@@ -60,6 +60,13 @@ real touch has a new identity, including a press that leaves the value unchanged
 Accessibility adjustments use independent transactions. The target-value and
 exact-count XCTest assertions remain intact and must pass before delivery.
 
+The next iOS 26.5 run passed all four drags, then exposed a stationary-press
+sequence of `editing(false) -> editing(true) -> binding write`. The early end
+is retained for that fresh, released touch instead of discarded. Its subsequent binding
+write is normalized before completing the operation, including an unchanged
+value; a stale configuration or cancelled touch cannot complete it. This uses
+the observed system events rather than an elapsed-time threshold.
+
 The XCTest scheme is separate from the ordinary `Runner` scheme. Its test runner
 requires iOS 26+, while the example application retains its iOS 16 deployment
 target. See [the example instructions](../example/README.md) for commands.

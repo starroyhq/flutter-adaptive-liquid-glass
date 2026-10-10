@@ -129,18 +129,37 @@ final class NativeSliderUITests: XCTestCase {
     let lastEnd: Double?
   }
 
+  private struct SnapshotParseError: Error, CustomStringConvertible {
+    let valueLabel: String
+    let countsLabel: String
+
+    var description: String {
+      "Invalid slider callback labels: value=\(String(reflecting: valueLabel)), counts=\(String(reflecting: countsLabel))"
+    }
+  }
+
   private func readSnapshot() throws -> Snapshot {
     let valueLabel = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Value:")).firstMatch.label
     let counts = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Gestures:")).firstMatch.label
-    let value = try XCTUnwrap(Double(valueLabel.replacingOccurrences(of: "Value: ", with: "")))
+    let invalidLabels = SnapshotParseError(valueLabel: valueLabel, countsLabel: counts)
+    guard let value = Double(valueLabel.replacingOccurrences(of: "Value: ", with: "")), value.isFinite else {
+      throw invalidLabels
+    }
     let regex = try NSRegularExpression(pattern: #"Gestures: (\d+) / (\d+) · Last end: ([\d.]+|none)"#)
     let text = counts as NSString
-    let match = try XCTUnwrap(regex.firstMatch(in: counts, range: NSRange(location: 0, length: text.length)))
+    guard let match = regex.firstMatch(in: counts, range: NSRange(location: 0, length: text.length)),
+          let starts = Int(text.substring(with: match.range(at: 1))),
+          let ends = Int(text.substring(with: match.range(at: 2))) else {
+      throw invalidLabels
+    }
+    let lastEndText = text.substring(with: match.range(at: 3))
+    let lastEnd = Double(lastEndText)
+    guard lastEndText == "none" || lastEnd?.isFinite == true else { throw invalidLabels }
     return Snapshot(
       value: value,
-      starts: try XCTUnwrap(Int(text.substring(with: match.range(at: 1)))),
-      ends: try XCTUnwrap(Int(text.substring(with: match.range(at: 2)))),
-      lastEnd: Double(text.substring(with: match.range(at: 3)))
+      starts: starts,
+      ends: ends,
+      lastEnd: lastEnd
     )
   }
 }

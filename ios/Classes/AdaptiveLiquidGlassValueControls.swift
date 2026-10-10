@@ -208,6 +208,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   private var activeGesture: Int?
   private var activeTouchSequence: Int?
   private var completedTouchSequence: Int?
+  private var pendingTerminalSequence: Int?
   private var popupOwner = false
   private var routeSuppressed = false
   private var enabled = true
@@ -355,6 +356,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   private func invalidateInteraction() {
     activeGesture = nil
     activeTouchSequence = nil
+    pendingTerminalSequence = nil
     touchSequence.invalidate()
   }
 
@@ -362,6 +364,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     if activeGesture != nil { emit("cancel", model.configuration.value) }
     activeGesture = nil
     activeTouchSequence = nil
+    pendingTerminalSequence = nil
   }
 
   @discardableResult
@@ -395,15 +398,19 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
       let fraction = ((candidate - next.minimum) / (next.maximum - next.minimum) * Double(divisions)).rounded() / Double(divisions)
       candidate = next.minimum + fraction * (next.maximum - next.minimum)
     }
-    // SwiftUI can repeat its final binding write after editing(false). Check
-    // the normalized value before opening a gesture so that this echo cannot
-    // create a second start with no corresponding end. A real no-change press
-    // still starts through editing(true).
-    guard candidate != next.value else { return }
+    // On iOS 26 a released press can arrive as false -> true -> binding. Keep
+    // that terminal signal until the binding supplies its value, even when it
+    // is unchanged. Committing at the early false would use the old value.
+    let pendingTerminal = pendingTerminalSequence != nil &&
+      pendingTerminalSequence == touchSequence.current && !touchSequence.isCancelled
+    guard candidate != next.value || pendingTerminal else { return }
     guard begin() else { return }
-    next.value = candidate
-    model.configuration = next
-    emit("change", candidate)
+    if candidate != next.value {
+      next.value = candidate
+      model.configuration = next
+      emit("change", candidate)
+    }
+    if pendingTerminal, pendingTerminalSequence == activeTouchSequence { finish() }
   }
 
   private func editing(_ editing: Bool, generation: Int) {
@@ -413,11 +420,22 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     if editing {
       begin()
     } else if activeGesture != nil {
-      if let activeTouchSequence { completedTouchSequence = activeTouchSequence }
-      emit("end", model.configuration.value)
-      activeGesture = nil
-      activeTouchSequence = nil
+      // A duplicate terminal signal must not commit the old value while a
+      // false-first press is still waiting for its binding write.
+      if pendingTerminalSequence == nil || pendingTerminalSequence != activeTouchSequence { finish() }
+    } else if touchSequence.isReleased, !touchSequence.isCancelled, let sequence = touchSequence.current,
+              sequence != completedTouchSequence {
+      pendingTerminalSequence = sequence
+      trace("terminal.pending")
     }
+  }
+
+  private func finish() {
+    if let activeTouchSequence { completedTouchSequence = activeTouchSequence }
+    emit("end", model.configuration.value)
+    activeGesture = nil
+    activeTouchSequence = nil
+    pendingTerminalSequence = nil
   }
 
   private func adjust(_ direction: Int, generation: Int) {
@@ -427,6 +445,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     let increment = (state.maximum - state.minimum) / Double(state.divisions ?? 20)
     let candidate = min(state.maximum, max(state.minimum, state.value + Double(direction) * increment))
     guard candidate != state.value else { return }
+    pendingTerminalSequence = nil
     touchSequence.invalidate()
     begin(accessibility: true)
     propose(candidate, generation: generation)
@@ -442,7 +461,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   private func trace(_ event: String, value: Double? = nil) {
     #if DEBUG
     guard ProcessInfo.processInfo.arguments.contains("--liquid-glass-slider-trace") else { return }
-    let message = "t=\(ProcessInfo.processInfo.systemUptime) \(event) input=\(String(describing: value)) value=\(model.configuration.value) revision=\(revision) generation=\(generation) gesture=\(String(describing: activeGesture)) touch=\(String(describing: touchSequence.current)) completedTouch=\(String(describing: completedTouchSequence)) touchCancelled=\(touchSequence.isCancelled) attached=\(isAttached) enabled=\(model.configuration.enabled)"
+    let message = "t=\(ProcessInfo.processInfo.systemUptime) \(event) input=\(String(describing: value)) value=\(model.configuration.value) revision=\(revision) generation=\(generation) gesture=\(String(describing: activeGesture)) touch=\(String(describing: touchSequence.current)) completedTouch=\(String(describing: completedTouchSequence)) pendingTerminal=\(String(describing: pendingTerminalSequence)) touchCancelled=\(touchSequence.isCancelled) attached=\(isAttached) enabled=\(model.configuration.enabled)"
     Logger(subsystem: "dev.flutter-adaptive-liquid-glass.slider", category: "acceptance")
       .notice("\(message, privacy: .public)")
     #endif
@@ -480,6 +499,7 @@ private final class AdaptiveGlassSliderTouchSequence: UIGestureRecognizer {
   private var nextSequence = 0
   private(set) var current: Int?
   private(set) var isCancelled = false
+  var isReleased: Bool { touches.isEmpty }
   var onCancellation: (() -> Void)?
   var onNewSequence: (() -> Void)?
   var onTrace: ((String) -> Void)?

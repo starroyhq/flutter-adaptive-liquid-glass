@@ -3,7 +3,9 @@
 - Bind native slider editing callbacks to the actual touch sequence, preventing
   a late iOS 26 editing-begin from reopening an already completed drag. Normalize
   and deduplicate binding writes before opening a gesture; accessibility
-  adjustments retain their own complete editing cycle.
+  adjustments retain their own complete editing cycle. Preserve an early end
+  notification until the binding write when iOS 26 reverses stationary-press
+  editing callbacks.
 - Replace Cupertino fallback controls with owned slider/switch rendering,
   repeating stepper buttons, localized date wheels and an activity painter.
 - Add independent package haptic/sound permissions, platform feedback dispatch,

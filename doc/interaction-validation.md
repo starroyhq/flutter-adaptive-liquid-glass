@@ -1,8 +1,10 @@
 # Owned fallback and interaction validation
 
-This is an unpublished 0.2.0 follow-up to source checkpoint `8524992`. It changes
-only the component package and its example. It does not publish a package,
-change a consuming application or claim a new remote CI result.
+This records the 0.2.0 implementation follow-up to source checkpoint `8524992`,
+before publication. It changed only the component package and its example;
+this stage did not publish a package, change a consuming application or claim a
+new remote CI result. Subsequent checks are recorded in
+[release validation](release-validation.md).
 
 ## Implementation
 

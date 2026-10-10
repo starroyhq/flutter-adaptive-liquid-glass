@@ -4,9 +4,11 @@ This records the original component-coverage checkpoint. The subsequent owned
 fallback, feedback and long-press work is recorded separately in
 [interaction validation](interaction-validation.md).
 
-This is an unpublished component coverage candidate. It does not replace the
-published 0.1.1 package. No consuming application, production service, pub.dev
-version or GitHub Release was changed during this work.
+At this checkpoint the component coverage candidate was unpublished and did not
+replace the published 0.1.1 package. No consuming application, production service,
+pub.dev version or GitHub Release was changed during this implementation stage.
+Subsequent release checks are recorded separately in
+[release validation](release-validation.md).
 
 ## Environment
 
@@ -139,8 +141,9 @@ names were added to public CI configuration as a scanning word list.
 
 The existing CI still checks formatting, analysis and tests and builds Android
 and iOS simulator artifacts. Its format check now includes integration sources.
-The current candidate has not been pushed, so **no new remote CI success is
-claimed**. Building an artifact does not establish device interaction success.
+At this checkpoint the candidate had not been pushed, so **no new remote CI
+success was claimed**. Building an artifact does not establish device interaction
+success.
 
 ## Remaining external acceptance
 

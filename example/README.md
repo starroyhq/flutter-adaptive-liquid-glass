@@ -1,9 +1,15 @@
 # flutter_adaptive_liquid_glass_example
 
 Standalone iOS/Android showcase for `flutter_adaptive_liquid_glass`. Its dependency
-uses `path: ../`, resolving to the surrounding package checkout. The current
-checkout demonstrates the **unreleased 0.2.0 candidate**; the additional APIs are
-not part of the published pub.dev 0.1.1 release.
+uses `path: ../`, resolving to the surrounding package checkout. This example
+demonstrates the **0.2.0** component catalog. Applications can use the hosted
+`flutter_adaptive_liquid_glass: ^0.2.0` dependency; the example deliberately keeps
+its local path so it tests the same source checkout. See the
+[upgrade notes](../README.md#upgrading-from-011) when moving from 0.1.1.
+
+Development and CI use Flutter 3.41.9 / Dart 3.11.5 with
+`native_liquid_glass` pinned to 0.3.1. Use the committed lockfiles; no production
+dependency or global toolchain upgrade is introduced by the new fallbacks.
 
 From the package root:
 
@@ -34,7 +40,8 @@ Chinese, Japanese and Arabic; explanatory sample text remains English.
 
 The [component coverage matrix](../doc/component-coverage.md) maps all 21
 capabilities to implementations and regression sources. Actual execution results
-belong in the [candidate validation record](../doc/component-validation.md).
+belong in the [component validation record](../doc/component-validation.md) and
+[interaction validation record](../doc/interaction-validation.md).
 The checks below are acceptance steps, not a claim that every check has passed.
 
 1. Change slider, switch, stepper and segment values; change appearance, palette
@@ -115,14 +122,17 @@ results and remaining hardware checks are recorded in
 
 The configured CI runs root/example unit and widget tests and builds Android
 and iOS simulator applications. It formats/analyzes integration-test source but
-does not currently run this device scenario. See the candidate validation record
+does not currently run this device scenario. See the validation records above
 for the checks actually executed on a particular source revision.
 
 A simulator can validate application flow, layout and native integration on its
 installed runtime. It cannot establish physical-device GPU/frame performance,
 power usage, high-refresh behavior, full hardware keyboard/IME behavior or
 complete VoiceOver/TalkBack acceptance. Record those physical-device checks
-separately; an iOS 26+ simulator result is not an iOS hardware result.
+separately; an iOS 26+ simulator result is not an iOS hardware result. Broader
+local checks used iOS 27; the dedicated CI gate uses actual iOS 26 for the native
+slider scenario below. See [release validation](../doc/release-validation.md)
+for the normal-duration slider result and the remaining platform coverage.
 
 ## Original material probe
 
@@ -161,7 +171,7 @@ survive returning to a previous layer and root tabs return after popup exit.
 Repeat with light/dark and Blue/Green. An iOS 26+ runtime is required to inspect
 native composition; widget tests alone validate only Dart behavior. The earlier
 release's [fallback validation record](../doc/fallback-validation.md) remains
-historical evidence, separate from the candidate's execution record.
+historical evidence, separate from the 0.2.0 execution records.
 
 ## Owned fallback and feedback checks
 
@@ -171,7 +181,14 @@ that releasing does not increment the click counter. In Appearance, independentl
 toggle Package haptics and Package system sounds. Native controls and the inline
 calendar retain system feedback; these toggles do not override it.
 
+The fallback slider, switch, stepper buttons, date wheels and activity indicator
+are package-owned. Date wheels reuse SDK locale resources rather than Cupertino
+control widgets. Both feedback permissions default to enabled; disabling one
+does not disable the other or change reduced-motion settings.
+
 In Popups, hold First menu, choose or cancel, then tap and hold the other triggers.
+The default menu trigger accepts both gestures; choose `LiquidGlassMenuTrigger.tap`
+or `.longPress` to test an explicit single-gesture policy.
 There must be one popup and one result per gesture. In Pickers, select wheels and
 exercise month ends, localized 12/24-hour time, external resets and keyboard focus.
 The Controls spinner must stop when motion is reduced or the app backgrounds.
@@ -179,3 +196,45 @@ The Controls spinner must stop when motion is reduced or the app backgrounds.
 The device suite also performs fallback long presses, silent stepper repetition
 and actual month-wheel scrolling. Physical vibration, audibility and VoiceOver /
 TalkBack require separate hardware acceptance.
+
+## Native slider acceptance
+
+`NativeSliderAcceptance` is a separate Xcode UI-test scheme. It launches the
+default catalog, verifies that its renderer is native, then uses Apple's public
+[press, drag and hold API](https://developer.apple.com/documentation/xcuiautomation/xcuicoordinate/press%28forduration%3Athendragto%3Awithvelocity%3Athenholdforduration%3A%29)
+to send normal-duration system input. It does not use Flutter's synthetic pointer
+channel or modify the production slider's event handling.
+
+Each drag holds the thumb for 0.2 seconds, moves at the SDK's `.slow` velocity,
+then holds its destination for 0.2 seconds. Four consecutive drags alternate
+between 0.8 and 0.2 from an initial 0.4. Every drag must increment Flutter's start
+and end counters exactly once, reach the requested detent within 0.051, and
+report the same final value through `onChangeEnd`. The fixture waits for the
+slider's frame to stop moving after revealing it; XCTest's normal idle detection
+does not observe Flutter scroll tickers. Screenshots and the initial native
+accessibility hierarchy are retained in the `.xcresult` bundle.
+
+Use an explicitly selected, dedicated iOS 26+ simulator. The UI-test target has
+an iOS 26 minimum; the example application's minimum remains iOS 16. From this
+example directory:
+
+```sh
+flutter build ios --simulator --debug --config-only --no-pub
+cd ios
+pod install --deployment
+GLASS_SIMULATOR_ID='<dedicated-simulator-uuid>'
+xcodebuild -workspace Runner.xcworkspace -scheme NativeSliderAcceptance \
+  -configuration Debug -sdk iphonesimulator \
+  -destination "platform=iOS Simulator,id=$GLASS_SIMULATOR_ID" \
+  -derivedDataPath ../build/ios-parity \
+  -parallel-testing-enabled NO \
+  -maximum-concurrent-test-simulator-destinations 1 \
+  -resultBundlePath ../build/native-slider-acceptance.xcresult \
+  ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO test
+```
+
+Use a new result-bundle path when repeating the command: Xcode does not overwrite
+an existing `.xcresult`. Parallel testing is disabled to avoid simulator clones.
+An iOS 27 result verifies that runtime only; iOS 26 compatibility and physical
+device behavior require their own executions. See the current
+[release validation record](../doc/release-validation.md) for completed checks.

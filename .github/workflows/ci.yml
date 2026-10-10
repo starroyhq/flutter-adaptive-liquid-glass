@@ -99,3 +99,98 @@ jobs:
           path: example/build/ios-simulator-app.tar.gz
           if-no-files-found: error
           retention-days: 14
+
+  native-interaction:
+    needs: quality
+    # The public label for the macos-26-arm64 image is macos-26.
+    # https://github.com/actions/runner-images#available-images
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require an arm64 runner
+        run: test "$(uname -m)" = arm64
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter pub get --enforce-lockfile
+        working-directory: example
+      - run: flutter build ios --simulator --debug --config-only --no-pub
+        working-directory: example
+      - run: pod install --deployment
+        working-directory: example/ios
+      - name: Create and verify a dedicated iOS 26 simulator
+        id: simulator
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import plistlib
+          import subprocess
+          from pathlib import Path
+
+          def simctl(*args):
+              return subprocess.check_output(['xcrun', 'simctl', *args], text=True)
+
+          candidates = [
+              runtime for runtime in json.loads(simctl('list', 'runtimes', '--json'))['runtimes']
+              if runtime.get('isAvailable')
+              and runtime['identifier'].startswith('com.apple.CoreSimulator.SimRuntime.iOS-')
+              and runtime['version'].split('.')[0] == '26'
+          ]
+          if not candidates:
+              raise SystemExit('No available iOS 26 runtime is installed; do not substitute iOS 27 or download a runtime.')
+          runtime = max(candidates, key=lambda item: tuple(map(int, item['version'].split('.'))))
+          runtime_id = runtime['identifier']
+          device_type = 'com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro'
+          name = 'Liquid Glass Native Interaction ' + os.environ['GITHUB_RUN_ID']
+          device_id = simctl('create', name, device_type, runtime_id).strip()
+          # Save ownership before booting so the always-cleanup step also runs
+          # if boot or runtime verification fails.
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'device_id={device_id}\n')
+          subprocess.run(['xcrun', 'simctl', 'boot', device_id], check=True)
+          subprocess.run(['xcrun', 'simctl', 'bootstatus', device_id, '-b'], check=True)
+          devices = json.loads(simctl('list', 'devices', '--json'))['devices']
+          device = next((item for item in devices.get(runtime_id, []) if item['udid'] == device_id), None)
+          if not device or device['state'] != 'Booted':
+              raise SystemExit('The dedicated device did not boot on the selected iOS 26 runtime.')
+          system_version = Path(runtime['runtimeRoot']) / 'System/Library/CoreServices/SystemVersion.plist'
+          with system_version.open('rb') as source:
+              version = plistlib.load(source)['ProductVersion']
+          if version.split('.')[0] != '26':
+              raise SystemExit(f'Runtime verification failed: expected iOS 26, found {version}.')
+          print(f'Native interaction destination: iPhone 17 Pro, iOS {version}, {device_id}')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f'Native interaction: dedicated iPhone 17 Pro simulator, iOS {version}, arm64.\n')
+          PY
+      - name: Test native slider interaction
+        run: >-
+          xcodebuild -workspace Runner.xcworkspace -scheme NativeSliderAcceptance
+          -configuration Debug -sdk iphonesimulator
+          -destination "platform=iOS Simulator,id=$GLASS_SIMULATOR_ID"
+          -derivedDataPath ../build/ios-native-interaction
+          -resultBundlePath ../build/native-interaction.xcresult
+          -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1
+          ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO test
+        env:
+          GLASS_SIMULATOR_ID: ${{ steps.simulator.outputs.device_id }}
+        working-directory: example/ios
+      - name: Preserve native test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-26-native-interaction-xcresult
+          path: example/build/native-interaction.xcresult
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Remove the dedicated simulator
+        if: ${{ always() && steps.simulator.outputs.device_id != '' }}
+        env:
+          GLASS_SIMULATOR_ID: ${{ steps.simulator.outputs.device_id }}
+        run: |
+          xcrun simctl shutdown "$GLASS_SIMULATOR_ID" || true
+          xcrun simctl delete "$GLASS_SIMULATOR_ID"

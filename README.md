@@ -9,12 +9,12 @@ imports use `flutter_adaptive_liquid_glass`, following Dart's
 [package naming rules](https://dart.dev/tools/pub/pubspec#name); hyphens are not
 valid in a pubspec package name.
 
-The published pub.dev version is **0.1.1**. This checkout contains the
-**unreleased 0.2.0 candidate**, including the component catalog and new APIs below.
-Use a local checkout to evaluate those APIs; a source version number does not
-mean that a release has been published or device validation has completed.
-The [validation record](doc/component-validation.md#native-slider-acceptance-limitation)
-records a native slider input limitation that remains a release acceptance gate.
+Version **0.2.0** expands the package to 21 UI capabilities, with package-owned
+frosted fallbacks, optional long-press actions and configurable interaction feedback.
+See the [release notes](doc/release-0.2.0.md) and
+[upgrade notes](#upgrading-from-011). The
+[release validation record](doc/release-validation.md) separates native system-input
+checks, platform coverage and remaining physical-device acceptance.
 
 ## Installation
 
@@ -26,12 +26,35 @@ Or add the version to your app's `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_adaptive_liquid_glass: ^0.1.1
+  flutter_adaptive_liquid_glass: ^0.2.0
 ```
 
 Requires Flutter 3.41.2 or later and Dart 3.11 or later. Supported platforms are
 Android and iOS 16+. Native system glass is available on iOS 26+; older iOS and
 Android use the Flutter fallback. Build native iOS glass with Xcode 26 or later.
+Development and CI retain Flutter **3.41.9** / Dart **3.11.5**. The production
+dependency `native_liquid_glass` remains pinned to **0.3.1**; this release adds no
+production dependency and does not require a global toolchain upgrade.
+
+### Upgrading from 0.1.1
+
+Change `^0.1.1` to `^0.2.0`, run `flutter pub get`, then perform a full native
+rebuild. Dart's `^0.1.1` constraint does not select the 0.2 series automatically.
+Keep the existing `LiquidGlassAppearance` and `LiquidGlassNavigatorObserver`
+installation. Existing surfaces, buttons, shared capsules, tabs, segments,
+appearance settings and color-token APIs remain available; their controlled
+selection and callback contracts are retained.
+
+New `onLongPress` callbacks are optional. Package haptic and sound permissions
+default to enabled, so existing Flutter controls can now provide the platform
+feedback described [below](#interaction-feedback-and-long-press). Applications
+that need silent package interactions can set
+`feedback: const LiquidGlassFeedbackData(haptics: false, sound: false)`.
+This does not suppress feedback owned by native controls or the Material calendar.
+
+The new `LiquidGlassMenuButton` default trigger supports both tap and long press.
+Use `trigger: LiquidGlassMenuTrigger.tap` for tap-only menus, or `.longPress`
+for hold-only menus. A custom menu builder continues to own its gestures.
 
 ### Local checkout integration
 
@@ -105,12 +128,13 @@ Native text buttons use the same small UIKit bridge. `UIButton.Configuration`
 and native title measurement own their layout, replacing the upstream SwiftUI
 path that compressed Chinese titles even with an explicit platform-view width.
 The Flutter estimate prevents first-frame collapse; UIKit's intrinsic content
-width can enlarge it, never shrink it. Icon-only standalone controls continue to
-use the pinned provider. Both paths retain native materials and app appearance.
+width can enlarge it, never shrink it. Icon-only standalone controls without
+long-press actions continue to use the pinned provider. Both paths retain native
+materials and app appearance.
 
-## Component catalog — unreleased 0.2.0
+## Component catalog
 
-The candidate covers 21 UI capabilities. Icon buttons are a constructor variant;
+The package covers 21 UI capabilities. Icon buttons are a constructor variant;
 alert and action sheet are two styles of the same helper. See the
 [component coverage matrix](doc/component-coverage.md) for individual rendering
 paths, constraints and regression sources.
@@ -199,7 +223,9 @@ LiquidGlassColorPicker(
 
 Date pickers support `date`, `time` and `dateAndTime` modes, with `compact`,
 `inline` and `wheels` styles. Native rendering uses `UIDatePicker`; the compact
-fallback opens a sheet containing Flutter calendar/time controls. Install your
+fallback opens a sheet containing the Material calendar and package-owned time
+wheels. Wheel labels, date order and 12/24-hour formatting reuse SDK localization
+resources; no Cupertino picker or theme is instantiated. Install your
 app's `flutter_localizations` delegates for supported locales. A picker `locale`
 override does not install localization delegates by itself.
 
@@ -299,7 +325,7 @@ and removal keep underlying native views hidden until the outgoing route's
 transition finishes. Locally scoped themes are captured when opening; place a
 live application-wide theme above the Navigator for global appearance updates.
 
-## Interaction feedback and long press — unreleased 0.2.0
+## Interaction feedback and long press
 
 The fallback slider, switch, stepper buttons, date wheels and activity indicator
 are package-owned implementations. They use Flutter drawing, gestures, focus,
@@ -440,7 +466,8 @@ therefore not expected to produce identical pixels for a custom palette.
 The table applies to adaptive surfaces and controls. Search fields and popup
 contents retain Flutter editing, layout and routing in every mode; their
 backgrounds follow the material policy. Value controls use the applicable UIKit,
-SwiftUI or Flutter SDK control instead of adding a glass wrapper to every element.
+SwiftUI or package-owned Flutter control instead of adding a glass wrapper to
+every element.
 **Bottom tabs always use the system `UITabBarController` / `UITabBar` on iOS 26+,**
 including `fallback` and `opaque`. They retain UIKit selection, hit testing and
 system accessibility materials. `opaque` or `reduceTransparency` places a solid
@@ -533,12 +560,17 @@ Its Appearance action changes rendering mode, system/light/dark appearance,
 custom color, reduced motion and reduced transparency. The original material and
 mixed-modal probes remain available through compile-time flags. See
 [example acceptance steps](example/README.md), the
-[coverage matrix](doc/component-coverage.md) and the
-[candidate validation record](doc/component-validation.md).
-CI/widget tests verify portable behavior;
-iOS 26 Release rendering, VoiceOver, real keyboard/IME, scrolling beneath glass,
-popup occlusion, rapid tab selection, old iOS and Android hardware remain device
-acceptance gates. Do not treat widget tests as native rendering proof.
+[coverage matrix](doc/component-coverage.md), the
+[component validation record](doc/component-validation.md) and
+[interaction validation record](doc/interaction-validation.md).
+The recorded local checks include Android 15, iOS 18.6 and iOS 27 simulator
+integration runs; they are separate from release CI and publication status.
+Normal-duration native slider input is covered by the dedicated XCTest scheme.
+The iOS 26 CI gate runs that scenario on an actual iOS 26 simulator; it does not
+represent a complete interactive sweep of every control on that OS. Physical
+haptic and sound behavior, full VoiceOver/TalkBack and keyboard/IME acceptance,
+and hardware rendering/performance remain outside simulator validation. See the
+[release validation record](doc/release-validation.md) for the executed scope.
 
 ## License
 
@@ -553,12 +585,17 @@ both, and runs both test suites. After quality passes, separate jobs build the
 example Debug APK (Java 17) and an arm64 iOS simulator application (macOS 26).
 The iOS job generates Flutter configuration, enforces `Podfile.lock`, then invokes
 `xcodebuild` directly to avoid the toolchain's combined-architecture parsing issue.
-Only the APK and archived simulator `.app` are retained as artifacts for 14 days.
-Build success does not establish native animation, IME, accessibility or GPU
-performance. Device integration scenarios are runnable locally; the configured
-CI formats/analyzes their source but does not run them on a device. Configuration
-is not evidence of a successful run for the current candidate. See the
-[candidate validation record](doc/component-validation.md) for executed checks;
+An additional arm64 job boots its own iOS 26 simulator and runs the
+`NativeSliderAcceptance` XCTest scheme using normal-duration system input. It
+requires an installed iOS 26 runtime rather than substituting a newer version.
+The APK, archived simulator `.app` and native XCTest result bundle are retained
+for 14 days. Build success does not establish native animation, IME,
+accessibility or GPU performance. The separate Flutter integration scenarios
+are runnable locally; CI formats/analyzes those sources but does not run that
+suite on a device. Configuration is not evidence of a successful run for a
+release commit. See the
+[component validation record](doc/component-validation.md) and
+[interaction validation record](doc/interaction-validation.md) for executed checks;
 [fallback validation](doc/fallback-validation.md) preserves the earlier release's
 validation record.
 

@@ -1,0 +1,29 @@
+# Dart/Flutter caches, including the independent example.
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+.pub-cache/
+build/
+coverage/
+doc/api/
+
+# Native build caches; retain platform projects and dependency lockfiles.
+.gradle/
+.kotlin/
+.cxx/
+Pods/
+.symlinks/
+DerivedData/
+.build/
+.swiftpm/
+xcuserdata/
+
+# Local editor/OS metadata.
+.DS_Store
+.idea/
+*.iml
+*.ipr
+*.iws
+*.swp

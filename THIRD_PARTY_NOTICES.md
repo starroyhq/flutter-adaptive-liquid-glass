@@ -35,4 +35,5 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-The upstream license does not assign a license to flutter_adaptive_liquid_glass itself.
+flutter_adaptive_liquid_glass is separately licensed under the MIT License in
+the repository's LICENSE file.

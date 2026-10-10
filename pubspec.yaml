@@ -1,8 +1,11 @@
 name: flutter_adaptive_liquid_glass
 description: Adaptive Liquid Glass controls for Flutter with isolated native iOS rendering.
 repository: https://github.com/starroyhq/flutter-adaptive-liquid-glass
-version: 0.1.0
-publish_to: none
+version: 0.1.1
+
+platforms:
+  android:
+  ios:
 
 environment:
   sdk: ^3.11.0

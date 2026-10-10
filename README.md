@@ -9,7 +9,24 @@ imports use `flutter_adaptive_liquid_glass`, following Dart's
 [package naming rules](https://dart.dev/tools/pub/pubspec#name); hyphens are not
 valid in a pubspec package name.
 
-## Local checkout integration
+## Installation
+
+```sh
+flutter pub add flutter_adaptive_liquid_glass
+```
+
+Or add the version to your app's `pubspec.yaml`:
+
+```yaml
+dependencies:
+  flutter_adaptive_liquid_glass: ^0.1.1
+```
+
+Requires Flutter 3.41.2 or later and Dart 3.11 or later. Supported platforms are
+Android and iOS 16+. Native system glass is available on iOS 26+; older iOS and
+Android use the Flutter fallback. Build native iOS glass with Xcode 26 or later.
+
+### Local checkout integration
 
 The package lives in the standalone `flutter-adaptive-liquid-glass` directory and its Dart
 package name is **`flutter_adaptive_liquid_glass`**. For a local consuming app,
@@ -260,11 +277,10 @@ iOS 26 Release rendering, VoiceOver, real keyboard/IME, scrolling beneath glass,
 popup occlusion, rapid tab selection, old iOS and Android hardware remain device
 acceptance gates. Do not treat widget tests as native rendering proof.
 
-`publish_to: none` prevents accidental pub.dev publication; it does not control
-the visibility of the GitHub repository. No pub.dev publication is part of
-the application work. Review its public API and select the package's own license
-before a separate open-source release. Upstream attribution is preserved in
-`THIRD_PARTY_NOTICES.md`.
+## License
+
+Released under the [MIT License](LICENSE). Upstream dependency attribution is
+preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Continuous integration
 
@@ -276,7 +292,7 @@ The iOS job generates Flutter configuration, enforces `Podfile.lock`, then invok
 `xcodebuild` directly to avoid the toolchain's combined-architecture parsing issue.
 Only the APK and archived simulator `.app` are retained as artifacts for 14 days.
 Build success does not establish native animation, IME, accessibility or GPU
-performance. See the [validation record](docs/fallback-validation.md) for executed
+performance. See the [validation record](doc/fallback-validation.md) for executed
 checks and remaining device acceptance.
 
 ## GitHub releases

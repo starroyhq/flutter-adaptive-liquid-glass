@@ -69,7 +69,7 @@ The fallback has no refraction shader. Painting layers separate the background a
 moving selection, but scrolling performance and GPU cost need device profiling.
 These are acceptance steps, not a claim that every listed device check has passed.
 See the [package README](../README.md) for setup and validation boundaries.
-The current run is recorded in [fallback validation](../docs/fallback-validation.md).
+The current run is recorded in [fallback validation](../doc/fallback-validation.md).
 
 ## Mixed native/Flutter modal regression
 

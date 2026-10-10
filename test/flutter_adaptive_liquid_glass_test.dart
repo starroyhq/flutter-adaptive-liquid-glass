@@ -63,36 +63,52 @@ void main() {
       );
     });
 
-    test('accessibility takes precedence over every render mode', () {
-      for (final mode in LiquidGlassMode.values) {
-        expect(
-          LiquidGlassThemeData(
-            mode: mode,
-            reduceTransparency: true,
-          ).resolve(nativeAvailable: true),
-          LiquidGlassMode.opaque,
-        );
-        expect(
-          LiquidGlassThemeData(
-            mode: mode,
-            reduceMotion: true,
-          ).resolve(nativeAvailable: true),
-          LiquidGlassMode.opaque,
-        );
-        expect(
-          LiquidGlassThemeData(
-            mode: mode,
-          ).resolve(nativeAvailable: true, highContrast: true),
-          LiquidGlassMode.opaque,
-        );
-        expect(
-          LiquidGlassThemeData(
-            mode: mode,
-          ).resolve(nativeAvailable: true, disableAnimations: true),
-          LiquidGlassMode.opaque,
-        );
-      }
-    });
+    test(
+      'transparency and contrast take precedence over every render mode',
+      () {
+        for (final mode in LiquidGlassMode.values) {
+          expect(
+            LiquidGlassThemeData(
+              mode: mode,
+              reduceTransparency: true,
+            ).resolve(nativeAvailable: true),
+            LiquidGlassMode.opaque,
+          );
+          expect(
+            LiquidGlassThemeData(
+              mode: mode,
+            ).resolve(nativeAvailable: true, highContrast: true),
+            LiquidGlassMode.opaque,
+          );
+        }
+      },
+    );
+
+    test(
+      'reduced motion preserves the chosen material and native renderer',
+      () {
+        for (final mode in LiquidGlassMode.values) {
+          for (final available in [false, true]) {
+            final expected = LiquidGlassThemeData(
+              mode: mode,
+            ).resolve(nativeAvailable: available);
+            expect(
+              LiquidGlassThemeData(
+                mode: mode,
+                reduceMotion: true,
+              ).resolve(nativeAvailable: available),
+              expected,
+            );
+            expect(
+              LiquidGlassThemeData(
+                mode: mode,
+              ).resolve(nativeAvailable: available, disableAnimations: true),
+              expected,
+            );
+          }
+        }
+      },
+    );
   });
 
   testWidgets(

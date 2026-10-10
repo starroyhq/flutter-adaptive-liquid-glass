@@ -1,0 +1,101 @@
+name: Component checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter pub get --enforce-lockfile
+        working-directory: example
+      - run: dart format --output=none --set-exit-if-changed lib test example/lib example/test
+      - run: flutter analyze --no-pub
+      - run: flutter analyze --no-pub
+        working-directory: example
+      - run: flutter test --no-pub --coverage
+      - run: flutter test --no-pub
+        working-directory: example
+
+  android:
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter pub get --enforce-lockfile
+        working-directory: example
+      - run: flutter build apk --debug --no-pub
+        working-directory: example
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-example-debug-apk
+          path: example/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  ios-simulator:
+    needs: quality
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter pub get --enforce-lockfile
+        working-directory: example
+      - run: flutter build ios --simulator --debug --config-only --no-pub
+        working-directory: example
+      - run: pod install --deployment
+        working-directory: example/ios
+      # Pin the simulator architecture to avoid the Flutter toolchain's combined
+      # arm64/x86_64 architecture parsing issue while compiling native controls.
+      - run: >-
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner
+          -configuration Debug -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath ../build/ios-ci
+          ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
+        working-directory: example/ios
+      # Preserve executable permissions inside the downloadable application.
+      - run: >-
+          tar -czf build/ios-simulator-app.tar.gz
+          -C build/ios-ci/Build/Products/Debug-iphonesimulator Runner.app
+        working-directory: example
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-example-simulator-app
+          path: example/build/ios-simulator-app.tar.gz
+          if-no-files-found: error
+          retention-days: 14

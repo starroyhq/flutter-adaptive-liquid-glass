@@ -20,6 +20,7 @@ class LiquidGlassButtonGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final foreground = LiquidGlassTheme.of(context).colors.foreground;
     if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native &&
         MediaQuery.textScalerOf(context).scale(17) <= 24) {
       return NativeCapsule(
@@ -77,8 +78,14 @@ class LiquidGlassButtonGroup extends StatelessWidget {
                               ? Icon(
                                   action.icon,
                                   size: NativeButtonLayout.iconSize,
+                                  color: foreground,
                                 )
-                              : Text(action.label),
+                              : Text(
+                                  action.label,
+                                  style: foreground == null
+                                      ? null
+                                      : TextStyle(color: foreground),
+                                ),
                         ),
                       ),
                     ),

@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:native_liquid_glass/native_liquid_glass.dart' as native;
 
 import 'native_button_layout.dart';
+import 'theme.dart';
+import 'native_visibility.dart';
 
 @immutable
 class NativeCapsuleItem {
@@ -143,12 +145,18 @@ class _NativeCapsuleState extends State<NativeCapsule>
     final theme = Theme.of(context),
         fontSize = MediaQuery.textScalerOf(context).scale(17);
     final colors = theme.colorScheme;
+    final glassColors = LiquidGlassTheme.of(context).colors;
     final params = <String, Object?>{
       'dark': theme.brightness == Brightness.dark,
       'grouped': widget.grouped,
-      'foreground': (widget.prominent ? colors.onPrimary : colors.onSurface)
-          .toARGB32(),
-      'tint': widget.prominent ? colors.primary.toARGB32() : null,
+      'foreground':
+          (widget.prominent
+                  ? glassColors.onAccent ?? colors.onPrimary
+                  : glassColors.foreground ?? colors.onSurface)
+              .toARGB32(),
+      'tint': widget.prominent
+          ? (glassColors.accent ?? colors.primary).toARGB32()
+          : glassColors.surfaceTint?.toARGB32(),
       'fontSize': fontSize,
       'suppressed': ModalRoute.of(context)?.isCurrent == false,
       'popupOwner': ModalRoute.of(context) is PopupRoute,
@@ -207,15 +215,17 @@ class _NativeCapsuleState extends State<NativeCapsule>
     return SizedBox(
       width: width,
       height: 48,
-      child: UiKitView(
-        key: ValueKey(signature),
-        viewType: 'flutter_adaptive_liquid_glass/capsule',
-        creationParams: params,
-        creationParamsCodec: const StandardMessageCodec(),
-        onPlatformViewCreated: (id) => _created(id, signature),
-        gestureRecognizers: {
-          Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
-        },
+      child: NativeVisibility(
+        child: UiKitView(
+          key: ValueKey(signature),
+          viewType: 'flutter_adaptive_liquid_glass/capsule',
+          creationParams: params,
+          creationParamsCodec: const StandardMessageCodec(),
+          onPlatformViewCreated: (id) => _created(id, signature),
+          gestureRecognizers: {
+            Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
+          },
+        ),
       ),
     );
   }

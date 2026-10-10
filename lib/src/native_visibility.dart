@@ -1,0 +1,73 @@
+import 'package:flutter/material.dart';
+
+/// Route coverage is separate from UIKit alpha: a transparent platform view can
+/// still reserve a composition slice and clip Flutter content in the overlay.
+final nativeRouteCoverage = NativeRouteCoverage();
+
+/// Internal, shared across navigator observers so nested navigators can inspect
+/// coverage of both their own route and the route containing their navigator.
+class NativeRouteCoverage extends ChangeNotifier {
+  final Map<Object, Set<Route<dynamic>>> _covered = {};
+
+  bool covers(Route<dynamic> route) =>
+      _covered.values.any((routes) => routes.contains(route));
+
+  void retain(Object token, Iterable<Route<dynamic>> routes) {
+    _covered[token] = routes.toSet();
+    notifyListeners();
+  }
+
+  void release(Object token) {
+    if (_covered.remove(token) != null) notifyListeners();
+  }
+
+  void replace(Route<dynamic> oldRoute, Route<dynamic> newRoute) {
+    var changed = false;
+    for (final routes in _covered.values) {
+      if (routes.remove(oldRoute)) {
+        routes.add(newRoute);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+}
+
+/// Keeps a covered native subtree laid out and alive, but excludes it from
+/// painting, hit testing and accessibility until its overlay has fully exited.
+class NativeVisibility extends StatelessWidget {
+  const NativeVisibility({super.key, required this.child});
+
+  final Widget child;
+
+  bool _isVisible(BuildContext context) {
+    Route<dynamic>? route = ModalRoute.of(context);
+    final visited = <Route<dynamic>>{};
+    while (route != null && visited.add(route)) {
+      // A popped route is no longer current, but its native content must remain
+      // visible during its own reverse transition. Active non-current routes
+      // are covered; observer coverage also protects the newly-current route
+      // underneath until that reverse transition has finished.
+      if ((!route.isCurrent && route.isActive) ||
+          nativeRouteCoverage.covers(route)) {
+        return false;
+      }
+      final navigator = route.navigator;
+      route = navigator == null ? null : ModalRoute.of(navigator.context);
+    }
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: nativeRouteCoverage,
+    child: child,
+    builder: (context, child) => Visibility(
+      visible: _isVisible(context),
+      maintainState: true,
+      maintainAnimation: true,
+      maintainSize: true,
+      child: child!,
+    ),
+  );
+}

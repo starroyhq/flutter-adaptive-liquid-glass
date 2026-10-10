@@ -10,11 +10,13 @@ class FallbackPressable extends StatefulWidget {
     required this.child,
     required this.onTap,
     required this.borderRadius,
+    this.scaleOnPress = true,
   });
 
   final Widget child;
   final VoidCallback? onTap;
   final BorderRadius borderRadius;
+  final bool scaleOnPress;
 
   @override
   State<FallbackPressable> createState() => _FallbackPressableState();
@@ -31,6 +33,7 @@ class _FallbackPressableState extends State<FallbackPressable> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = LiquidGlassTheme.of(context).colors;
     final reduced =
         LiquidGlassTheme.of(context).reduceMotion ||
         MediaQuery.disableAnimationsOf(context);
@@ -44,12 +47,13 @@ class _FallbackPressableState extends State<FallbackPressable> {
       overlayColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.pressed) ||
             states.contains(WidgetState.focused)) {
-          return Theme.of(context).colorScheme.onSurface.withValues(alpha: .06);
+          return (colors.foreground ?? Theme.of(context).colorScheme.onSurface)
+              .withValues(alpha: .06);
         }
         return Colors.transparent;
       }),
       child: AnimatedScale(
-        scale: _pressed && !reduced ? .97 : 1,
+        scale: _pressed && !reduced && widget.scaleOnPress ? .97 : 1,
         duration: reduced ? Duration.zero : const Duration(milliseconds: 120),
         curve: Curves.easeOutCubic,
         child: widget.child,

@@ -3,7 +3,9 @@ import 'package:native_liquid_glass/native_liquid_glass.dart' as native;
 
 import 'surface.dart';
 import 'fallback_pressable.dart';
+import 'fallback_selection_track.dart';
 import 'theme.dart';
+import 'native_visibility.dart';
 import 'native_button_layout.dart';
 import 'native_capsule.dart';
 
@@ -35,7 +37,11 @@ class LiquidGlassButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final callback = loading ? null : onPressed;
     final colors = Theme.of(context).colorScheme;
-    final textColor = prominent ? colors.onPrimary : colors.onSurface;
+    final glassColors = LiquidGlassTheme.of(context).colors;
+    final textColor = prominent
+        ? glassColors.onAccent ?? colors.onPrimary
+        : glassColors.foreground ?? colors.onSurface;
+    final accent = glassColors.accent ?? colors.primary;
     final nativeIcon = sfSymbol != null
         ? native.NativeLiquidGlassIcon.sfSymbol(sfSymbol!)
         : icon != null
@@ -69,12 +75,14 @@ class LiquidGlassButton extends StatelessWidget {
         iconSize: NativeButtonLayout.iconSize,
         padding: const EdgeInsets.all(12),
         iconColor: textColor,
-        tint: prominent ? colors.primary : null,
+        tint: prominent ? accent : glassColors.surfaceTint,
         style: prominent
             ? native.LiquidGlassButtonStyle.prominentGlass
             : native.LiquidGlassButtonStyle.glass,
       );
-      return Semantics(label: semanticLabel, child: button);
+      return NativeVisibility(
+        child: Semantics(label: semanticLabel, child: button),
+      );
     }
     final content = Row(
       mainAxisSize: MainAxisSize.min,
@@ -93,7 +101,7 @@ class LiquidGlassButton extends StatelessWidget {
       ],
     );
     final button = Material(
-      color: prominent ? colors.primary : Colors.transparent,
+      color: prominent ? accent : Colors.transparent,
       borderRadius: BorderRadius.circular(24),
       child: FallbackPressable(
         borderRadius: BorderRadius.circular(24),
@@ -167,105 +175,92 @@ class LiquidGlassSegmentedControl<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final glassColors = LiquidGlassTheme.of(context).colors;
     if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native &&
         MediaQuery.textScalerOf(context).scale(14) <= 20) {
-      return native.LiquidGlassSegmentedControl(
-        labels: [for (final segment in segments) segment.label],
-        selectedIndex: segments.indexWhere(
-          (segment) => segment.value == selected,
+      return NativeVisibility(
+        child: native.LiquidGlassSegmentedControl(
+          labels: [for (final segment in segments) segment.label],
+          selectedIndex: segments.indexWhere(
+            (segment) => segment.value == selected,
+          ),
+          enabled: onChanged != null,
+          color: glassColors.accent ?? Theme.of(context).colorScheme.primary,
+          height: 48,
+          onValueChanged: (index) {
+            if (index >= 0 && index < segments.length) {
+              onChanged?.call(segments[index].value);
+            }
+          },
         ),
-        enabled: onChanged != null,
-        color: Theme.of(context).colorScheme.primary,
-        height: 48,
-        onValueChanged: (index) {
-          if (index >= 0 && index < segments.length) {
-            onChanged?.call(segments[index].value);
-          }
-        },
       );
     }
     final colors = Theme.of(context).colorScheme;
-    final highContrast = MediaQuery.highContrastOf(context);
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final radius = BorderRadius.circular(28);
-    // Segments are a solid track and thumb, not nested translucent capsules.
     return Opacity(
       opacity: onChanged == null ? .5 : 1,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: colors.surfaceContainerHigh,
-          borderRadius: radius,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final segment in segments)
-                  Expanded(
-                    child: Semantics(
-                      selected: segment.value == selected,
-                      button: true,
-                      enabled: onChanged != null,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: segment.value == selected
-                              ? (dark
-                                    ? colors.surfaceContainerHighest
-                                    : colors.surface)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(24),
-                          border: segment.value == selected
-                              ? Border.all(
-                                  color: colors.onSurface.withValues(
-                                    alpha: highContrast ? .22 : .06,
-                                  ),
-                                  width: .5,
-                                )
-                              : null,
+      child: LiquidGlassSurface(
+        radius: 28,
+        style: LiquidGlassSurfaceStyle.control,
+        padding: const EdgeInsets.all(4),
+        child: FallbackSelectionTrack(
+          selectedIndex: segments.indexWhere(
+            (segment) => segment.value == selected,
+          ),
+          radius: 24,
+          children: [
+            for (final segment in segments)
+              Semantics(
+                selected: segment.value == selected,
+                button: true,
+                enabled: onChanged != null,
+                label: segment.label,
+                excludeSemantics: true,
+                onTap: onChanged == null
+                    ? null
+                    : () => onChanged!(segment.value),
+                child: Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(24),
+                  child: FallbackPressable(
+                    borderRadius: BorderRadius.circular(24),
+                    scaleOnPress: false,
+                    onTap: onChanged == null
+                        ? null
+                        : () => onChanged!(segment.value),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minHeight: 48,
+                        minWidth: 48,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
                         ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: FallbackPressable(
-                            borderRadius: BorderRadius.circular(24),
-                            onTap: onChanged == null
-                                ? null
-                                : () => onChanged!(segment.value),
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(minHeight: 48),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 8,
+                        child: Center(
+                          child: Text(
+                            segment.label,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(
+                                  color: segment.value == selected
+                                      ? glassColors.selectedForeground ??
+                                            glassColors.foreground ??
+                                            colors.onSurface
+                                      : glassColors.foreground ??
+                                            colors.onSurface,
+                                  fontWeight: segment.value == selected
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
                                 ),
-                                child: Center(
-                                  child: Text(
-                                    segment.label,
-                                    textAlign: TextAlign.center,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelMedium
-                                        ?.copyWith(
-                                          color: segment.value == selected
-                                              ? colors.onSurface
-                                              : colors.onSurfaceVariant,
-                                          fontWeight: segment.value == selected
-                                              ? FontWeight.w600
-                                              : FontWeight.w500,
-                                        ),
-                                  ),
-                                ),
-                              ),
-                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-              ],
-            ),
-          ),
+                ),
+              ),
+          ],
         ),
       ),
     );

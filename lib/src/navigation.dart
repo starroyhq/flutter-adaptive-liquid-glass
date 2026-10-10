@@ -5,9 +5,11 @@ import 'controls.dart';
 import 'actions.dart';
 import 'button_group.dart';
 import 'fallback_pressable.dart';
+import 'fallback_selection_track.dart';
 import 'native_tab_item.dart';
 import 'surface.dart';
 import 'theme.dart';
+import 'native_visibility.dart';
 
 @immutable
 class LiquidGlassTabItem {
@@ -43,22 +45,27 @@ class LiquidGlassTabBar extends StatelessWidget {
     final glassTheme = LiquidGlassTheme.of(context);
     if (glassTheme.resolveTabBar(nativeAvailable: liquidGlassNativeAvailable) ==
         LiquidGlassMode.native) {
-      final tabBar = native.LiquidGlassTabBar(
-        items: [
-          for (final item in items)
-            nativeTabItem(
-              label: item.label,
-              icon: item.icon,
-              selectedIcon: item.selectedIcon,
-              sfSymbol: item.sfSymbol,
-              badge: item.badge,
-            ),
-        ],
-        currentIndex: selectedIndex,
-        selectedItemColor: Theme.of(context).colorScheme.primary,
-        onTabSelected: (index) {
-          if (index >= 0 && index < items.length) onSelected(index);
-        },
+      final tabBar = NativeVisibility(
+        child: native.LiquidGlassTabBar(
+          items: [
+            for (final item in items)
+              nativeTabItem(
+                label: item.label,
+                icon: item.icon,
+                selectedIcon: item.selectedIcon,
+                sfSymbol: item.sfSymbol,
+                badge: item.badge,
+              ),
+          ],
+          currentIndex: selectedIndex,
+          selectedItemColor:
+              glassTheme.colors.selectedForeground ??
+              glassTheme.colors.accent ??
+              Theme.of(context).colorScheme.primary,
+          onTabSelected: (index) {
+            if (index >= 0 && index < items.length) onSelected(index);
+          },
+        ),
       );
       // UIKit keeps its native Liquid Glass shape, selection, hit testing and
       // system accessibility behavior. An app-specific transparency preference
@@ -66,7 +73,10 @@ class LiquidGlassTabBar extends StatelessWidget {
       return glassTheme.reduceTransparency ||
               glassTheme.mode == LiquidGlassMode.opaque
           ? ColoredBox(
-              color: Theme.of(context).colorScheme.surface,
+              color:
+                  (glassTheme.colors.surfaceTint ??
+                          Theme.of(context).colorScheme.surface)
+                      .withValues(alpha: 1),
               child: tabBar,
             )
           : tabBar;
@@ -75,22 +85,18 @@ class LiquidGlassTabBar extends StatelessWidget {
       top: false,
       minimum: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       child: LiquidGlassSurface(
-        radius: 30,
-        padding: const EdgeInsets.all(4),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var index = 0; index < items.length; index++)
-                Expanded(
-                  child: _TabItem(
-                    item: items[index],
-                    selected: index == selectedIndex,
-                    onTap: () => onSelected(index),
-                  ),
-                ),
-            ],
-          ),
+        radius: 32,
+        padding: const EdgeInsets.all(6),
+        child: FallbackSelectionTrack(
+          selectedIndex: selectedIndex,
+          children: [
+            for (var index = 0; index < items.length; index++)
+              _TabItem(
+                item: items[index],
+                selected: index == selectedIndex,
+                onTap: () => onSelected(index),
+              ),
+          ],
         ),
       ),
     );
@@ -110,8 +116,12 @@ class _TabItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final color = selected ? colors.onSurface : colors.onSurfaceVariant;
+    final glassColors = LiquidGlassTheme.of(context).colors;
+    final color = selected
+        ? glassColors.selectedForeground ??
+              glassColors.foreground ??
+              colors.onSurface
+        : glassColors.foreground ?? colors.onSurface;
     final icon = Icon(
       selected ? item.selectedIcon ?? item.icon : item.icon,
       size: 20,
@@ -124,13 +134,12 @@ class _TabItem extends StatelessWidget {
       excludeSemantics: true,
       onTap: onTap,
       child: Material(
-        color: selected
-            ? colors.onSurface.withValues(alpha: dark ? .10 : .06)
-            : Colors.transparent,
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(26),
         child: FallbackPressable(
           borderRadius: BorderRadius.circular(26),
           onTap: onTap,
+          scaleOnPress: false,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 52, minWidth: 48),
             child: Padding(
@@ -181,6 +190,7 @@ class LiquidGlassNavigationBar extends StatelessWidget
 
   @override
   Widget build(BuildContext context) {
+    final glassColors = LiquidGlassTheme.of(context).colors;
     final all = [...leading, ...actions];
     // The provider's UINavigationBar only serializes SF Symbols, and has no
     // disabled-action property. Fall back instead of silently losing either.
@@ -204,21 +214,26 @@ class LiquidGlassNavigationBar extends StatelessWidget
           );
       return SafeArea(
         bottom: false,
-        child: native.LiquidGlassNavigationBar(
-          title: title,
-          height: 64,
-          brightness: Theme.of(context).brightness,
-          tintColor: Theme.of(context).colorScheme.primary,
-          leadingItems: leading.map(item).toList(),
-          trailingItems: actions.map(item).toList(),
-          onItemTapped: (id) {
-            for (final action in all) {
-              if (action.id == id) {
-                action.onPressed?.call();
-                return;
+        child: NativeVisibility(
+          child: native.LiquidGlassNavigationBar(
+            title: title,
+            height: 64,
+            brightness: Theme.of(context).brightness,
+            tintColor:
+                glassColors.foreground ??
+                glassColors.accent ??
+                Theme.of(context).colorScheme.primary,
+            leadingItems: leading.map(item).toList(),
+            trailingItems: actions.map(item).toList(),
+            onItemTapped: (id) {
+              for (final action in all) {
+                if (action.id == id) {
+                  action.onPressed?.call();
+                  return;
+                }
               }
-            }
-          },
+            },
+          ),
         ),
       );
     }
@@ -249,7 +264,9 @@ class LiquidGlassNavigationBar extends StatelessWidget
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: glassColors.foreground,
+                  ),
                 ),
               ),
             ),

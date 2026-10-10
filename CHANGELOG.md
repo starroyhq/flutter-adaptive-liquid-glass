@@ -1,5 +1,13 @@
 ## 0.2.0 — unreleased candidate
 
+- Replace Cupertino fallback controls with owned slider/switch rendering,
+  repeating stepper buttons, localized date wheels and an activity painter.
+- Add independent package haptic/sound permissions, platform feedback dispatch,
+  long-only actions and default tap-or-long-press menu triggers. Native capsules
+  cancel click-after-hold and stale lifecycle events; system tabs remain native.
+- Preserve controlled input and date/time contracts through resets, calendar
+  boundaries and DST changes. Document the boundary between package feedback
+  and system/calendar behavior.
 - Expand the independent example into a 21-capability component catalog with
   Controls, Pickers, Popups and Search pages; retain the material and mixed-modal
   probes behind explicit compile-time flags.

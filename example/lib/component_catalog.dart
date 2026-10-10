@@ -19,6 +19,8 @@ class _ComponentCatalogAppState extends State<ComponentCatalogApp> {
   late LiquidGlassMode _mode = widget.initialMode;
   ThemeMode _appearance = ThemeMode.system;
   bool _branded = false, _reduceMotion = false, _opaque = false;
+  bool _haptics = true, _sound = true;
+  int _longPresses = 0;
   int _page = 0, _segment = 0, _presses = 0;
   int _sliderStarts = 0, _sliderEnds = 0;
   double? _sliderLastEnd;
@@ -66,6 +68,7 @@ class _ComponentCatalogAppState extends State<ComponentCatalogApp> {
           mode: _mode,
           reduceMotion: _reduceMotion,
           reduceTransparency: _opaque,
+          feedback: LiquidGlassFeedbackData(haptics: _haptics, sound: _sound),
           colors: _branded
               ? LiquidGlassColors.fromColorScheme(Theme.of(context).colorScheme)
               : const LiquidGlassColors(),
@@ -168,18 +171,28 @@ class _ComponentCatalogAppState extends State<ComponentCatalogApp> {
         LiquidGlassButton(
           label: 'Action',
           onPressed: () => setState(() => _presses++),
+          onLongPress: () => setState(() => _longPresses++),
+          longPressSemanticLabel: 'Count a long press',
         ),
         LiquidGlassButton.icon(
           icon: Icons.add,
           sfSymbol: 'plus',
           semanticLabel: 'Add',
           onPressed: () => setState(() => _presses++),
+          onLongPress: () => setState(() => _longPresses++),
+          longPressSemanticLabel: 'Count an icon long press',
         ),
         const LiquidGlassButton(label: 'Disabled'),
         const LiquidGlassButton(label: 'Loading', loading: true),
       ],
     ),
     Text('Action count: $_presses'),
+    Text('Long press count: $_longPresses'),
+    LiquidGlassButton(
+      label: 'Hold only',
+      onLongPress: () => setState(() => _longPresses++),
+      longPressSemanticLabel: 'Count a hold without a click action',
+    ),
     _heading('Grouped toolbar'),
     LiquidGlassToolbar(
       groups: [
@@ -190,6 +203,8 @@ class _ComponentCatalogAppState extends State<ComponentCatalogApp> {
             icon: Icons.undo,
             sfSymbol: 'arrow.uturn.backward',
             onPressed: () => setState(() => _presses--),
+            onLongPress: () => setState(() => _longPresses++),
+            longPressSemanticLabel: 'Hold Undo',
           ),
           LiquidGlassAction(
             id: 'redo',
@@ -197,6 +212,8 @@ class _ComponentCatalogAppState extends State<ComponentCatalogApp> {
             icon: Icons.redo,
             sfSymbol: 'arrow.uturn.forward',
             onPressed: () => setState(() => _presses++),
+            onLongPress: () => setState(() => _longPresses++),
+            longPressSemanticLabel: 'Hold Redo',
           ),
         ],
         [
@@ -374,6 +391,19 @@ class _ComponentCatalogAppState extends State<ComponentCatalogApp> {
               title: const Text('Reduce transparency'),
               value: _opaque,
               onChanged: (value) => change(() => _opaque = value),
+            ),
+            SwitchListTile(
+              title: const Text('Package haptics'),
+              value: _haptics,
+              onChanged: (value) => change(() => _haptics = value),
+            ),
+            SwitchListTile(
+              title: const Text('Package system sounds'),
+              value: _sound,
+              onChanged: (value) => change(() => _sound = value),
+            ),
+            const Text(
+              'These switches control package feedback. Native controls and the calendar retain their system behavior.',
             ),
             Wrap(
               spacing: 8,

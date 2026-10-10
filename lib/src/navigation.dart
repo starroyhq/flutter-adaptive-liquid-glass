@@ -6,6 +6,8 @@ import 'actions.dart';
 import 'button_group.dart';
 import 'fallback_pressable.dart';
 import 'fallback_selection_track.dart';
+import 'feedback.dart';
+import 'native_capsule.dart';
 import 'native_tab_item.dart';
 import 'surface.dart';
 import 'theme.dart';
@@ -94,7 +96,13 @@ class LiquidGlassTabBar extends StatelessWidget {
               _TabItem(
                 item: items[index],
                 selected: index == selectedIndex,
-                onTap: () => onSelected(index),
+                onTap: () {
+                  if (!LiquidGlassFeedback.canInteract(context)) return;
+                  if (index != selectedIndex) {
+                    LiquidGlassFeedback.selection(context);
+                  }
+                  onSelected(index);
+                },
               ),
           ],
         ),
@@ -140,6 +148,7 @@ class _TabItem extends StatelessWidget {
           borderRadius: BorderRadius.circular(26),
           onTap: onTap,
           scaleOnPress: false,
+          feedbackOnTap: false,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 52, minWidth: 48),
             child: Padding(
@@ -197,6 +206,7 @@ class LiquidGlassNavigationBar extends StatelessWidget
     final nativeActions = all.every(
       (action) =>
           action.onPressed != null &&
+          action.onLongPress == null &&
           (action.icon == null || action.sfSymbol != null),
     );
     if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native &&
@@ -228,6 +238,8 @@ class LiquidGlassNavigationBar extends StatelessWidget
             onItemTapped: (id) {
               for (final action in all) {
                 if (action.id == id) {
+                  if (!nativeCapsuleActionAllowed(context)) return;
+                  LiquidGlassFeedback.tap(context);
                   action.onPressed?.call();
                   return;
                 }
@@ -245,6 +257,8 @@ class LiquidGlassNavigationBar extends StatelessWidget
         icon: action.icon,
         sfSymbol: action.sfSymbol,
         onPressed: action.onPressed,
+        onLongPress: action.onLongPress,
+        longPressSemanticLabel: action.longPressSemanticLabel,
       ),
     );
     return SafeArea(

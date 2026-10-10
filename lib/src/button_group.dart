@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'actions.dart';
 import 'fallback_pressable.dart';
+import 'feedback.dart';
 import 'native_button_layout.dart';
 import 'native_capsule.dart';
 import 'surface.dart';
@@ -35,6 +36,8 @@ class LiquidGlassButtonGroup extends StatelessWidget {
               icon: action.icon,
               sfSymbol: action.sfSymbol,
               onPressed: action.onPressed,
+              onLongPress: action.onLongPress,
+              longPressSemanticLabel: action.longPressSemanticLabel,
             ),
         ],
         grouped: true,
@@ -50,10 +53,27 @@ class LiquidGlassButtonGroup extends StatelessWidget {
           for (final action in actions)
             Tooltip(
               message: action.label,
+              triggerMode: action.onLongPress == null
+                  ? null
+                  : TooltipTriggerMode.manual,
               child: Semantics(
                 button: true,
-                enabled: action.onPressed != null,
-                onTap: action.onPressed,
+                enabled: action.onPressed != null || action.onLongPress != null,
+                onTap: action.onPressed == null
+                    ? null
+                    : () {
+                        if (!LiquidGlassFeedback.canInteract(context)) return;
+                        LiquidGlassFeedback.tap(context);
+                        action.onPressed!();
+                      },
+                onLongPress: action.onLongPress == null
+                    ? null
+                    : () {
+                        if (!LiquidGlassFeedback.canInteract(context)) return;
+                        LiquidGlassFeedback.longPress(context);
+                        action.onLongPress!();
+                      },
+                onLongPressHint: action.longPressSemanticLabel,
                 label: action.label,
                 excludeSemantics: true,
                 child: Material(
@@ -62,13 +82,19 @@ class LiquidGlassButtonGroup extends StatelessWidget {
                     key: ValueKey(action.id),
                     borderRadius: BorderRadius.circular(24),
                     onTap: action.onPressed,
+                    onLongPress: action.onLongPress,
+                    longPressSemanticLabel: action.longPressSemanticLabel,
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(
                         minWidth: 48,
                         minHeight: 48,
                       ),
                       child: Opacity(
-                        opacity: action.onPressed == null ? .4 : 1,
+                        opacity:
+                            action.onPressed == null &&
+                                action.onLongPress == null
+                            ? .4
+                            : 1,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,

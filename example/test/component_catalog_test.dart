@@ -4,9 +4,17 @@ import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart
 import 'package:flutter_adaptive_liquid_glass_example/component_catalog.dart';
 
 import '../integration_test/components_test.dart'
-    show dismissKeyboard, exerciseFallbackControls, reveal;
+    show
+        dismissKeyboard,
+        exerciseFallbackControls,
+        exerciseOwnedInteractions,
+        reveal;
 
 void main() {
+  testWidgets(
+    'owned interactions include long press, repeat and date scrolling',
+    exerciseOwnedInteractions,
+  );
   testWidgets('catalog exposes every component family with real contents', (
     tester,
   ) async {

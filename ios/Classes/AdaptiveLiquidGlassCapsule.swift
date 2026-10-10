@@ -42,29 +42,36 @@ final class AdaptiveLiquidGlassCapsuleFactory: NSObject, FlutterPlatformViewFact
 /// UILabel/UIButton own title layout; there is no SwiftUI hosting/compression
 /// bridge and no individual child glass surface to turn a group into circles.
 private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
-  private let container: UIVisualEffectView
+  private let container: AdaptiveGlassCapsuleContainer
   private let stack = UIStackView()
   private let channel: FlutterMethodChannel
-  private var buttons: [UIButton] = []
+  private var buttons: [AdaptiveGlassCapsuleButton] = []
   private let grouped: Bool
   private let suppression: AdaptiveLiquidGlassSuppression
   private let popupOwner: Bool
   private var routeSuppressed: Bool
   private var suppressionObserver: UUID?
+  private var lifecycleObservers: [NSObjectProtocol] = []
+  private var applicationActive = UIApplication.shared.applicationState == .active
+  private var interactionEnabled = true
+  private var interactionEpoch = 0
+  private var sequence = 0
 
   init(frame: CGRect, identifier: Int64, arguments: [String: Any], messenger: FlutterBinaryMessenger, suppression: AdaptiveLiquidGlassSuppression) {
     grouped = arguments["grouped"] as? Bool ?? false
     self.suppression = suppression
     popupOwner = arguments["popupOwner"] as? Bool ?? false
     routeSuppressed = arguments["suppressed"] as? Bool ?? false
+    interactionEnabled = arguments["interactionEnabled"] as? Bool ?? true
+    interactionEpoch = arguments["epoch"] as? Int ?? 0
     if #available(iOS 26.0, *) {
       let glass = UIGlassEffect(style: .regular)
       glass.isInteractive = true
       glass.tintColor = Self.color(arguments["tint"])
-      container = UIVisualEffectView(effect: glass)
+      container = AdaptiveGlassCapsuleContainer(effect: glass)
     } else {
       // The Dart adapter never requests this platform view before iOS 26.
-      container = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
+      container = AdaptiveGlassCapsuleContainer(effect: UIBlurEffect(style: .systemMaterial))
     }
     channel = FlutterMethodChannel(name: "flutter_adaptive_liquid_glass/capsule/\(identifier)", binaryMessenger: messenger)
     super.init()
@@ -73,6 +80,14 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     container.layer.cornerCurve = .continuous
     container.clipsToBounds = true
     container.overrideUserInterfaceStyle = arguments["dark"] as? Bool == true ? .dark : .light
+    container.onWindowChanged = { [weak self] in self?.updateVisibility() }
+    for (name, active) in [(UIApplication.willResignActiveNotification, false),
+                           (UIApplication.didBecomeActiveNotification, true)] {
+      lifecycleObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+        self?.applicationActive = active
+        self?.updateVisibility()
+      })
+    }
     suppressionObserver = suppression.observe { [weak self] in self?.updateVisibility() }
     updateVisibility()
     stack.axis = .horizontal
@@ -117,20 +132,42 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
           image.draw(in: CGRect(origin: .zero, size: size))
         }.withRenderingMode(.alwaysTemplate)
       }
-      let button = UIButton(configuration: config)
-      button.isEnabled = item["enabled"] as? Bool ?? false
+      let button = AdaptiveGlassCapsuleButton(configuration: config)
+      button.actionId = id
+      button.tapEnabled = item["tapEnabled"] as? Bool ?? (item["enabled"] as? Bool ?? false)
+      button.longPressEnabled = item["longPressEnabled"] as? Bool ?? false
+      button.isEnabled = button.tapEnabled || button.longPressEnabled
       button.accessibilityLabel = item["label"] as? String
       button.accessibilityIdentifier = id
       button.titleLabel?.numberOfLines = 1
       button.titleLabel?.adjustsFontSizeToFitWidth = false
       button.setContentCompressionResistancePriority(.required, for: .horizontal)
       button.widthAnchor.constraint(greaterThanOrEqualToConstant: 48).isActive = true
-      button.addAction(UIAction { [weak self] _ in
-        self?.channel.invokeMethod("pressed", arguments: id)
-      }, for: .touchUpInside)
+      button.addTarget(self, action: #selector(touchDown(_:)), for: .touchDown)
+      button.addTarget(self, action: #selector(pressed(_:event:)), for: .touchUpInside)
+      button.onAccessibilityActivate = { [weak self, weak button] longPress in
+        guard let self, let button else { return false }
+        return self.activate(button, longPress: longPress)
+      }
+      if button.longPressEnabled {
+        let recognizer = AdaptiveGlassCapsuleLongPress(target: self, action: #selector(longPressed(_:)))
+        // UIKit is the sole owner of the business gesture. Flutter's recognizer
+        // only wins its arena team and releases this touch sequence to UIKit.
+        recognizer.cancelsTouchesInView = true
+        button.addGestureRecognizer(recognizer)
+        button.longPressRecognizer = recognizer
+        button.accessibilityCustomActions = [UIAccessibilityCustomAction(
+          name: item["longPressLabel"] as? String ?? item["label"] as? String ?? "",
+          actionHandler: { [weak self, weak button] _ in
+            guard let self, let button else { return false }
+            return self.activate(button, longPress: true)
+          }
+        )]
+      }
       buttons.append(button)
       stack.addArrangedSubview(button)
     }
+    updateVisibility()
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self else { result(nil); return }
       switch call.method {
@@ -141,7 +178,12 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
         }
         result(["width": ceil(width), "height": 48])
       case "setSuppressed":
-        self.routeSuppressed = (call.arguments as? [String: Any])?["suppressed"] as? Bool ?? false
+        let state = call.arguments as? [String: Any] ?? [:]
+        let epoch = state["epoch"] as? Int ?? self.interactionEpoch
+        if epoch != self.interactionEpoch { self.cancelInteractions() }
+        self.interactionEpoch = epoch
+        self.routeSuppressed = state["suppressed"] as? Bool ?? false
+        self.interactionEnabled = state["interactionEnabled"] as? Bool ?? true
         self.updateVisibility()
         result(nil)
       default: result(FlutterMethodNotImplemented)
@@ -151,22 +193,115 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
 
   func view() -> UIView { container }
 
+  @objc private func touchDown(_ button: AdaptiveGlassCapsuleButton) {
+    button.longPressConsumed = false
+    button.pressCancelled = false
+  }
+
+  @objc private func pressed(_ button: AdaptiveGlassCapsuleButton, event: UIEvent?) {
+    // Long press cancels UIButton tracking. Keep the latch through touch-up too,
+    // protecting against a queued touchUpInside from the same sequence.
+    if event != nil && (button.longPressConsumed || button.pressCancelled) { return }
+    _ = activate(button, longPress: false)
+  }
+
+  @objc private func longPressed(_ recognizer: UILongPressGestureRecognizer) {
+    guard recognizer.state == .began,
+          let button = recognizer.view as? AdaptiveGlassCapsuleButton,
+          !button.longPressConsumed, !button.pressCancelled else { return }
+    button.longPressConsumed = true
+    button.cancelTracking(with: nil)
+    _ = activate(button, longPress: true)
+  }
+
+  private func activate(_ button: AdaptiveGlassCapsuleButton, longPress: Bool) -> Bool {
+    guard !container.isHidden, container.window != nil,
+          interactionEnabled, applicationActive, button.isEnabled,
+          longPress ? button.longPressEnabled : button.tapEnabled else { return false }
+    sequence += 1
+    channel.invokeMethod(longPress ? "longPressed" : "pressed", arguments: [
+      "id": button.actionId, "epoch": interactionEpoch, "sequence": sequence,
+    ])
+    return true
+  }
+
+  private func cancelInteractions() {
+    for button in buttons {
+      button.pressCancelled = true
+      button.cancelTracking(with: nil)
+      button.longPressRecognizer?.isEnabled = false
+    }
+  }
+
   private func updateVisibility() {
     // Controls inside the popup must not be hidden by their own popup. A nested
     // popup makes that owner's route non-current, and route suppression wins.
     let hidden = routeSuppressed || (suppression.active && !popupOwner)
+    let canInteract = !hidden && interactionEnabled && applicationActive && container.window != nil
+    if !canInteract { cancelInteractions() }
     container.isHidden = hidden
     container.accessibilityElementsHidden = hidden
+    for button in buttons {
+      button.isEnabled = canInteract && (button.tapEnabled || button.longPressEnabled)
+      button.longPressRecognizer?.isEnabled = canInteract && button.longPressEnabled
+    }
   }
 
   deinit {
+    container.onWindowChanged = nil
+    cancelInteractions()
     channel.setMethodCallHandler(nil)
     if let suppressionObserver { suppression.remove(suppressionObserver) }
+    for observer in lifecycleObservers { NotificationCenter.default.removeObserver(observer) }
   }
 
   private static func color(_ value: Any?) -> UIColor? {
     guard let number = value as? NSNumber else { return nil }
     let argb = number.uint32Value
     return UIColor(red: CGFloat((argb >> 16) & 255) / 255, green: CGFloat((argb >> 8) & 255) / 255, blue: CGFloat(argb & 255) / 255, alpha: CGFloat((argb >> 24) & 255) / 255)
+  }
+}
+
+private final class AdaptiveGlassCapsuleContainer: UIVisualEffectView {
+  var onWindowChanged: (() -> Void)?
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    onWindowChanged?()
+  }
+}
+
+private final class AdaptiveGlassCapsuleButton: UIButton {
+  var actionId = ""
+  var tapEnabled = false
+  var longPressEnabled = false
+  var longPressConsumed = false
+  var pressCancelled = false
+  var longPressRecognizer: UILongPressGestureRecognizer?
+  var onAccessibilityActivate: ((Bool) -> Bool)?
+
+  override func accessibilityActivate() -> Bool {
+    onAccessibilityActivate?(!tapEnabled && longPressEnabled) ?? false
+  }
+}
+
+private final class AdaptiveGlassCapsuleLongPress: UILongPressGestureRecognizer {
+  private var trackedTouch: UITouch?
+
+  override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+    if trackedTouch == nil, let touch = touches.first {
+      trackedTouch = touch
+      // This is only per-sequence bookkeeping, never a business callback. Raw
+      // recognizer touches arrive before Flutter releases UIButton tracking.
+      let button = view as? AdaptiveGlassCapsuleButton
+      button?.longPressConsumed = false
+      button?.pressCancelled = false
+    }
+    super.touchesBegan(touches, with: event)
+  }
+
+  override func reset() {
+    trackedTouch = nil
+    // Keep the consumed latch until a genuinely new pointer sequence begins.
+    super.reset()
   }
 }

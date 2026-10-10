@@ -1,14 +1,19 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:native_liquid_glass/native_liquid_glass.dart' as native;
 
 import 'native_button_layout.dart';
 import 'theme.dart';
 import 'native_visibility.dart';
+import 'feedback.dart';
+
+/// Also used by upstream adapters before invoking a package-owned action.
+bool nativeCapsuleActionAllowed(BuildContext context) =>
+    LiquidGlassFeedback.canInteract(context);
 
 @immutable
 class NativeCapsuleItem {
@@ -19,11 +24,15 @@ class NativeCapsuleItem {
     this.icon,
     this.sfSymbol,
     this.onPressed,
+    this.onLongPress,
+    this.longPressSemanticLabel,
   });
   final String id, label;
   final String? title, sfSymbol;
   final IconData? icon;
   final VoidCallback? onPressed;
+  final VoidCallback? onLongPress;
+  final String? longPressSemanticLabel;
 }
 
 /// One platform view owns one glass effect and all its plain UIKit buttons.
@@ -41,10 +50,12 @@ class NativeCapsule extends StatefulWidget {
 }
 
 class _NativeCapsuleState extends State<NativeCapsule>
-    with native.LiquidGlassRouteSuppression {
+    with WidgetsBindingObserver {
   MethodChannel? _channel;
-  @override
-  MethodChannel? get suppressionChannel => _channel;
+  Map<String, bool>? _interactionState;
+  int _interactionEpoch = 0;
+  int _viewGeneration = 0;
+  int _lastEvent = 0;
   final _icons = <int, Uint8List>{};
   int _generation = 0;
   double? _measuredWidth;
@@ -56,7 +67,52 @@ class _NativeCapsuleState extends State<NativeCapsule>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _prepareIcons();
+  }
+
+  List<Route<dynamic>> _routes() {
+    Route<dynamic>? route = ModalRoute.of(context);
+    final visited = <Route<dynamic>>{};
+    while (route != null && visited.add(route)) {
+      final navigator = route.navigator;
+      route = navigator == null ? null : ModalRoute.of(navigator.context);
+    }
+    return visited.toList();
+  }
+
+  bool get _covered => _routes().any(
+    (route) =>
+        (route.isActive && !route.isCurrent) ||
+        nativeRouteCoverage.covers(route),
+  );
+
+  void _syncInteraction({bool force = false}) {
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    final state = {
+      'suppressed': _covered,
+      'interactionEnabled':
+          lifecycle == null || lifecycle == AppLifecycleState.resumed,
+    };
+    final changed = !mapEquals(_interactionState, state);
+    if (changed) {
+      _interactionState = state;
+      ++_interactionEpoch;
+    }
+    final channel = _channel;
+    if (channel != null && (changed || force)) {
+      unawaited(
+        channel.invokeMethod<void>('setSuppressed', {
+          ...state,
+          'epoch': _interactionEpoch,
+        }),
+      );
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _syncInteraction(force: true);
   }
 
   @override
@@ -105,22 +161,48 @@ class _NativeCapsuleState extends State<NativeCapsule>
     if (mounted && epoch == _generation) setState(() {});
   }
 
-  Future<void> _created(int id, int signature) async {
+  Future<void> _created(int id, int signature, int generation) async {
+    if (!mounted ||
+        signature != _measurementSignature ||
+        generation != _viewGeneration) {
+      return;
+    }
     _channel?.setMethodCallHandler(null);
     final channel = MethodChannel('flutter_adaptive_liquid_glass/capsule/$id');
     _channel = channel;
+    _lastEvent = 0;
     channel.setMethodCallHandler((call) async {
-      if (call.method == 'pressed') {
-        for (final item in widget.items) {
-          if (item.id == call.arguments) {
-            item.onPressed?.call();
-            break;
-          }
+      if (!mounted ||
+          _channel != channel ||
+          generation != _viewGeneration ||
+          signature != _measurementSignature ||
+          !nativeCapsuleActionAllowed(context)) {
+        return null;
+      }
+      if (call.method != 'pressed' && call.method != 'longPressed') return null;
+      final arguments = call.arguments;
+      if (arguments is! Map || arguments['epoch'] != _interactionEpoch) {
+        return null;
+      }
+      final sequence = arguments['sequence'];
+      if (sequence is! int || sequence <= _lastEvent) return null;
+      _lastEvent = sequence;
+      for (final item in widget.items) {
+        if (item.id != arguments['id']) continue;
+        final longPress = call.method == 'longPressed';
+        final callback = longPress ? item.onLongPress : item.onPressed;
+        if (callback == null) break;
+        if (longPress) {
+          LiquidGlassFeedback.longPress(context);
+        } else {
+          LiquidGlassFeedback.tap(context);
         }
+        callback();
+        break;
       }
       return null;
     });
-    syncGlassRouteVisibility();
+    _syncInteraction(force: true);
     final size = await channel.invokeMapMethod<String, Object?>(
       'intrinsicSize',
     );
@@ -136,12 +218,24 @@ class _NativeCapsuleState extends State<NativeCapsule>
   @override
   void dispose() {
     ++_generation;
+    ++_viewGeneration;
+    WidgetsBinding.instance.removeObserver(this);
     _channel?.setMethodCallHandler(null);
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: Listenable.merge([
+      nativeRouteCoverage,
+      for (final route in _routes().whereType<TransitionRoute>())
+        route.secondaryAnimation,
+    ]),
+    builder: (context, _) => _buildCapsule(context),
+  );
+
+  Widget _buildCapsule(BuildContext context) {
+    _syncInteraction();
     final theme = Theme.of(context),
         fontSize = MediaQuery.textScalerOf(context).scale(17);
     final colors = theme.colorScheme;
@@ -158,8 +252,9 @@ class _NativeCapsuleState extends State<NativeCapsule>
           ? (glassColors.accent ?? colors.primary).toARGB32()
           : glassColors.surfaceTint?.toARGB32(),
       'fontSize': fontSize,
-      'suppressed': ModalRoute.of(context)?.isCurrent == false,
-      'popupOwner': ModalRoute.of(context) is PopupRoute,
+      ..._interactionState!,
+      'epoch': _interactionEpoch,
+      'popupOwner': _routes().any((route) => route is PopupRoute),
       'items': [
         for (var i = 0; i < widget.items.length; ++i)
           {
@@ -168,7 +263,13 @@ class _NativeCapsuleState extends State<NativeCapsule>
             'title': widget.items[i].title,
             'symbol': widget.items[i].sfSymbol,
             'png': _icons[i],
-            'enabled': widget.items[i].onPressed != null,
+            'enabled':
+                widget.items[i].onPressed != null ||
+                widget.items[i].onLongPress != null,
+            'tapEnabled': widget.items[i].onPressed != null,
+            'longPressEnabled': widget.items[i].onLongPress != null,
+            'longPressLabel':
+                widget.items[i].longPressSemanticLabel ?? widget.items[i].label,
           },
       ],
     };
@@ -188,15 +289,19 @@ class _NativeCapsuleState extends State<NativeCapsule>
             item.icon,
             item.sfSymbol,
             item.onPressed != null,
+            item.onLongPress != null,
+            item.longPressSemanticLabel,
           ),
         ),
       ),
       Object.hashAll(_icons.values),
     );
     if (_measurementSignature != signature) {
+      ++_viewGeneration;
       _measurementSignature = signature;
       _measuredWidth = null;
     }
+    final generation = _viewGeneration;
     final estimate = widget.items.fold<double>(
       widget.grouped ? 8 : 0,
       (sum, item) =>
@@ -221,9 +326,13 @@ class _NativeCapsuleState extends State<NativeCapsule>
           viewType: 'flutter_adaptive_liquid_glass/capsule',
           creationParams: params,
           creationParamsCodec: const StandardMessageCodec(),
-          onPlatformViewCreated: (id) => _created(id, signature),
+          onPlatformViewCreated: (id) => _created(id, signature, generation),
           gestureRecognizers: {
             Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
+            if (widget.items.any((item) => item.onLongPress != null))
+              Factory<LongPressGestureRecognizer>(
+                () => LongPressGestureRecognizer(),
+              ),
           },
         ),
       ),

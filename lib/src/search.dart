@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'feedback.dart';
 
 import 'navigation.dart';
 import 'surface.dart';
@@ -75,6 +76,8 @@ class _LiquidGlassSearchFieldState extends State<LiquidGlassSearchField> {
   }
 
   void _clear() {
+    if (!widget.enabled || !LiquidGlassFeedback.canInteract(context)) return;
+    LiquidGlassFeedback.tap(context);
     _controller.clear();
     widget.onChanged?.call('');
     widget.onClear?.call();
@@ -119,6 +122,7 @@ class _LiquidGlassSearchFieldState extends State<LiquidGlassSearchField> {
           ),
           if (_controller.text.isNotEmpty)
             IconButton(
+              enableFeedback: false,
               tooltip: localizations.deleteButtonTooltip,
               onPressed: widget.enabled ? _clear : null,
               color: foreground,
@@ -133,11 +137,14 @@ class _LiquidGlassSearchFieldState extends State<LiquidGlassSearchField> {
     final cancel = TextButton(
       onPressed: widget.enabled
           ? () {
+              if (!LiquidGlassFeedback.canInteract(context)) return;
+              LiquidGlassFeedback.tap(context);
               _focus.unfocus();
               widget.onCancelled?.call();
             }
           : null,
       style: TextButton.styleFrom(
+        enableFeedback: false,
         foregroundColor: glass.colors.accent ?? colors.primary,
       ),
       child: Text(localizations.cancelButtonLabel),

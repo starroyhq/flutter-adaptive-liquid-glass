@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'feedback.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'surface.dart';
@@ -299,6 +300,7 @@ class _AlertState<T> extends State<_Alert<T>> {
       return;
     }
     _submitted = true;
+    LiquidGlassFeedback.tap(context);
     Navigator.of(context).pop<T>(action.cancel ? null : action.value);
   }
 
@@ -357,6 +359,7 @@ class _AlertState<T> extends State<_Alert<T>> {
                                 ? () => _select(action)
                                 : null,
                             style: TextButton.styleFrom(
+                              enableFeedback: false,
                               minimumSize: const Size(48, 52),
                               foregroundColor: action.destructive
                                   ? theme.colorScheme.error

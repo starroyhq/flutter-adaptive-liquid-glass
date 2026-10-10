@@ -1,8 +1,8 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_adaptive_liquid_glass/src/theme.dart';
+import 'package:flutter_adaptive_liquid_glass/src/fallback_value_controls.dart';
 import 'package:flutter_adaptive_liquid_glass/src/value_controls.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -52,7 +52,7 @@ void main() {
         ),
       ),
     );
-    await tester.drag(find.byType(CupertinoSlider), const Offset(80, 0));
+    await tester.drag(find.byType(FallbackGlassSlider), const Offset(80, 0));
     await tester.pumpAndSettle();
     expect(changes, isNotEmpty);
     expect(changes.every((v) => v * 4 == (v * 4).round()), isTrue);
@@ -109,7 +109,7 @@ void main() {
         direction: TextDirection.rtl,
       ),
     );
-    await tester.drag(find.byType(CupertinoSlider), const Offset(60, 0));
+    await tester.drag(find.byType(FallbackGlassSlider), const Offset(60, 0));
     expect(changed, lessThan(.5));
   });
 
@@ -127,7 +127,7 @@ void main() {
           ),
         ),
       );
-      await tester.drag(find.byType(CupertinoSlider), const Offset(80, 0));
+      await tester.drag(find.byType(FallbackGlassSlider), const Offset(80, 0));
       expect(starts, 0);
       expect(ends, 0);
     },
@@ -140,20 +140,24 @@ void main() {
     await tester.pumpWidget(
       host(LiquidGlassSwitch(value: false, onChanged: (_) => changes++)),
     );
-    await tester.tap(find.byType(CupertinoSwitch));
+    await tester.tap(find.byType(FallbackGlassSwitch));
     await tester.pumpAndSettle();
     expect(changes, 1);
     expect(
-      tester.widget<CupertinoSwitch>(find.byType(CupertinoSwitch)).value,
+      tester
+          .widget<FallbackGlassSwitch>(find.byType(FallbackGlassSwitch))
+          .value,
       isFalse,
     );
     await tester.pumpWidget(
       host(const LiquidGlassSwitch(value: true, onChanged: null)),
     );
-    await tester.tap(find.byType(CupertinoSwitch));
+    await tester.tap(find.byType(FallbackGlassSwitch));
     expect(changes, 1);
     expect(
-      tester.widget<CupertinoSwitch>(find.byType(CupertinoSwitch)).value,
+      tester
+          .widget<FallbackGlassSwitch>(find.byType(FallbackGlassSwitch))
+          .value,
       isTrue,
     );
   });
@@ -198,7 +202,10 @@ void main() {
           reason:
               'A discrete value must reach its endpoint without a position ticker.',
         );
-        await tester.drag(find.byType(CupertinoSlider), const Offset(75, 0));
+        await tester.drag(
+          find.byType(FallbackGlassSlider),
+          const Offset(75, 0),
+        );
         await tester.pump();
         expect(value, greaterThan(.5));
         expect(changes.every((next) => next * 4 == (next * 4).round()), isTrue);
@@ -235,20 +242,25 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        final switchFocus = find.descendant(
+          of: find.byType(FallbackGlassSwitch),
+          matching: find.byType(FocusableActionDetector),
+        );
         final focus = tester
-            .widget<CupertinoSwitch>(find.byType(CupertinoSwitch))
+            .widget<FocusableActionDetector>(switchFocus)
             .focusNode!;
         focus.requestFocus();
         await tester.pump();
-        await tester.drag(find.byType(CupertinoSwitch), const Offset(-65, 0));
+        await tester.drag(
+          find.byType(FallbackGlassSwitch),
+          const Offset(-65, 0),
+        );
         await tester.pump();
         expect(value, isTrue);
         expect(callbacks, 1);
         expect(focus.hasFocus, isTrue);
         expect(
-          tester
-              .widget<CupertinoSwitch>(find.byType(CupertinoSwitch))
-              .focusNode,
+          tester.widget<FocusableActionDetector>(switchFocus).focusNode,
           same(focus),
         );
         expect(tester.binding.transientCallbackCount, 0);
@@ -259,7 +271,10 @@ void main() {
         expect(tester.binding.transientCallbackCount, 0);
         update(() => accept = false);
         await tester.pump();
-        await tester.drag(find.byType(CupertinoSwitch), const Offset(-65, 0));
+        await tester.drag(
+          find.byType(FallbackGlassSwitch),
+          const Offset(-65, 0),
+        );
         await tester.pump();
         expect(value, isFalse);
         expect(callbacks, 3);
@@ -290,20 +305,28 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.byIcon(CupertinoIcons.plus));
+    await tester.tap(
+      find.byKey(const ValueKey('liquid-glass-stepper-increase')),
+    );
     await tester.pump();
     expect(value, 10);
     update(() => wraps = true);
     await tester.pump();
-    await tester.tap(find.byIcon(CupertinoIcons.plus));
+    await tester.tap(
+      find.byKey(const ValueKey('liquid-glass-stepper-increase')),
+    );
     await tester.pump();
     expect(value, 0);
-    await tester.tap(find.byIcon(CupertinoIcons.minus));
+    await tester.tap(
+      find.byKey(const ValueKey('liquid-glass-stepper-decrease')),
+    );
     await tester.pump();
     expect(value, 10);
     update(() => value = 9);
     await tester.pump();
-    await tester.tap(find.byIcon(CupertinoIcons.plus));
+    await tester.tap(
+      find.byKey(const ValueKey('liquid-glass-stepper-increase')),
+    );
     await tester.pump();
     expect(value, 0);
   });
@@ -323,7 +346,9 @@ void main() {
       ),
     );
     final gesture = await tester.startGesture(
-      tester.getCenter(find.byIcon(CupertinoIcons.plus)),
+      tester.getCenter(
+        find.byKey(const ValueKey('liquid-glass-stepper-increase')),
+      ),
     );
     await tester.pump(const Duration(milliseconds: 600));
     for (var i = 0; i < 4; i++) {
@@ -335,7 +360,9 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(value, released);
     final next = await tester.startGesture(
-      tester.getCenter(find.byIcon(CupertinoIcons.plus)),
+      tester.getCenter(
+        find.byKey(const ValueKey('liquid-glass-stepper-increase')),
+      ),
     );
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpWidget(const SizedBox());
@@ -366,7 +393,9 @@ void main() {
         ),
       );
       final gesture = await tester.startGesture(
-        tester.getCenter(find.byIcon(CupertinoIcons.plus)),
+        tester.getCenter(
+          find.byKey(const ValueKey('liquid-glass-stepper-increase')),
+        ),
       );
       await tester.pump(const Duration(milliseconds: 600));
       for (var i = 0; i < 8; i++) {
@@ -386,7 +415,9 @@ void main() {
         host(LiquidGlassStepper(value: 0, onChanged: (_) => changes++)),
       );
       var gesture = await tester.startGesture(
-        tester.getCenter(find.byIcon(CupertinoIcons.plus)),
+        tester.getCenter(
+          find.byKey(const ValueKey('liquid-glass-stepper-increase')),
+        ),
       );
       await tester.pump(const Duration(milliseconds: 600));
       await gesture.cancel();
@@ -394,7 +425,9 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       expect(changes, stopped);
       gesture = await tester.startGesture(
-        tester.getCenter(find.byIcon(CupertinoIcons.plus)),
+        tester.getCenter(
+          find.byKey(const ValueKey('liquid-glass-stepper-increase')),
+        ),
       );
       await tester.pump(const Duration(milliseconds: 600));
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
@@ -427,7 +460,9 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.byIcon(CupertinoIcons.plus));
+      await tester.tap(
+        find.byKey(const ValueKey('liquid-glass-stepper-increase')),
+      );
       expect(changes, 0);
       expect(tester.takeException(), isNull);
     },

@@ -1,10 +1,11 @@
 import 'dart:ui' show ColorSpace;
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'controls.dart';
+import 'fallback_date_wheels.dart';
 import 'fallback_pressable.dart';
+import 'fallback_value_controls.dart';
 import 'native_picker.dart';
 import 'presentation.dart';
 import 'surface.dart';
@@ -248,22 +249,31 @@ class _DatePolicy {
   DateTime? minimum;
   DateTime? maximum;
 
-  // Subtract elapsed time instead of reconstructing a wall-clock timestamp:
-  // rebuilding 01:30 during a DST fold can silently choose the other offset.
-  DateTime _floor(DateTime date) => date.subtract(
+  // Walk actual minutes without reconstructing wall time: folds must retain
+  // their occurrence, and a DST offset change need not divide the interval.
+  DateTime _minuteStart(DateTime date) => date.subtract(
     Duration(
-      minutes: date.minute % picker.minuteInterval,
       seconds: date.second,
       milliseconds: date.millisecond,
       microseconds: date.microsecond,
     ),
   );
 
+  DateTime _floor(DateTime date) {
+    var result = _minuteStart(date);
+    while (result.minute % picker.minuteInterval != 0) {
+      result = result.subtract(const Duration(minutes: 1));
+    }
+    return result;
+  }
+
   DateTime _ceil(DateTime date) {
-    final floor = _floor(date);
-    return floor.isBefore(date)
-        ? floor.add(Duration(minutes: picker.minuteInterval))
-        : floor;
+    var result = _minuteStart(date);
+    if (result.isBefore(date)) result = result.add(const Duration(minutes: 1));
+    while (result.minute % picker.minuteInterval != 0) {
+      result = result.add(const Duration(minutes: 1));
+    }
+    return result;
   }
 
   DateTime normalize(DateTime candidate) {
@@ -366,55 +376,24 @@ class _DateEditorState extends State<_DateEditor> {
     final picker = widget.picker;
     final policy = _DatePolicy(picker);
     final mode = timeOnly
-        ? CupertinoDatePickerMode.time
+        ? FallbackDateWheelMode.time
         : switch (picker.mode) {
-            LiquidGlassDatePickerMode.date => CupertinoDatePickerMode.date,
-            LiquidGlassDatePickerMode.time => CupertinoDatePickerMode.time,
+            LiquidGlassDatePickerMode.date => FallbackDateWheelMode.date,
+            LiquidGlassDatePickerMode.time => FallbackDateWheelMode.time,
             LiquidGlassDatePickerMode.dateAndTime =>
-              CupertinoDatePickerMode.dateAndTime,
+              FallbackDateWheelMode.dateAndTime,
           };
-    final palette = LiquidGlassTheme.of(context).colors;
-    return CupertinoTheme(
-      data: CupertinoThemeData(
-        brightness: Theme.of(context).brightness,
-        primaryColor: palette.accent ?? Theme.of(context).colorScheme.primary,
-        textTheme: CupertinoTextThemeData(
-          dateTimePickerTextStyle: TextStyle(
-            color:
-                palette.foreground ?? Theme.of(context).colorScheme.onSurface,
-            fontSize: 20,
-          ),
-        ),
-      ),
-      child: SizedBox(
-        height: 216,
-        child: CupertinoDatePicker(
-          key: ValueKey(('wheels', _revision, timeOnly, mode)),
-          mode: mode,
-          initialDateTime: _display,
-          minimumDate: policy.minimum,
-          maximumDate: policy.maximum,
-          minimumYear: policy.minimum?.year ?? 1,
-          maximumYear: policy.maximum?.year,
-          minuteInterval: picker.mode == LiquidGlassDatePickerMode.date
-              ? 1
-              : picker.minuteInterval,
-          use24hFormat: MediaQuery.alwaysUse24HourFormatOf(context),
-          onDateTimeChanged: (date) {
-            _select(
-              timeOnly
-                  ? DateTime(
-                      _display.year,
-                      _display.month,
-                      _display.day,
-                      date.hour,
-                      date.minute,
-                    )
-                  : date,
-            );
-          },
-        ),
-      ),
+    return FallbackDateWheels(
+      key: ValueKey(('wheels', _revision, timeOnly, mode)),
+      value: _display,
+      mode: mode,
+      enabled: picker.onChanged != null,
+      minimumDate: policy.minimum,
+      maximumDate: policy.maximum,
+      minuteInterval: picker.mode == LiquidGlassDatePickerMode.date
+          ? 1
+          : picker.minuteInterval,
+      onChanged: _select,
     );
   }
 
@@ -743,16 +722,14 @@ class _ColorEditorState extends State<_ColorEditor> {
                   ),
                 ),
                 Expanded(
-                  child: Slider(
+                  child: FallbackGlassSlider(
                     key: ValueKey('liquid-glass-color-${channels[i].$1}'),
                     value: channels[i].$2.toDouble(),
                     max: 255,
                     divisions: 255,
-                    label: '${channels[i].$2}',
+                    continuousFeedback: false,
                     semanticFormatterCallback: (value) =>
                         '${channels[i].$1} ${value.round()}',
-                    activeColor: palette.accent ?? scheme.primary,
-                    inactiveColor: palette.selection,
                     onChanged: widget.enabled
                         ? (value) {
                             final parts = [

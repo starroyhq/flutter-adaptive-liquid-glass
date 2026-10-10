@@ -17,6 +17,8 @@ dependencies:
   native_liquid_glass: 0.3.1
 
 dev_dependencies:
+  flutter_localizations:
+    sdk: flutter
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0

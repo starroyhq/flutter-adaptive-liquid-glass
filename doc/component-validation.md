@@ -1,5 +1,9 @@
 # 0.2.0 candidate validation
 
+This records the original component-coverage checkpoint. The subsequent owned
+fallback, feedback and long-press work is recorded separately in
+[interaction validation](interaction-validation.md).
+
 This is an unpublished component coverage candidate. It does not replace the
 published 0.1.1 package. No consuming application, production service, pub.dev
 version or GitHub Release was changed during this work.

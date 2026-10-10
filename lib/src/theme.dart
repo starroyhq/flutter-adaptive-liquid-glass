@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:native_liquid_glass/native_liquid_glass.dart' as native;
 
 import 'colors.dart';
+import 'feedback_data.dart';
 export 'colors.dart';
+export 'feedback_data.dart';
 
 /// [native] prefers system glass but still falls back on unsupported platforms.
 enum LiquidGlassMode { auto, native, fallback, opaque }
@@ -15,6 +17,7 @@ class LiquidGlassThemeData {
     this.reduceMotion = false,
     this.blurSigma = 20,
     this.colors = const LiquidGlassColors(),
+    this.feedback = const LiquidGlassFeedbackData(),
   }) : assert(blurSigma >= 0 && blurSigma <= 40);
 
   final LiquidGlassMode mode;
@@ -22,6 +25,7 @@ class LiquidGlassThemeData {
   final bool reduceMotion;
   final double blurSigma;
   final LiquidGlassColors colors;
+  final LiquidGlassFeedbackData feedback;
 
   LiquidGlassThemeData copyWith({
     LiquidGlassMode? mode,
@@ -29,12 +33,14 @@ class LiquidGlassThemeData {
     bool? reduceMotion,
     double? blurSigma,
     LiquidGlassColors? colors,
+    LiquidGlassFeedbackData? feedback,
   }) => LiquidGlassThemeData(
     mode: mode ?? this.mode,
     reduceTransparency: reduceTransparency ?? this.reduceTransparency,
     reduceMotion: reduceMotion ?? this.reduceMotion,
     blurSigma: blurSigma ?? this.blurSigma,
     colors: colors ?? this.colors,
+    feedback: feedback ?? this.feedback,
   );
 
   @override
@@ -45,11 +51,18 @@ class LiquidGlassThemeData {
           reduceTransparency == other.reduceTransparency &&
           reduceMotion == other.reduceMotion &&
           blurSigma == other.blurSigma &&
-          colors == other.colors;
+          colors == other.colors &&
+          feedback == other.feedback;
 
   @override
-  int get hashCode =>
-      Object.hash(mode, reduceTransparency, reduceMotion, blurSigma, colors);
+  int get hashCode => Object.hash(
+    mode,
+    reduceTransparency,
+    reduceMotion,
+    blurSigma,
+    colors,
+    feedback,
+  );
 
   /// System navigation remains a native UITabBar on iOS 26+. Accessibility
   /// changes its backdrop/material, never replaces its interaction model.

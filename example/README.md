@@ -107,6 +107,12 @@ the Flutter SDK's synthetic text-input channel consistently; this avoids a
 Flutter 3.41 driver connection-cache issue after submission and does not claim
 system keyboard or IME acceptance.
 
+The third forces fallback and verifies tap/long-press exclusivity, two independent
+menu triggers followed by reopening, stepper hold/release and actual date-wheel
+scrolling. It also runs in the example Widget suite. The latest interaction
+results and remaining hardware checks are recorded in
+[interaction validation](../doc/interaction-validation.md).
+
 The configured CI runs root/example unit and widget tests and builds Android
 and iOS simulator applications. It formats/analyzes integration-test source but
 does not currently run this device scenario. See the candidate validation record
@@ -156,3 +162,20 @@ Repeat with light/dark and Blue/Green. An iOS 26+ runtime is required to inspect
 native composition; widget tests alone validate only Dart behavior. The earlier
 release's [fallback validation record](../doc/fallback-validation.md) remains
 historical evidence, separate from the candidate's execution record.
+
+## Owned fallback and feedback checks
+
+In Controls, tap and hold Action, Add and Hold only; inspect separate action and
+long-press counters. Hold either action in the shared Undo/Redo capsule and verify
+that releasing does not increment the click counter. In Appearance, independently
+toggle Package haptics and Package system sounds. Native controls and the inline
+calendar retain system feedback; these toggles do not override it.
+
+In Popups, hold First menu, choose or cancel, then tap and hold the other triggers.
+There must be one popup and one result per gesture. In Pickers, select wheels and
+exercise month ends, localized 12/24-hour time, external resets and keyboard focus.
+The Controls spinner must stop when motion is reduced or the app backgrounds.
+
+The device suite also performs fallback long presses, silent stepper repetition
+and actual month-wheel scrolling. Physical vibration, audibility and VoiceOver /
+TalkBack require separate hardware acceptance.

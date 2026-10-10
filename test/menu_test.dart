@@ -1,10 +1,143 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_adaptive_liquid_glass/src/menu.dart';
+import 'package:flutter_adaptive_liquid_glass/src/controls.dart';
 import 'package:flutter_adaptive_liquid_glass/src/theme.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('menu selection restores trigger keyboard focus for reopening', (
+    tester,
+  ) async {
+    await _host(
+      tester,
+      LiquidGlassMenuButton<int>(
+        label: 'Keyboard options',
+        items: const [LiquidGlassMenuItem(value: 1, label: 'Choose')],
+      ),
+    );
+    final focus = Focus.of(tester.element(find.text('Keyboard options')));
+    focus.requestFocus();
+    await tester.pump();
+    expect(focus.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Choose'), findsOneWidget);
+    await tester.tap(find.text('Choose'));
+    await tester.pumpAndSettle();
+    expect(focus.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Choose'), findsOneWidget);
+    await tester.tap(find.text('Choose'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('dialog and theme changes preserve trigger keyboard focus', (
+    tester,
+  ) async {
+    final settings = ValueNotifier(false);
+    addTearDown(settings.dispose);
+    await _host(
+      tester,
+      ValueListenableBuilder<bool>(
+        valueListenable: settings,
+        builder: (_, reduced, _) => LiquidGlassTheme(
+          data: LiquidGlassThemeData(
+            mode: LiquidGlassMode.fallback,
+            reduceMotion: reduced,
+            colors: LiquidGlassColors(
+              accent: reduced ? Colors.red : Colors.blue,
+            ),
+          ),
+          child: LiquidGlassButton(label: 'Target', onPressed: () {}),
+        ),
+      ),
+    );
+    final context = tester.element(find.text('Target'));
+    final focus = Focus.of(context);
+    focus.requestFocus();
+    await tester.pump();
+    final dialog = showDialog<void>(
+      context: context,
+      builder: (_) => const AlertDialog(content: Text('Overlay')),
+    );
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.text('Overlay'))).pop();
+    await tester.pumpAndSettle();
+    await dialog;
+    expect(focus.hasFocus, isTrue);
+    settings.value = true;
+    await tester.pumpAndSettle();
+    expect(Focus.of(tester.element(find.text('Target'))), same(focus));
+    expect(focus.hasFocus, isTrue);
+  });
+
+  testWidgets('default trigger opens once on long press and reopens on tap', (
+    tester,
+  ) async {
+    var cancels = 0;
+    await _host(
+      tester,
+      LiquidGlassMenuButton<int>(
+        label: 'Options',
+        items: const [LiquidGlassMenuItem(value: 1, label: 'Choose')],
+        onCanceled: () => cancels++,
+      ),
+    );
+    await tester.longPress(find.text('Options'));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose'), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(cancels, 1);
+    expect(find.text('Choose'), findsNothing);
+    await tester.tap(find.text('Options'));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose'), findsOneWidget);
+    await tester.tap(find.text('Choose'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('explicit trigger modes expose only the chosen gesture', (
+    tester,
+  ) async {
+    for (final trigger in [
+      LiquidGlassMenuTrigger.tap,
+      LiquidGlassMenuTrigger.longPress,
+    ]) {
+      await _host(
+        tester,
+        LiquidGlassMenuButton<int>(
+          key: ValueKey(trigger),
+          label: 'Open',
+          trigger: trigger,
+          items: const [LiquidGlassMenuItem(value: 1, label: 'Choose')],
+        ),
+      );
+      final button = tester.widget<LiquidGlassButton>(
+        find.byType(LiquidGlassButton),
+      );
+      expect(button.onPressed != null, trigger == LiquidGlassMenuTrigger.tap);
+      expect(
+        button.onLongPress != null,
+        trigger == LiquidGlassMenuTrigger.longPress,
+      );
+      if (trigger == LiquidGlassMenuTrigger.longPress) {
+        await tester.tap(find.text('Open'));
+        await tester.pumpAndSettle();
+        expect(find.text('Choose'), findsNothing);
+        await tester.longPress(find.text('Open'));
+      } else {
+        await tester.tap(find.text('Open'));
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Choose'), findsOneWidget);
+      await tester.tap(find.text('Choose'));
+      await tester.pumpAndSettle();
+    }
+  });
+
   testWidgets(
     'rapid branch and back taps cannot duplicate or underflow the path',
     (tester) async {

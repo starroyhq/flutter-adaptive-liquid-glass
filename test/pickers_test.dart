@@ -1,10 +1,11 @@
 import 'dart:async';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_adaptive_liquid_glass/src/native_picker.dart';
+import 'package:flutter_adaptive_liquid_glass/src/fallback_date_wheels.dart';
+import 'package:flutter_adaptive_liquid_glass/src/fallback_value_controls.dart';
 import 'package:flutter_adaptive_liquid_glass/src/pickers.dart';
 import 'package:flutter_adaptive_liquid_glass/src/theme.dart';
 
@@ -63,8 +64,8 @@ void main() {
       ),
     );
     tester
-        .widget<CupertinoDatePicker>(find.byType(CupertinoDatePicker))
-        .onDateTimeChanged(DateTime(2030, 2, 3, 17, 47, 9));
+        .widget<FallbackDateWheels>(find.byType(FallbackDateWheels))
+        .onChanged(DateTime(2030, 2, 3, 17, 47, 9));
     await tester.pumpAndSettle();
     expect(value, DateTime(2026, 10, 10, 17, 45));
     expect(value.isUtc, isFalse);
@@ -96,8 +97,8 @@ void main() {
         ),
       );
       tester
-          .widget<CupertinoDatePicker>(find.byType(CupertinoDatePicker))
-          .onDateTimeChanged(DateTime.utc(2026, 11, 1, 6, 49).toLocal());
+          .widget<FallbackDateWheels>(find.byType(FallbackDateWheels))
+          .onChanged(DateTime.utc(2026, 11, 1, 6, 49).toLocal());
       await tester.pumpAndSettle();
       expect(
         value,
@@ -110,6 +111,67 @@ void main() {
         ),
       );
       expect(value.isUtc, isTrue);
+    }
+  });
+
+  testWidgets('minute grid survives a half-hour DST jump and bound snapping', (
+    tester,
+  ) async {
+    // TZ=Australia/Lord_Howe skips 02:00–02:29 on this date. A 20-minute
+    // interval cannot be rounded by subtracting minute % 20 across that gap.
+    final before = DateTime(2026, 10, 4, 1, 59);
+    final value = DateTime(2026, 10, 4, 2, 35, 12).toUtc();
+    final hasGap = before.timeZoneOffset != value.toLocal().timeZoneOffset;
+    final floor = hasGap
+        ? DateTime(2026, 10, 4, 1, 40)
+        : DateTime(2026, 10, 4, 2, 20);
+    final ceiling = DateTime(2026, 10, 4, 2, hasGap ? 40 : 0);
+    final received = <DateTime>[];
+    for (final mode in [
+      LiquidGlassDatePickerMode.time,
+      LiquidGlassDatePickerMode.dateAndTime,
+    ]) {
+      Future<FallbackDateWheels> show({
+        DateTime? lower,
+        DateTime? upper,
+      }) async {
+        await tester.pumpWidget(
+          _app(
+            LiquidGlassDatePicker(
+              value: value,
+              mode: mode,
+              style: LiquidGlassDatePickerStyle.wheels,
+              minuteInterval: 20,
+              minimumDate: lower,
+              maximumDate: upper,
+              onChanged: received.add,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final wheel = tester.widget<FallbackDateWheels>(
+          find.byType(FallbackDateWheels),
+        );
+        expect(wheel.value.minute % 20, 0);
+        return wheel;
+      }
+
+      expect((await show()).value, floor);
+      final bounded = await show(
+        lower: before,
+        upper: DateTime(2026, 10, 4, 3, 5),
+      );
+      expect(bounded.minimumDate, ceiling);
+      expect(bounded.maximumDate, DateTime(2026, 10, 4, 3));
+      expect(bounded.value, hasGap ? ceiling : floor);
+      final upperBounded = await show(upper: value.toLocal());
+      expect(upperBounded.maximumDate, floor);
+      expect(upperBounded.value, floor);
+      expect(received, isEmpty);
+      upperBounded.onChanged(value.toLocal());
+      expect(received.removeLast(), floor.toUtc());
+      await tester.pumpAndSettle();
     }
   });
 
@@ -129,14 +191,14 @@ void main() {
         ),
       ),
     );
-    final picker = tester.widget<CupertinoDatePicker>(
-      find.byType(CupertinoDatePicker),
+    final picker = tester.widget<FallbackDateWheels>(
+      find.byType(FallbackDateWheels),
     );
     expect(picker.minimumDate, DateTime(2026, 10, 10, 10, 15));
     expect(picker.maximumDate, DateTime(2026, 10, 10, 11));
-    expect(picker.initialDateTime, picker.minimumDate);
+    expect(picker.value, picker.minimumDate);
     expect(received, isEmpty);
-    picker.onDateTimeChanged(DateTime(2026, 10, 10, 12));
+    picker.onChanged(DateTime(2026, 10, 10, 12));
     expect(received.single, DateTime(2026, 10, 10, 11));
     await tester.pumpAndSettle();
   });
@@ -218,13 +280,13 @@ void main() {
 
     await show(DateTime(2026, 10, 10, 10), minimum: DateTime(2026, 10, 10));
     await show(DateTime(2026, 11, 11, 11), locale: const Locale('en', 'GB'));
-    final picker = tester.widget<CupertinoDatePicker>(
-      find.byType(CupertinoDatePicker),
+    final picker = tester.widget<FallbackDateWheels>(
+      find.byType(FallbackDateWheels),
     );
-    expect(picker.initialDateTime, DateTime(2026, 11, 11, 11));
+    expect(picker.value, DateTime(2026, 11, 11, 11));
     expect(picker.minimumDate, isNull);
     expect(
-      Localizations.localeOf(tester.element(find.byType(CupertinoDatePicker))),
+      Localizations.localeOf(tester.element(find.byType(FallbackDateWheels))),
       const Locale('en', 'GB'),
     );
     expect(tester.takeException(), isNull);
@@ -244,13 +306,11 @@ void main() {
       ),
     );
     tester
-        .widget<CupertinoDatePicker>(find.byType(CupertinoDatePicker))
-        .onDateTimeChanged(DateTime(2026, 10, 11, 11));
+        .widget<FallbackDateWheels>(find.byType(FallbackDateWheels))
+        .onChanged(DateTime(2026, 10, 11, 11));
     await tester.pumpAndSettle();
     expect(
-      tester
-          .widget<CupertinoDatePicker>(find.byType(CupertinoDatePicker))
-          .initialDateTime,
+      tester.widget<FallbackDateWheels>(find.byType(FallbackDateWheels)).value,
       value,
     );
   });
@@ -281,7 +341,7 @@ void main() {
     await tester.tap(find.byType(LiquidGlassColorPicker));
     await tester.pumpAndSettle();
     expect(find.byType(CalendarDatePicker), findsNothing);
-    expect(find.byType(Slider), findsNothing);
+    expect(find.byType(FallbackGlassSlider), findsNothing);
     expect(
       tester.getSemantics(find.bySemanticsLabel('Label color')),
       matchesSemantics(
@@ -350,7 +410,7 @@ void main() {
     );
     await tester.tap(find.byType(LiquidGlassColorPicker));
     await tester.pumpAndSettle();
-    expect(find.byType(Slider), findsNWidgets(4));
+    expect(find.byType(FallbackGlassSlider), findsNWidgets(4));
     await tester.enterText(find.byType(TextField), '#12345678');
     await tester.pumpAndSettle();
     expect(color.toARGB32(), 0x78123456);
@@ -386,11 +446,11 @@ void main() {
     );
     await tester.tap(find.byType(LiquidGlassColorPicker));
     await tester.pumpAndSettle();
-    expect(find.byType(Slider), findsNWidgets(3));
+    expect(find.byType(FallbackGlassSlider), findsNWidgets(3));
     await tester.enterText(find.byType(TextField), '#abcdef01');
     await tester.pumpAndSettle();
     expect(color.toARGB32(), 0xffabcdef);
-    final slider = tester.widget<Slider>(
+    final slider = tester.widget<FallbackGlassSlider>(
       find.byKey(const ValueKey('liquid-glass-color-R')),
     );
     slider.onChanged!(22);
@@ -425,11 +485,15 @@ void main() {
     await tester.tap(find.byType(LiquidGlassColorPicker));
     await tester.pumpAndSettle();
     expect(
-      tester.widget<Slider>(find.byType(Slider).first).activeColor,
+      LiquidGlassTheme.of(
+        tester.element(find.byType(FallbackGlassSlider).first),
+      ).colors.accent,
       Colors.purple,
     );
     expect(
-      tester.widget<Slider>(find.byType(Slider).first).inactiveColor,
+      LiquidGlassTheme.of(
+        tester.element(find.byType(FallbackGlassSlider).first),
+      ).colors.selection,
       Colors.orange,
     );
     expect(
@@ -444,6 +508,65 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'color channel dragging stays controlled without 255 feedback ticks',
+    (tester) async {
+      var color = const Color(0xff112233);
+      final changes = <Color>[];
+      final haptics = <MethodCall>[];
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'HapticFeedback.vibrate') haptics.add(call);
+        return null;
+      });
+      addTearDown(
+        () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+      await tester.pumpWidget(
+        _app(
+          StatefulBuilder(
+            builder: (context, setState) => LiquidGlassColorPicker(
+              selectedColor: color,
+              onChanged: (value) {
+                changes.add(value);
+                setState(() => color = value);
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(LiquidGlassColorPicker));
+      await tester.pumpAndSettle();
+      final red = find.byKey(const ValueKey('liquid-glass-color-R'));
+      final rect = tester.getRect(red);
+      final gesture = await tester.startGesture(
+        Offset(rect.left + 24, rect.center.dy),
+      );
+      for (final fraction in [.25, .5, .75, 1.0]) {
+        await gesture.moveTo(
+          Offset(rect.left + rect.width * fraction, rect.center.dy),
+        );
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(color.toARGB32(), 0xffff2233);
+      expect(changes.length, greaterThan(2));
+      expect(
+        changes.map((color) => color.toARGB32()).toSet(),
+        hasLength(changes.length),
+      );
+      expect(haptics, hasLength(1));
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '#FF2233FF',
+      );
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
 
   for (final kind in ['date', 'color']) {
     testWidgets(

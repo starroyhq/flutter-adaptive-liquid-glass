@@ -299,6 +299,62 @@ and removal keep underlying native views hidden until the outgoing route's
 transition finishes. Locally scoped themes are captured when opening; place a
 live application-wide theme above the Navigator for global appearance updates.
 
+## Interaction feedback and long press — unreleased 0.2.0
+
+The fallback slider, switch, stepper buttons, date wheels and activity indicator
+are package-owned implementations. They use Flutter drawing, gestures, focus,
+semantics and scrolling rather than Cupertino control widgets. Date wheels still
+reuse the SDK's localized labels and date order. The inline Material calendar and
+Flutter text editors remain in use; native iOS controls keep their system behavior.
+
+```dart
+LiquidGlassTheme(
+  data: const LiquidGlassThemeData(
+    feedback: LiquidGlassFeedbackData(haptics: true, sound: false),
+  ),
+  child: LiquidGlassButton(
+    label: 'Preview',
+    onPressed: openPreview,
+    onLongPress: showDetails,
+    longPressSemanticLabel: 'Show details',
+  ),
+);
+```
+
+Both feedback permissions default to `true`, following platform conventions;
+they do not mean that every click vibrates. Android button activation uses its
+system click sound, while ordinary iOS button clicks add no haptic or sound.
+Recognized long presses use platform long-press feedback. Package-owned discrete
+selections provide selection feedback; continuous sliders only give haptics at
+endpoints. Date-wheel changes use selection feedback and an iOS system tick.
+Stepper holds confirm once and then repeat silently every 100 ms. Programmatic
+updates, unchanged selections and cancelled gestures do not generate new feedback.
+
+`LiquidGlassFeedbackData.copyWith` independently changes haptic and sound
+permissions. Use a nested theme to override a subtree. The flags govern only
+feedback explicitly sent by this package: native system controls and the retained
+Material calendar may provide feedback of their own. No custom audio assets,
+private sound identifiers or device-setting overrides are used. Reduced motion
+controls visual animation independently of these permissions.
+
+Buttons, icon buttons and `LiquidGlassAction` accept `onLongPress` and an optional
+`longPressSemanticLabel`. A long-only action is enabled; loading or two null
+callbacks disables both interactions. Holding activates once, and releasing the
+same gesture does not also click. Shared capsules keep independent action targets.
+Only the stepper repeats. Scroll takeover, leaving the target, route coverage,
+backgrounding and disposal cancel applicable pending gestures.
+
+`LiquidGlassMenuButton.trigger` accepts `LiquidGlassMenuTrigger.tap`, `.longPress`
+or `.tapAndLongPress` (the default). A custom `builder` keeps the existing
+`(context, open)` signature and owns its gestures. Each default trigger supports
+only one open menu at a time, and remains usable after cancelling or selecting.
+
+Native icon buttons with long-press actions use the package's UIKit capsule.
+Navigation bars containing these actions combine the existing Flutter title
+layout with native capsules. System iOS 26+ tabs are unchanged. Haptic strength,
+audibility and assistive-technology experience still need physical-device
+acceptance; test channel counts and simulator gestures are not substitutes.
+
 ## Custom colors
 
 `LiquidGlassThemeData.colors` accepts a `LiquidGlassColors` object. Every color

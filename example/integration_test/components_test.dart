@@ -1,5 +1,5 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart';
@@ -82,6 +82,135 @@ void main() {
     'fallback device controls edit values, search drafts and color panels',
     exerciseFallbackControls,
   );
+  testWidgets(
+    'owned long presses, repeating controls and date wheels remain independent',
+    exerciseOwnedInteractions,
+  );
+}
+
+Future<void> exerciseOwnedInteractions(WidgetTester tester) async {
+  final observer = LiquidGlassNavigatorObserver();
+  var taps = 0, holds = 0;
+  double count = 1;
+  var date = DateTime(2024, 1, 31, 12);
+  String? result;
+  await tester.pumpWidget(
+    MaterialApp(
+      navigatorObservers: [observer],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      builder: (context, child) => LiquidGlassTheme(
+        data: const LiquidGlassThemeData(mode: LiquidGlassMode.fallback),
+        child: child!,
+      ),
+      home: StatefulBuilder(
+        builder: (context, update) => Scaffold(
+          body: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                LiquidGlassButton(
+                  label: 'Tap or hold',
+                  onPressed: () => update(() => taps++),
+                  onLongPress: () => update(() => holds++),
+                  longPressSemanticLabel: 'Count hold',
+                ),
+                Text('Taps $taps Holds $holds'),
+                Wrap(
+                  children: [
+                    for (final name in ['One', 'Two'])
+                      LiquidGlassMenuButton<String>(
+                        label: '$name menu',
+                        items: [
+                          LiquidGlassMenuItem(
+                            value: name,
+                            label: 'Choose $name',
+                          ),
+                        ],
+                        onSelected: (value) => update(() => result = value),
+                      ),
+                  ],
+                ),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: LiquidGlassStepper(
+                    value: count,
+                    min: 0,
+                    max: 20,
+                    onChanged: (value) => update(() => count = value),
+                  ),
+                ),
+                Text('Count $count'),
+                LiquidGlassDatePicker(
+                  value: date,
+                  mode: LiquidGlassDatePickerMode.date,
+                  style: LiquidGlassDatePickerStyle.wheels,
+                  minimumDate: DateTime(2024),
+                  maximumDate: DateTime(2024, 12, 31),
+                  onChanged: (value) => update(() => date = value),
+                ),
+                Text('Date ${date.toIso8601String()}'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.longPress(find.text('Tap or hold'));
+  await tester.pumpAndSettle();
+  expect(taps, 0);
+  expect(holds, 1);
+  await tester.tap(find.text('Tap or hold'));
+  await tester.pumpAndSettle();
+  expect(taps, 1);
+  for (final name in ['One', 'Two']) {
+    await tester.longPress(find.text('$name menu'));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose $name'), findsOneWidget);
+    await tester.tap(find.text('Choose $name'));
+    await tester.pumpAndSettle();
+    expect(result, name);
+  }
+  // Tap remains usable after repeated long-press presentations.
+  await tester.tap(find.text('One menu'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Choose One'));
+  await tester.pumpAndSettle();
+  expect(result, 'One');
+  final increase = find.byKey(const ValueKey('liquid-glass-stepper-increase'));
+  await tester.ensureVisible(increase);
+  final pointer = await tester.startGesture(tester.getCenter(increase));
+  await tester.pump(const Duration(milliseconds: 600));
+  await tester.pump(const Duration(milliseconds: 120));
+  await pointer.up();
+  await tester.pumpAndSettle();
+  expect(count, greaterThan(1));
+  final stopped = count;
+  await tester.pump(const Duration(milliseconds: 500));
+  expect(count, stopped);
+  final month = find.byKey(const ValueKey('liquid-glass-date-month'));
+  await tester.ensureVisible(month);
+  await tester.pumpAndSettle();
+  final wheel = tester.widget<ListWheelScrollView>(
+    find.descendant(of: month, matching: find.byType(ListWheelScrollView)),
+  );
+  await tester.timedDrag(
+    month,
+    Offset(0, -wheel.itemExtent * 1.5),
+    const Duration(milliseconds: 600),
+  );
+  await tester.pumpAndSettle();
+  expect(date.month, greaterThan(1));
+  expect(
+    date.day,
+    lessThanOrEqualTo(DateUtils.getDaysInMonth(date.year, date.month)),
+  );
+  expect(date.hour, 12);
+  expect(tester.takeException(), isNull);
+  await tester.pumpWidget(const SizedBox());
+  await tester.pumpAndSettle();
+  observer.dispose();
 }
 
 /// Also run by the example widget suite. The device run uses compiled Flutter
@@ -104,19 +233,19 @@ Future<void> exerciseFallbackControls(WidgetTester tester) async {
   await tester.pumpAndSettle();
   final host = hostKey.currentState!;
 
-  final slider = find.byType(CupertinoSlider);
+  final slider = find.byType(LiquidGlassSlider);
   await tester.drag(slider, const Offset(90, 0));
   await tester.pumpAndSettle();
   expect(find.text('Slider increased: true'), findsOneWidget);
   expect(find.text('Slider gestures: 1 / 1'), findsOneWidget);
 
-  await tester.tap(find.byType(CupertinoSwitch));
+  await tester.tap(find.byType(LiquidGlassSwitch));
   await tester.pumpAndSettle();
   expect(find.text('Switch: true'), findsOneWidget);
-  await tester.tap(find.byIcon(CupertinoIcons.plus));
+  await tester.tap(find.byKey(const ValueKey('liquid-glass-stepper-increase')));
   await tester.pumpAndSettle();
   expect(find.text('Stepper: 2'), findsOneWidget);
-  await tester.tap(find.byIcon(CupertinoIcons.minus));
+  await tester.tap(find.byKey(const ValueKey('liquid-glass-stepper-decrease')));
   await tester.pumpAndSettle();
   expect(find.text('Stepper: 1'), findsOneWidget);
 

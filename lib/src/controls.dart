@@ -4,6 +4,7 @@ import 'package:native_liquid_glass/native_liquid_glass.dart' as native;
 import 'surface.dart';
 import 'fallback_pressable.dart';
 import 'fallback_selection_track.dart';
+import 'feedback.dart';
 import 'theme.dart';
 import 'native_visibility.dart';
 import 'native_button_layout.dart';
@@ -17,6 +18,8 @@ class LiquidGlassButton extends StatelessWidget {
     required String this.semanticLabel,
     this.sfSymbol,
     this.onPressed,
+    this.onLongPress,
+    this.longPressSemanticLabel,
     this.prominent = false,
     this.loading = false,
   }) : label = null;
@@ -28,6 +31,8 @@ class LiquidGlassButton extends StatelessWidget {
     this.sfSymbol,
     this.semanticLabel,
     this.onPressed,
+    this.onLongPress,
+    this.longPressSemanticLabel,
     this.prominent = false,
     this.loading = false,
   }) : assert(label != null || icon != null),
@@ -41,12 +46,16 @@ class LiquidGlassButton extends StatelessWidget {
   final String? sfSymbol;
   final String? semanticLabel;
   final VoidCallback? onPressed;
+  final VoidCallback? onLongPress;
+  final String? longPressSemanticLabel;
   final bool prominent;
   final bool loading;
 
   @override
   Widget build(BuildContext context) {
     final callback = loading ? null : onPressed;
+    final longCallback = loading ? null : onLongPress;
+    final enabled = callback != null || longCallback != null;
     final colors = Theme.of(context).colorScheme;
     final glassColors = LiquidGlassTheme.of(context).colors;
     final textColor = prominent
@@ -63,7 +72,7 @@ class LiquidGlassButton extends StatelessWidget {
         !loading &&
         MediaQuery.textScalerOf(context).scale(14) <= 20;
     if (useNative) {
-      if (label != null) {
+      if (label != null || longCallback != null) {
         return NativeCapsule(
           prominent: prominent,
           items: [
@@ -74,13 +83,21 @@ class LiquidGlassButton extends StatelessWidget {
               icon: icon,
               sfSymbol: sfSymbol,
               onPressed: callback,
+              onLongPress: longCallback,
+              longPressSemanticLabel: longPressSemanticLabel,
             ),
           ],
         );
       }
       final button = native.LiquidGlassButton.icon(
         icon: nativeIcon!,
-        onPressed: callback,
+        onPressed: callback == null
+            ? null
+            : () {
+                if (!nativeCapsuleActionAllowed(context)) return;
+                LiquidGlassFeedback.tap(context);
+                callback();
+              },
         tooltip: semanticLabel,
         size: NativeButtonLayout.height,
         iconSize: NativeButtonLayout.iconSize,
@@ -117,6 +134,8 @@ class LiquidGlassButton extends StatelessWidget {
       child: FallbackPressable(
         borderRadius: BorderRadius.circular(24),
         onTap: callback,
+        onLongPress: longCallback,
+        longPressSemanticLabel: longPressSemanticLabel,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
           child: Padding(
@@ -144,10 +163,10 @@ class LiquidGlassButton extends StatelessWidget {
     );
     return Semantics(
       button: true,
-      enabled: callback != null,
+      enabled: enabled,
       label: semanticLabel,
       child: Opacity(
-        opacity: callback == null && !loading ? .48 : 1,
+        opacity: !enabled && !loading ? .48 : 1,
         child: prominent
             ? button
             : LiquidGlassSurface(
@@ -207,6 +226,14 @@ class LiquidGlassSegmentedControl<T> extends StatelessWidget {
       );
     }
     final colors = Theme.of(context).colorScheme;
+    void select(T value) {
+      if (onChanged == null || !LiquidGlassFeedback.canInteract(context)) {
+        return;
+      }
+      if (value != selected) LiquidGlassFeedback.selection(context);
+      onChanged!(value);
+    }
+
     return Opacity(
       opacity: onChanged == null ? .5 : 1,
       child: LiquidGlassSurface(
@@ -226,18 +253,17 @@ class LiquidGlassSegmentedControl<T> extends StatelessWidget {
                 enabled: onChanged != null,
                 label: segment.label,
                 excludeSemantics: true,
-                onTap: onChanged == null
-                    ? null
-                    : () => onChanged!(segment.value),
+                onTap: onChanged == null ? null : () => select(segment.value),
                 child: Material(
                   color: Colors.transparent,
                   borderRadius: BorderRadius.circular(24),
                   child: FallbackPressable(
                     borderRadius: BorderRadius.circular(24),
                     scaleOnPress: false,
+                    feedbackOnTap: false,
                     onTap: onChanged == null
                         ? null
-                        : () => onChanged!(segment.value),
+                        : () => select(segment.value),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(
                         minHeight: 48,

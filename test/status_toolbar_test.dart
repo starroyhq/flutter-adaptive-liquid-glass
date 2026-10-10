@@ -1,24 +1,56 @@
-import 'package:flutter/cupertino.dart';
+import 'package:flutter_adaptive_liquid_glass/src/fallback_activity_indicator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart';
 
 void main() {
   testWidgets(
+    'owned activity stops in background and resumes without resetting state',
+    (tester) async {
+      await tester.pumpWidget(_host(const LiquidGlassActivityIndicator()));
+      FallbackActivityPainter painter() => tester
+          .widgetList<CustomPaint>(find.byType(CustomPaint))
+          .map((widget) => widget.painter)
+          .whereType<FallbackActivityPainter>()
+          .single;
+      await tester.pump(const Duration(milliseconds: 200));
+      final animation = painter().animation;
+      final before = animation.value;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(animation.value, before);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(animation.value, isNot(before));
+      await tester.pumpWidget(
+        _host(const LiquidGlassActivityIndicator(), reduceMotion: true),
+      );
+      final staticPhase = painter().animation.value;
+      await tester.pump(const Duration(seconds: 2));
+      expect(painter().animation.value, staticPhase);
+      expect(painter().animating, isFalse);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      expect(tester.binding.transientCallbackCount, 0);
+    },
+  );
+
+  testWidgets(
     'stopped status hides; reduced motion retains static busy status',
     (tester) async {
       await tester.pumpWidget(
         _host(const LiquidGlassActivityIndicator(animating: false)),
       );
-      expect(find.byType(CupertinoActivityIndicator), findsNothing);
+      expect(find.byType(FallbackGlassActivityIndicator), findsNothing);
       await tester.pumpWidget(
         _host(
           const LiquidGlassActivityIndicator(semanticLabel: 'Loading'),
           reduceMotion: true,
         ),
       );
-      final spinner = tester.widget<CupertinoActivityIndicator>(
-        find.byType(CupertinoActivityIndicator),
+      final spinner = tester.widget<FallbackGlassActivityIndicator>(
+        find.byType(FallbackGlassActivityIndicator),
       );
       expect(spinner.animating, isFalse);
       expect(find.byType(LiquidGlassSurface), findsNothing);
@@ -103,8 +135,8 @@ void main() {
     await show(Brightness.light, palette);
     expect(
       tester
-          .widget<CupertinoActivityIndicator>(
-            find.byType(CupertinoActivityIndicator),
+          .widget<FallbackGlassActivityIndicator>(
+            find.byType(FallbackGlassActivityIndicator),
           )
           .color,
       Colors.purple,
@@ -112,8 +144,8 @@ void main() {
     await show(Brightness.dark, palette, explicit: Colors.red);
     expect(
       tester
-          .widget<CupertinoActivityIndicator>(
-            find.byType(CupertinoActivityIndicator),
+          .widget<FallbackGlassActivityIndicator>(
+            find.byType(FallbackGlassActivityIndicator),
           )
           .color,
       Colors.red,
@@ -136,8 +168,8 @@ void main() {
     ).colorScheme;
     expect(
       tester
-          .widget<CupertinoActivityIndicator>(
-            find.byType(CupertinoActivityIndicator),
+          .widget<FallbackGlassActivityIndicator>(
+            find.byType(FallbackGlassActivityIndicator),
           )
           .color,
       scheme.onSurface,

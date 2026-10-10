@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'controls.dart';
+import 'feedback.dart';
 import 'presentation.dart';
 import 'theme.dart';
+
+/// Gestures supported by the default [LiquidGlassMenuButton] trigger.
+enum LiquidGlassMenuTrigger { tap, longPress, tapAndLongPress }
 
 /// A leaf action or a branch in a [LiquidGlassMenuButton].
 ///
@@ -45,6 +49,8 @@ class LiquidGlassMenuButton<T extends Object> extends StatefulWidget {
     this.sfSymbol = 'ellipsis',
     this.semanticLabel,
     this.enabled = true,
+    this.trigger = LiquidGlassMenuTrigger.tapAndLongPress,
+    this.longPressSemanticLabel,
     this.useRootNavigator = true,
     this.width = 300,
     this.builder,
@@ -59,10 +65,16 @@ class LiquidGlassMenuButton<T extends Object> extends StatefulWidget {
   final String? sfSymbol;
   final String? semanticLabel;
   final bool enabled;
+  final LiquidGlassMenuTrigger trigger;
+  final String? longPressSemanticLabel;
   final bool useRootNavigator;
   final double width;
 
   /// Builds a custom trigger. A null callback means the trigger is disabled.
+  ///
+  /// Custom builders keep ownership of their gestures and feedback. [trigger]
+  /// controls only the default button; this callback may be used for either
+  /// gesture without changing the existing builder signature.
   final Widget Function(BuildContext context, VoidCallback? open)? builder;
 
   @override
@@ -75,7 +87,13 @@ class _LiquidGlassMenuButtonState<T extends Object>
   bool _opening = false;
 
   Future<void> _open(BuildContext anchorContext) async {
-    if (_opening || !widget.enabled || widget.items.isEmpty) return;
+    if (!mounted ||
+        _opening ||
+        !widget.enabled ||
+        widget.items.isEmpty ||
+        !LiquidGlassFeedback.canInteract(context)) {
+      return;
+    }
     final values = <T>{};
     List<LiquidGlassMenuItem<T>> snapshot(List<LiquidGlassMenuItem<T>> items) =>
         List.unmodifiable(
@@ -126,12 +144,28 @@ class _LiquidGlassMenuButtonState<T extends Object>
       final canOpen = widget.enabled && !_opening && widget.items.isNotEmpty;
       final VoidCallback? open = canOpen ? () => _open(anchorContext) : null;
       if (widget.builder != null) return widget.builder!(anchorContext, open);
+      // The route already guards repeated presentation. Keeping the default
+      // trigger enabled preserves its keyboard focus history while covered;
+      // temporarily disabling it would prevent restoration after menu close.
+      final VoidCallback? defaultOpen =
+          widget.enabled && widget.items.isNotEmpty
+          ? () => _open(anchorContext)
+          : null;
       return LiquidGlassButton(
         label: widget.label,
         icon: widget.icon,
         sfSymbol: widget.sfSymbol,
         semanticLabel: widget.semanticLabel ?? widget.label,
-        onPressed: open,
+        onPressed: widget.trigger == LiquidGlassMenuTrigger.longPress
+            ? null
+            : defaultOpen,
+        onLongPress: widget.trigger == LiquidGlassMenuTrigger.tap
+            ? null
+            : defaultOpen,
+        longPressSemanticLabel:
+            widget.longPressSemanticLabel ??
+            widget.semanticLabel ??
+            widget.label,
       );
     },
   );
@@ -159,9 +193,11 @@ class _MenuState<T extends Object> extends State<_Menu<T>> {
       return;
     }
     if (item.children.isNotEmpty) {
+      LiquidGlassFeedback.tap(context);
       setState(() => _path.add(item));
     } else {
       _selected = true;
+      LiquidGlassFeedback.tap(context);
       Navigator.of(context).pop<T>(item.value);
     }
   }
@@ -175,6 +211,7 @@ class _MenuState<T extends Object> extends State<_Menu<T>> {
         !ModalRoute.of(context)!.isCurrent) {
       return;
     }
+    LiquidGlassFeedback.tap(context);
     setState(() => _path.removeLast());
   }
 
@@ -251,6 +288,7 @@ class _MenuRow extends StatelessWidget {
     enabled: onTap != null,
     selected: selected,
     child: InkWell(
+      enableFeedback: false,
       onTap: onTap,
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 48),

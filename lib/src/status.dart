@@ -1,5 +1,5 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'fallback_activity_indicator.dart';
 import 'native_status.dart';
 import 'theme.dart';
 
@@ -55,13 +55,11 @@ class LiquidGlassActivityIndicator extends StatelessWidget {
       indicator = SizedBox.square(
         dimension: size,
         child: Center(
-          child: moving
-              ? CupertinoActivityIndicator(radius: radius, color: foreground)
-              : CupertinoActivityIndicator.partiallyRevealed(
-                  radius: radius,
-                  color: foreground,
-                  progress: .75,
-                ),
+          child: FallbackGlassActivityIndicator(
+            animating: moving,
+            radius: radius,
+            color: foreground,
+          ),
         ),
       );
     }

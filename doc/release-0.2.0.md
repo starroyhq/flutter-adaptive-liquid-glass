@@ -92,6 +92,12 @@ stationary presses verify complete editing cycles without a value change. The re
 adds a separate iOS 26 runtime gate for this scenario. Results and commands are
 recorded in [release validation](https://github.com/starroyhq/flutter-adaptive-liquid-glass/blob/v0.2.0/doc/release-validation.md).
 
+The six-operation native scenario passed on an actual iOS 26.5 runtime in
+[release preparation CI](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38082178380),
+including the reversed stationary-press callbacks. Temporary diagnostic logging
+was removed before delivery. The release's artifact-source run verifies the
+final tagged commit separately.
+
 The following acceptance checks remain open:
 
 - A complete interactive control sweep on iOS 26. The dedicated CI gate uses

@@ -168,36 +168,15 @@ jobs:
               summary.write(f'Native interaction: dedicated iPhone 17 Pro simulator, iOS {version}, arm64.\n')
           PY
       - name: Test native slider interaction
-        run: |
-          glass_trace_file="$RUNNER_TEMP/liquid-glass-slider-acceptance.log"
-          # Only the DEBUG/XCTest-enabled slider logger is collected. Cap this
-          # process's output file; never stream general device or app logs.
-          (
-            ulimit -f 2048
-            exec xcrun simctl spawn "$GLASS_SIMULATOR_ID" log stream \
-              --style compact --level info \
-              --predicate 'subsystem == "dev.flutter-adaptive-liquid-glass.slider" AND category == "acceptance"'
-          ) >"$glass_trace_file" 2>&1 &
-          glass_trace_pid=$!
-          finish_native_test() {
-            glass_test_exit_code=$?
-            trap - EXIT
-            kill -TERM "$glass_trace_pid" 2>/dev/null || true
-            wait "$glass_trace_pid" 2>/dev/null || true
-            printf '\n::group::Native slider acceptance trace\n'
-            tail -n 2000 "$glass_trace_file" || true
-            printf '::endgroup::\n'
-            exit "$glass_test_exit_code"
-          }
-          trap finish_native_test EXIT
-          xcodebuild -workspace Runner.xcworkspace -scheme NativeSliderAcceptance \
-            -configuration Debug -sdk iphonesimulator \
-            -destination "platform=iOS Simulator,id=$GLASS_SIMULATOR_ID" \
-            -derivedDataPath ../build/ios-native-interaction \
-            -resultBundlePath ../build/native-interaction.xcresult \
-            -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
-            -collect-test-diagnostics never \
-            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO test
+        run: >-
+          xcodebuild -workspace Runner.xcworkspace -scheme NativeSliderAcceptance
+          -configuration Debug -sdk iphonesimulator
+          -destination "platform=iOS Simulator,id=$GLASS_SIMULATOR_ID"
+          -derivedDataPath ../build/ios-native-interaction
+          -resultBundlePath ../build/native-interaction.xcresult
+          -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1
+          -collect-test-diagnostics never
+          ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO test
         env:
           GLASS_SIMULATOR_ID: ${{ steps.simulator.outputs.device_id }}
         working-directory: example/ios

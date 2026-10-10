@@ -67,6 +67,15 @@ write is normalized before completing the operation, including an unchanged
 value; a stale configuration or cancelled touch cannot complete it. This uses
 the observed system events rather than an elapsed-time threshold.
 
+The corrected six-operation scenario passed on actual iOS 26.5 in both
+[push CI](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38082178380)
+and [PR CI](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38082181436)
+at `f268deb`. Four target-value drags and two stationary presses each produced
+exactly one start/end pair. Scoped diagnostic logging was then removed without
+changing the state machine or assertions; the clean local iOS 27 run also passed
+all six operations. Final release artifacts must come from a successful run of
+the tagged commit, as enforced below.
+
 The XCTest scheme is separate from the ordinary `Runner` scheme. Its test runner
 requires iOS 26+, while the example application retains its iOS 16 deployment
 target. See [the example instructions](../example/README.md) for commands.

@@ -1,7 +1,6 @@
 import Flutter
 import UIKit
 import SwiftUI
-import os
 
 final class AdaptiveLiquidGlassValueControlFactory: NSObject, FlutterPlatformViewFactory {
   private let messenger: FlutterBinaryMessenger
@@ -223,7 +222,6 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     container.addGestureRecognizer(touchSequence)
     touchSequence.onCancellation = { [weak self] in self?.cancelTouchGesture() }
     touchSequence.onNewSequence = { [weak self] in self?.cancelTouchGesture() }
-    touchSequence.onTrace = { [weak self] event in self?.trace(event) }
     hosting.view.backgroundColor = .clear
     hosting.view.translatesAutoresizingMaskIntoConstraints = false
     hostingConstraints = [
@@ -272,7 +270,6 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     }
     let incomingRevision = configuration["revision"] as? Int ?? revision
     let echo = configuration["valueIsEcho"] as? Bool == true && incomingRevision == revision
-    trace("configure incomingRevision=\(incomingRevision) echo=\(echo)", value: value)
     if incomingRevision != revision {
       // Recreate only the SwiftUI interaction identity on authoritative reset.
       // Accepted echoes retain both the hosted control and the current gesture.
@@ -337,7 +334,6 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   }
 
   private func detachHosting() {
-    trace("detach")
     guard isAttached else { return }
     isAttached = false
     // A delayed begin or binding write can arrive before an active gesture was
@@ -369,7 +365,6 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
 
   @discardableResult
   private func begin(accessibility: Bool = false) -> Bool {
-    trace("begin")
     if activeGesture != nil { return true }
     if !accessibility {
       // Flutter can release a tap to UIKit after its finger has already lifted.
@@ -377,7 +372,6 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
       // sequence cannot create another operation from late SwiftUI callbacks.
       guard !touchSequence.isCancelled, let sequence = touchSequence.current,
             sequence != completedTouchSequence else {
-        trace("begin.rejected")
         return false
       }
       activeTouchSequence = sequence
@@ -389,7 +383,6 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   }
 
   private func propose(_ value: Double, generation: Int) {
-    trace("propose sourceGeneration=\(generation)", value: value)
     guard isAttached, container.window != nil, generation == self.generation,
           model.configuration.enabled, value.isFinite else { return }
     var next = model.configuration
@@ -414,7 +407,6 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   }
 
   private func editing(_ editing: Bool, generation: Int) {
-    trace("editing=\(editing) sourceGeneration=\(generation)")
     guard isAttached, container.window != nil, generation == self.generation,
           model.configuration.enabled else { return }
     if editing {
@@ -426,7 +418,6 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     } else if touchSequence.isReleased, !touchSequence.isCancelled, let sequence = touchSequence.current,
               sequence != completedTouchSequence {
       pendingTerminalSequence = sequence
-      trace("terminal.pending")
     }
   }
 
@@ -453,18 +444,8 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   }
 
   private func emit(_ phase: String, _ value: Double) {
-    trace("emit.\(phase)", value: value)
     guard let activeGesture else { return }
     channel.invokeMethod("valueEvent", arguments: ["phase": phase, "value": value, "revision": revision, "gestureId": activeGesture])
-  }
-
-  private func trace(_ event: String, value: Double? = nil) {
-    #if DEBUG
-    guard ProcessInfo.processInfo.arguments.contains("--liquid-glass-slider-trace") else { return }
-    let message = "t=\(ProcessInfo.processInfo.systemUptime) \(event) input=\(String(describing: value)) value=\(model.configuration.value) revision=\(revision) generation=\(generation) gesture=\(String(describing: activeGesture)) touch=\(String(describing: touchSequence.current)) completedTouch=\(String(describing: completedTouchSequence)) pendingTerminal=\(String(describing: pendingTerminalSequence)) touchCancelled=\(touchSequence.isCancelled) attached=\(isAttached) enabled=\(model.configuration.enabled)"
-    Logger(subsystem: "dev.flutter-adaptive-liquid-glass.slider", category: "acceptance")
-      .notice("\(message, privacy: .public)")
-    #endif
   }
 
   func view() -> UIView { container }
@@ -472,7 +453,6 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   deinit {
     touchSequence.onCancellation = nil
     touchSequence.onNewSequence = nil
-    touchSequence.onTrace = nil
     container.onHierarchyChanged = nil
     channel.setMethodCallHandler(nil)
     if let suppressionObserver { suppression.remove(suppressionObserver) }
@@ -502,7 +482,6 @@ private final class AdaptiveGlassSliderTouchSequence: UIGestureRecognizer {
   var isReleased: Bool { touches.isEmpty }
   var onCancellation: (() -> Void)?
   var onNewSequence: (() -> Void)?
-  var onTrace: ((String) -> Void)?
 
   init() {
     super.init(target: nil, action: nil)
@@ -532,13 +511,11 @@ private final class AdaptiveGlassSliderTouchSequence: UIGestureRecognizer {
       isCancelled = true
       onCancellation?()
     }
-    onTrace?("touch.began count=\(self.touches.count)")
   }
 
   override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
     guard !self.touches.isDisjoint(with: touches) else { return }
     self.touches.subtract(touches)
-    onTrace?("touch.ended count=\(self.touches.count)")
     if self.touches.isEmpty { state = .failed }
   }
 
@@ -546,7 +523,6 @@ private final class AdaptiveGlassSliderTouchSequence: UIGestureRecognizer {
     guard !self.touches.isDisjoint(with: touches) else { return }
     self.touches.subtract(touches)
     isCancelled = true
-    onTrace?("touch.cancelled count=\(self.touches.count)")
     onCancellation?()
     if self.touches.isEmpty { state = .failed }
   }

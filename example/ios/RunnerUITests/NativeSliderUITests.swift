@@ -7,7 +7,7 @@ final class NativeSliderUITests: XCTestCase {
 
   override func setUpWithError() throws {
     continueAfterFailure = false
-    app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+    app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "--liquid-glass-slider-trace"]
     app.launch()
   }
 
@@ -27,15 +27,29 @@ final class NativeSliderUITests: XCTestCase {
     XCTAssertTrue(counts.exists && counts.isHittable, "Flutter callback counters must be visible")
     // XCTest does not track Flutter scroll tickers as application activity.
     // Wait for layout to stop moving before resolving a thumb coordinate.
+    // Hosted CI accessibility snapshots can each take several seconds; allow
+    // time to collect three frames, not just to finish the scroll animation.
+    let settlingStarted = ProcessInfo.processInfo.systemUptime
+    var frameSamples: [String] = []
     var previousFrame = CGRect.null
     var stableSamples = 0
     let settled = NSPredicate { _, _ in
+      let queryStarted = ProcessInfo.processInfo.systemUptime
       let frame = slider.frame
-      stableSamples = frame == previousFrame ? stableSamples + 1 : 0
+      let queryFinished = ProcessInfo.processInfo.systemUptime
+      frameSamples.append("t=\(queryFinished - settlingStarted)s, query=\(queryFinished - queryStarted)s, frame=\(frame)")
+      let valid = !frame.isNull && !frame.isInfinite && !frame.isEmpty
+      stableSamples = valid && frame == previousFrame ? stableSamples + 1 : 0
       previousFrame = frame
       return stableSamples >= 2
     }
-    XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: settled, object: nil)], timeout: 8), .completed)
+    let settlingResult = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: settled, object: nil)], timeout: 45)
+    let frameHistory = frameSamples.joined(separator: "\n")
+    let settlingAttachment = XCTAttachment(string: frameHistory)
+    settlingAttachment.name = "Slider frame settling samples"
+    settlingAttachment.lifetime = .keepAlways
+    add(settlingAttachment)
+    XCTAssertEqual(settlingResult, .completed, "Slider did not return three identical nonempty frames within 45 seconds:\n\(frameHistory)")
     var snapshot = try readSnapshot()
     let initial = XCTAttachment(string: "Slider frame: \(slider.frame)\n\(app.debugDescription)")
     initial.name = "Native slider accessibility hierarchy"
@@ -59,7 +73,9 @@ final class NativeSliderUITests: XCTestCase {
         guard let current = try? self?.readSnapshot() else { return false }
         return current.ends >= previous.ends + 1
       }
-      let outcome = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: completed, object: nil)], timeout: 5)
+      // Reading the two Flutter labels also requires remote accessibility
+      // snapshots. Wait for the result without ever repeating the gesture.
+      let outcome = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: completed, object: nil)], timeout: 30)
       snapshot = try readSnapshot()
       let observed = "value \(snapshot.value), starts \(snapshot.starts), ends \(snapshot.ends), lastEnd \(String(describing: snapshot.lastEnd)); slider frame \(slider.frame)"
       let callbackSnapshot = XCTAttachment(string: "Drag \(index + 1), target \(destination): \(observed)")

@@ -1,6 +1,7 @@
 import Flutter
 import UIKit
 import SwiftUI
+import os
 
 final class AdaptiveLiquidGlassValueControlFactory: NSObject, FlutterPlatformViewFactory {
   private let messenger: FlutterBinaryMessenger
@@ -263,6 +264,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     }
     let incomingRevision = configuration["revision"] as? Int ?? revision
     let echo = configuration["valueIsEcho"] as? Bool == true && incomingRevision == revision
+    trace("configure incomingRevision=\(incomingRevision) echo=\(echo)", value: value)
     if incomingRevision != revision {
       // Recreate only the SwiftUI interaction identity on authoritative reset.
       // Accepted echoes retain both the hosted control and the current gesture.
@@ -327,6 +329,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   }
 
   private func detachHosting() {
+    trace("detach")
     guard isAttached else { return }
     isAttached = false
     // A delayed begin or binding write can arrive before an active gesture was
@@ -343,6 +346,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   }
 
   private func begin() {
+    trace("begin")
     guard activeGesture == nil else { return }
     nextGesture += 1
     activeGesture = nextGesture
@@ -350,6 +354,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   }
 
   private func propose(_ value: Double, generation: Int) {
+    trace("propose sourceGeneration=\(generation)", value: value)
     guard isAttached, container.window != nil, generation == self.generation,
           model.configuration.enabled, value.isFinite else { return }
     var next = model.configuration
@@ -370,6 +375,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   }
 
   private func editing(_ editing: Bool, generation: Int) {
+    trace("editing=\(editing) sourceGeneration=\(generation)")
     guard isAttached, container.window != nil, generation == self.generation,
           model.configuration.enabled else { return }
     if editing {
@@ -392,8 +398,18 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   }
 
   private func emit(_ phase: String, _ value: Double) {
+    trace("emit.\(phase)", value: value)
     guard let activeGesture else { return }
     channel.invokeMethod("valueEvent", arguments: ["phase": phase, "value": value, "revision": revision, "gestureId": activeGesture])
+  }
+
+  private func trace(_ event: String, value: Double? = nil) {
+    #if DEBUG
+    guard ProcessInfo.processInfo.arguments.contains("--liquid-glass-slider-trace") else { return }
+    let message = "t=\(ProcessInfo.processInfo.systemUptime) \(event) input=\(String(describing: value)) value=\(model.configuration.value) revision=\(revision) generation=\(generation) gesture=\(String(describing: activeGesture)) attached=\(isAttached) enabled=\(model.configuration.enabled)"
+    Logger(subsystem: "dev.flutter-adaptive-liquid-glass.slider", category: "acceptance")
+      .notice("\(message, privacy: .public)")
+    #endif
   }
 
   func view() -> UIView { container }

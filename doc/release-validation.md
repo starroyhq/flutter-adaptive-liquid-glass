@@ -38,6 +38,11 @@ at the end of that scroll and waits for a stable accessibility frame before
 resolving slider coordinates. No production callback debounce, event suppression
 or timing heuristic was added.
 
+Hosted-runner accessibility queries can take several seconds each. The layout
+readiness deadline therefore allows three exact-frame samples even under that
+latency, and callback observation has a separate bounded wait. These waits do not
+repeat gestures or relax the target-value or one-start/one-end assertions.
+
 The first remote iOS 26.5 run exposed a separate bridge bug: after reaching 0.8,
 the screenshot showed starts/ends of `2 / 1` and a last end value of 0.8. The
 binding setter opened a new gesture before checking whether a proposed value

@@ -3,7 +3,9 @@ PODS:
     - CocoaLumberjack/Core (= 3.9.1)
   - CocoaLumberjack/Core (3.9.1)
   - Flutter (1.0.0)
-  - flutter_adaptive_liquid_glass (0.1.1):
+  - flutter_adaptive_liquid_glass (0.2.0):
+    - Flutter
+  - integration_test (0.0.1):
     - Flutter
   - native_liquid_glass (0.2.10):
     - Flutter
@@ -14,6 +16,7 @@ PODS:
 DEPENDENCIES:
   - Flutter (from `Flutter`)
   - flutter_adaptive_liquid_glass (from `.symlinks/plugins/flutter_adaptive_liquid_glass/ios`)
+  - integration_test (from `.symlinks/plugins/integration_test/ios`)
   - native_liquid_glass (from `.symlinks/plugins/native_liquid_glass/ios`)
 
 SPEC REPOS:
@@ -26,13 +29,16 @@ EXTERNAL SOURCES:
     :path: Flutter
   flutter_adaptive_liquid_glass:
     :path: ".symlinks/plugins/flutter_adaptive_liquid_glass/ios"
+  integration_test:
+    :path: ".symlinks/plugins/integration_test/ios"
   native_liquid_glass:
     :path: ".symlinks/plugins/native_liquid_glass/ios"
 
 SPEC CHECKSUMS:
   CocoaLumberjack: e4ba3b414dfca8c1916c6303d37f63b3a95134c6
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  flutter_adaptive_liquid_glass: fa2f98b824b91cfbaee72f2c45ec551400efe62b
+  flutter_adaptive_liquid_glass: 6fd7e562ecf58955e875346c81e1636216de0064
+  integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
   native_liquid_glass: c77cd74256902cf8afcc6bf6baf0ebdc11bb4fad
   SVGKit: 1ad7513f8c74d9652f94ed64ddecda1a23864dea
 

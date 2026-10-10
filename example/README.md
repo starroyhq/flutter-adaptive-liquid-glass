@@ -1,88 +1,158 @@
 # flutter_adaptive_liquid_glass_example
 
-Standalone iOS/Android showcase for `flutter_adaptive_liquid_glass`. Its dependency uses `path: ../`,
-which resolves to the surrounding `flutter-adaptive-liquid-glass` package. The example
-runs independently of any consuming app.
+Standalone iOS/Android showcase for `flutter_adaptive_liquid_glass`. Its dependency
+uses `path: ../`, resolving to the surrounding package checkout. The current
+checkout demonstrates the **unreleased 0.2.0 candidate**; the additional APIs are
+not part of the published pub.dev 0.1.1 release.
 
-From the `flutter-adaptive-liquid-glass` package root:
+From the package root:
 
 ```sh
 cd example
-flutter pub get
-flutter run
+flutter pub get --enforce-lockfile
+flutter devices
+flutter run -d <device-id>
 ```
 
-The example keeps reading content on a neutral, solid canvas. Only the toolbar,
-segmented control, floating composer and bottom tabs use glass. Adjacent search
-and sliders actions share one capsule. Text and code blocks scroll behind these
-controls so the material can be inspected against changing backgrounds.
+## Component catalog
 
-The sliders action opens appearance and accessibility options:
+The default entry point is `ComponentCatalogApp`.
 
-- Compare **System**, **Light** and **Dark** without restarting the app.
-- Select **Neutral**, **Blue** or **Green** independently of appearance. Neutral
-  retains the original neutral theme; Blue and Green use `ColorScheme.fromSeed`
-  and `LiquidGlassColors.fromColorScheme`, including separate dark schemes.
-  These are example presets: the package accepts arbitrary colors and schemes.
-- Compare rendering modes. On iOS 26+, `fallback` changes the other controls but
-  bottom tabs always remain native. Use Android or older iOS to inspect fallback tabs.
-- Enable **Reduce motion** to stop fallback selection travel and press scale while
-  retaining glass. Disable it and rapidly select different tabs or segments to
-  inspect the shared capsule's movement and retargeting.
-- Enable **Reduce transparency** to replace background blur with a solid material.
-  Test this separately from reduced motion and then with both enabled.
+| Page | Examples |
+| --- | --- |
+| Controls | Surfaces, text/icon buttons, grouped toolbar, segments, activity/progress, slider, switch and stepper |
+| Pickers | Date/time modes and compact/inline/wheel styles, color well with alpha |
+| Popups | Three independent menus, alert/action sheet, mixed-content sheet, anchored popover and nested presentations |
+| Search | Flutter search editing and a controlled search scaffold with retained page state |
 
-The settings sheet uses the same renderer policy as the preview, including native
-segments on iOS 26+. Covered routes keep their Flutter content, but temporarily
-stop painting native platform views until the overlay finishes its exit animation.
-This prevents hidden background views from reserving composition slices in a modal.
-The tab selection updates the visible selected-tab label; this is a component
-showcase, not a routed multi-page app. The segments filter the sample rows.
+The **Appearance** action changes System/Light/Dark, the optional custom teal
+palette, rendering mode, reduced motion and reduced transparency. Palette changes
+are independent of appearance. On iOS 26+, tabs remain native even when selecting
+fallback or opaque rendering; use older iOS or Android to inspect fallback tabs.
+The catalog includes localization delegates for English, simplified/traditional
+Chinese, Japanese and Arabic; explanatory sample text remains English.
 
-Also check these interactions on a device or simulator:
+The [component coverage matrix](../doc/component-coverage.md) maps all 21
+capabilities to implementations and regression sources. Actual execution results
+belong in the [candidate validation record](../doc/component-validation.md).
+The checks below are acceptance steps, not a claim that every check has passed.
 
-1. Scroll through the list and solid code blocks. The background should be blurred
-   only inside control bounds; foreground labels must remain sharp in both themes.
-2. Tap each half of the shared toolbar capsule. Search opens a keyboard dialog;
-   sliders opens the options sheet. Neither control should intercept taps while
-   covered by a popup. Native content underneath the popup must not bleed through.
-3. Enter Chinese, Japanese and emoji in the floating composer. The composer should
-   rise above the keyboard, preserve Flutter editing and stay clear of the tabs.
-   Tabs are hidden while the keyboard is visible; drag the list or use the keyboard
-   dismissal button to restore them.
-4. Increase system text size and inspect selection, labels, hit areas and scrolling.
-   Repeat with the system's reduced-motion setting as well as the example toggle.
-5. On iOS 26+, repeat selection, theme changes and popup presentation with the
-   original native controls. A successful Flutter fallback test does not validate
-   UIKit material composition.
-6. Repeat scrolling and selection in Blue and Green, switching between light and
-   dark without changing the palette. Verify prominent-button foregrounds and
-   selected labels. Native controls use the supported public color mappings;
-   custom fallback selection fills and rims do not replace UIKit's material.
+1. Change slider, switch, stepper and segment values; change appearance, palette
+   and rendering mode, then return to the page. Confirm controlled values remain
+   accepted by the app. Exercise disabled controls, range ends and stepper hold.
+2. Inspect date modes/styles. The catalog uses the default minute interval and
+   unbounded dates; bounds and other minute intervals are covered by picker tests
+   and can be supplied when adapting the example. Open the color well;
+   change RGB and alpha, enter valid and invalid HEX, and return to the page.
+   Verify state after light/dark changes and reopening.
+3. Open each of the three menus, visit nested items, use Back rapidly, select a
+   leaf or dismiss. Only the initiating menu should receive a result. Check its
+   disabled item, then try alert/action-sheet confirmation, deletion and cancel.
+4. Open **Mixed sheet**, type Chinese/Japanese and emoji into the Flutter field,
+   change values, then open **Nest sheet** and the nested popover. Close layers
+   individually. Text, selection and focus must belong to the visible layer;
+   drafts must survive returning to a previous layer. The root tabs must return
+   after the final exit animation, with no native view bleeding through a popup.
+5. Drag a sheet between its medium and large detents, scroll its list, dismiss it
+   from the top, and repeat while the keyboard is visible. Resize/rotate while a
+   popover is open and check its position, safe area and available height.
+6. Enter a composing IME draft in Search; clear, cancel, submit, switch pages and
+   reopen search. Clear empties the draft; cancel retains it. Verify keyboard
+   dismissal and system back behavior, then background and restore the app.
+7. Repeat in light/dark and custom colors, with large text, right-to-left layout,
+   reduced motion and reduced transparency. Inspect labels, focus order and hit
+   areas with the platform's accessibility tools. On iOS 26+, also inspect the
+   actual native material during scrolling and popup transitions.
 
-For your own palette, see the [custom color API](../README.md#custom-colors), which
-supports partial token overrides, `fromColorScheme` and local `copyWith` changes.
-Validate text contrast with your chosen colors and actual backdrop content;
-the package does not guarantee contrast for arbitrary custom colors.
+The [custom color API](../README.md#custom-colors) supports partial tokens,
+`fromColorScheme` and local `copyWith` overrides. Colors are not a fixed palette
+and arbitrary custom colors do not carry a contrast guarantee. Native UIKit
+materials retain their own fills, rims and shadows. The Flutter fallback uses
+bounded blur and a protective fill; it does not implement a refraction shader.
 
-The fallback has no refraction shader. Painting layers separate the background and
-moving selection, but scrolling performance and GPU cost need device profiling.
-These are acceptance steps, not a claim that every listed device check has passed.
-See the [package README](../README.md) for setup and validation boundaries.
-The current run is recorded in [fallback validation](../doc/fallback-validation.md).
+When copying the mixed-sheet example, keep `primary: true` on its primary
+vertical `ListView`, or use `PrimaryScrollController.of(sheetContext)`. The
+sheet supplies that controller to coordinate scrolling and detent dragging.
+A separately owned controller does not participate in that coordination.
 
-## Mixed native/Flutter modal regression
+Dates display local calendar values even when the input is UTC, while callbacks
+retain the input's UTC/local representation. Date-only edits preserve the local
+time; time-only edits preserve the local date. Time modes clear seconds and use
+the supported minute grid; bounds snap inward to selectable values. This is not
+a named-time-zone scheduler. Color changes are continuous sRGB edits, not a
+transaction committed on close. Fallback HEX uses `RRGGBB` or `RRGGBBAA` with
+optional `#`; alpha is last.
+
+## Automated checks
+
+From `example/`:
 
 ```sh
-flutter run --dart-define=GLASS_MODAL_PROBE=true
+flutter pub get --enforce-lockfile
+flutter analyze --no-pub
+flutter test --no-pub test
+flutter test --no-pub integration_test/components_test.dart -d <device-id>
 ```
 
-Open Dialog and Bottom Sheet, nest them, and close them in order. Every layer
-interleaves Flutter text, an editable draft, a switch, native segments, a shared
-capsule and a native surface. Use the three native toggles to isolate a control;
-compile-time defaults can also be set with `GLASS_MODAL_SEGMENT`,
-`GLASS_MODAL_CAPSULE` and `GLASS_MODAL_SURFACE`. They do not change the tab policy.
-Verify all text stays visible, callbacks target only the front layer, selected
-values survive returning to a previous layer, and the root tab bar returns.
-Repeat with light/dark and Blue/Green. This probe needs an iOS 26+ runtime to
-establish native composition behavior; widget tests validate only Dart behavior.
+The first integration scenario opens a mixed-content sheet, enters a Unicode draft,
+opens and closes a nested sheet, verifies the preserved draft and returns to the
+root tab bar. It exercises the compiled application with native views present on
+an applicable runtime. Its Flutter assertions do not prove that every native
+control was drawn correctly or that every UIKit gesture worked; inspect actual
+composition and native interactions separately.
+
+The second forces fallback and exercises slider, switch and stepper gestures,
+search submission/clear/theme changes, and a color editor round trip. It uses
+the Flutter SDK's synthetic text-input channel consistently; this avoids a
+Flutter 3.41 driver connection-cache issue after submission and does not claim
+system keyboard or IME acceptance.
+
+The configured CI runs root/example unit and widget tests and builds Android
+and iOS simulator applications. It formats/analyzes integration-test source but
+does not currently run this device scenario. See the candidate validation record
+for the checks actually executed on a particular source revision.
+
+A simulator can validate application flow, layout and native integration on its
+installed runtime. It cannot establish physical-device GPU/frame performance,
+power usage, high-refresh behavior, full hardware keyboard/IME behavior or
+complete VoiceOver/TalkBack acceptance. Record those physical-device checks
+separately; an iOS 26+ simulator result is not an iOS hardware result.
+
+## Original material probe
+
+```sh
+flutter run -d <device-id> --dart-define=GLASS_MATERIAL_PROBE=true
+```
+
+This starts `GlassExample`, the original reading-content/material showcase.
+The toolbar, segmented control, floating Flutter composer and bottom tabs sit
+over a neutral canvas. Adjacent toolbar actions share one capsule. Scroll text
+and solid code blocks behind them to inspect material boundaries and legibility.
+
+The sliders action opens appearance/accessibility settings and the original
+Neutral/Blue/Green demonstration palettes. Compare light and dark independently
+of color, inspect rapid shared-capsule retargeting, then test reduced motion and
+reduced transparency separately. Enter Chinese, Japanese and emoji into the
+composer and confirm it rises above the keyboard. Tabs hide while editing and
+return after keyboard dismissal.
+
+## Original mixed native/Flutter modal probe
+
+```sh
+flutter run -d <device-id> --dart-define=GLASS_MODAL_PROBE=true
+```
+
+This starts `NativeModalExample`. Open Dialog and Bottom Sheet, nest them, and
+close them in order. Each layer interleaves Flutter text, an editable draft,
+a switch, native segments, a shared capsule and a native surface. Use its three
+native toggles to isolate a control; compile-time defaults can also be set with
+`GLASS_MODAL_SEGMENT`, `GLASS_MODAL_CAPSULE` and `GLASS_MODAL_SURFACE`. These flags
+do not change the native-tab policy. `GLASS_MODAL_PROBE` takes precedence if both
+probe entry-point flags are set.
+
+Verify all content stays visible, callbacks target only the front layer, values
+survive returning to a previous layer and root tabs return after popup exit.
+Repeat with light/dark and Blue/Green. An iOS 26+ runtime is required to inspect
+native composition; widget tests alone validate only Dart behavior. The earlier
+release's [fallback validation record](../doc/fallback-validation.md) remains
+historical evidence, separate from the candidate's execution record.

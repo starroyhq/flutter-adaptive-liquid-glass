@@ -9,6 +9,13 @@ imports use `flutter_adaptive_liquid_glass`, following Dart's
 [package naming rules](https://dart.dev/tools/pub/pubspec#name); hyphens are not
 valid in a pubspec package name.
 
+The published pub.dev version is **0.1.1**. This checkout contains the
+**unreleased 0.2.0 candidate**, including the component catalog and new APIs below.
+Use a local checkout to evaluate those APIs; a source version number does not
+mean that a release has been published or device validation has completed.
+The [validation record](doc/component-validation.md#native-slider-acceptance-limitation)
+records a native slider input limitation that remains a release acceptance gate.
+
 ## Installation
 
 ```sh
@@ -58,8 +65,11 @@ The package's independent example already uses `path: ../`, relative to its own
 ```dart
 import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart';
 
+// Keep this observer in the owning State; dispose it with that State.
+final glassObserver = LiquidGlassNavigatorObserver();
+
 MaterialApp(
-  navigatorObservers: [LiquidGlassNavigatorObserver()],
+  navigatorObservers: [glassObserver],
   themeMode: appThemeMode,
   builder: (context, child) => LiquidGlassAppearance(
     mode: appThemeMode,
@@ -97,6 +107,197 @@ path that compressed Chinese titles even with an explicit platform-view width.
 The Flutter estimate prevents first-frame collapse; UIKit's intrinsic content
 width can enlarge it, never shrink it. Icon-only standalone controls continue to
 use the pinned provider. Both paths retain native materials and app appearance.
+
+## Component catalog — unreleased 0.2.0
+
+The candidate covers 21 UI capabilities. Icon buttons are a constructor variant;
+alert and action sheet are two styles of the same helper. See the
+[component coverage matrix](doc/component-coverage.md) for individual rendering
+paths, constraints and regression sources.
+
+| Family | Public API |
+| --- | --- |
+| Surfaces and actions | `LiquidGlassSurface`, `LiquidGlassButton`, `LiquidGlassButton.icon`, `LiquidGlassButtonGroup` |
+| Navigation and grouping | `LiquidGlassNavigationBar`, `LiquidGlassTabBar`, `LiquidGlassSegmentedControl<T>`, `LiquidGlassToolbar` |
+| Values | `LiquidGlassSlider`, `LiquidGlassSwitch`, `LiquidGlassStepper` |
+| Status | `LiquidGlassActivityIndicator`, `LiquidGlassProgressView` |
+| Picking | `LiquidGlassDatePicker`, `LiquidGlassColorPicker` |
+| Search | `LiquidGlassSearchField`, `LiquidGlassSearchScaffold` |
+| Presentations | `LiquidGlassMenuButton<T>`, `showLiquidGlassAlert<T>`, `showLiquidGlassSheet<T>`, `showLiquidGlassPopover<T>` |
+
+### Controlled values and search
+
+Value controls do not own application state. Accept an edit by rebuilding with
+the new value; a null `onChanged` disables the control. Programmatic updates do
+not emit change callbacks. Native bridges reconcile unaccepted edits to the
+value supplied by the caller.
+
+```dart
+LiquidGlassSlider(
+  value: volume,
+  divisions: 10,
+  semanticLabel: 'Volume',
+  onChanged: (value) => setState(() => volume = value),
+);
+
+LiquidGlassStepper(
+  value: quantity,
+  min: 1,
+  max: 12,
+  step: 1,
+  semanticLabel: 'Quantity',
+  onChanged: (value) => setState(() => quantity = value),
+);
+```
+
+Sliders require a finite value in a finite, nonempty range and positive
+`divisions`, when specified. Steppers require a positive `step`; passing a bound
+clamps to it, or wraps to the opposite bound with `wraps: true`. The fallback
+supports press-and-hold repetition. Progress is determinate, from 0 to 1.
+Status indicators do not add another glass layer behind their content. On the
+native path, package-owned bridges use `UIActivityIndicatorView` and
+`UIProgressView`. Progress, animation and color updates retain the UIKit instance;
+configuration is reapplied after creation and native visibility participates in
+nested popup suppression. The pinned provider remains in use for existing
+components, rather than presenting these status controls.
+
+`LiquidGlassToolbar(groups: [...])` takes groups of `LiquidGlassAction`. Each
+group shares one capsule; distinct groups retain spacing and can scroll
+horizontally when constrained. Supply stable action IDs and accessible labels.
+
+`LiquidGlassSearchField` keeps editing in a Flutter `TextField`, including
+selection and IME composing state. Supplied `TextEditingController` and
+`FocusNode` objects remain caller-owned; dispose them in their owning State.
+`onChanged` is immediate: debouncing, requests and results belong to the app.
+Clear empties the draft and invokes `onChanged('')` and `onClear`; Cancel removes
+focus and invokes `onCancelled` without clearing the draft.
+
+`LiquidGlassSearchScaffold` accepts a caller-owned `body`, `searchResults`,
+`searchController`, selected tab and controlled `searchActive` state. It retains
+the body while results are shown and hides bottom tabs while the keyboard is
+visible. It does not create a Navigator. Use your existing router or an
+`IndexedStack` for independently retained tab pages.
+
+### Date and color pickers
+
+```dart
+LiquidGlassDatePicker(
+  value: scheduledAt,
+  mode: LiquidGlassDatePickerMode.dateAndTime,
+  style: LiquidGlassDatePickerStyle.compact,
+  minuteInterval: 5,
+  onChanged: (value) => setState(() => scheduledAt = value),
+);
+
+LiquidGlassColorPicker(
+  selectedColor: accent,
+  supportsAlpha: true,
+  semanticLabel: 'Accent color',
+  onChanged: (value) => setState(() => accent = value),
+);
+```
+
+Date pickers support `date`, `time` and `dateAndTime` modes, with `compact`,
+`inline` and `wheels` styles. Native rendering uses `UIDatePicker`; the compact
+fallback opens a sheet containing Flutter calendar/time controls. Install your
+app's `flutter_localizations` delegates for supported locales. A picker `locale`
+override does not install localization delegates by itself.
+
+All dates are displayed in the device's **local calendar**, including UTC input.
+Callbacks preserve the input's UTC/local representation: UTC input returns UTC
+output. Date-only edits preserve the existing local time, including seconds and
+subseconds; time-only edits preserve the existing local date. Time modes clear
+seconds and use a minute grid. Supported `minuteInterval` values are
+`1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30`.
+
+Date-only bounds compare local calendar dates. Time-mode lower bounds round up
+and upper bounds round down to selectable minutes; time-only selection is also
+limited to the input's local day. Empty ranges, unsupported intervals and local
+years outside 1–9999 fail explicitly. Normalizing a displayed value does not emit
+a callback. Calendar reconstruction follows Dart/platform local-time rules,
+including daylight-saving transitions; this is not a named-time-zone API.
+
+Colors are controlled **sRGB** values. The fallback sheet has RGB/alpha sliders
+and HEX editing; native rendering uses `UIColorWell` and its system picker.
+HEX accepts `RRGGBB` or `RRGGBBAA`, optionally prefixed with `#`; alpha is last,
+unlike Dart's integer `AARRGGBB` notation. Invalid HEX does not emit an edit.
+`supportsAlpha: false` hides alpha editing and emits opaque colors. Changes are
+continuous; closing is not a rollback or a second commit. Maintain a separate
+draft if the application needs explicit confirmation.
+
+### Menus and typed presentations
+
+```dart
+LiquidGlassMenuButton<String>(
+  label: 'More',
+  items: const [
+    LiquidGlassMenuItem(value: 'copy', label: 'Copy', icon: Icons.copy),
+    LiquidGlassMenuItem(
+      value: 'organize',
+      label: 'Organize',
+      children: [
+        LiquidGlassMenuItem(value: 'archive', label: 'Archive'),
+        LiquidGlassMenuItem(
+          value: 'delete',
+          label: 'Delete',
+          destructive: true,
+        ),
+      ],
+    ),
+  ],
+  onSelected: handleAction,
+);
+
+final result = await showLiquidGlassSheet<String>(
+  context: context,
+  initialDetent: LiquidGlassSheetDetent.medium,
+  builder: (sheetContext) => ListView(
+    primary: true,
+    padding: const EdgeInsets.all(20),
+    children: [
+      const Text('Choose an option'),
+      LiquidGlassButton(
+        label: 'Done',
+        onPressed: () => Navigator.of(sheetContext).pop('done'),
+      ),
+    ],
+  ),
+);
+```
+
+Menu values must be stable and unique across the whole item tree. Items expose
+`enabled`, `destructive`, `selected`, `icon` and nested `children`. Opening takes
+a snapshot of the tree; only leaf selection returns a value. Independent menu
+buttons own their anchors and presentation state. `onCanceled` distinguishes a
+dismissal from `onSelected`.
+
+`showLiquidGlassAlert<T>` takes a list of `LiquidGlassAlertAction<T>` with
+`label`, `value`, `enabled`, `destructive`, `cancel` and optional `icon`. Choose
+`LiquidGlassAlertStyle.alert` or `.actionSheet`. Cancel actions return null,
+regardless of their supplied value.
+
+All presentation helpers return `Future<T?>`; cancellation returns null, and
+`Navigator.of(popupContext).pop(value)` returns a typed result. They use Flutter
+`PopupRoute` content over adaptive glass, rather than hosting arbitrary Flutter
+widgets inside a UIKit alert or sheet controller. They default to the root
+Navigator; use `useRootNavigator: false` for the nearest Navigator, and install a
+`LiquidGlassNavigatorObserver` on the chosen Navigator.
+
+Sheets accept an ordinary `WidgetBuilder`, medium/large `detents`, an
+`initialDetent` included in that list, `enableDrag`, `showDragHandle` and
+`barrierDismissible`. For coordinated content scrolling and detent dragging,
+the builder's **one primary vertical scroll view** must use `primary: true` or
+`PrimaryScrollController.of(sheetContext)`. An unrelated scroll controller cannot
+coordinate sheet expansion. Non-scrolling content can still use the drag handle.
+The route applies keyboard and safe-area constraints.
+
+`showLiquidGlassPopover<T>` requires `anchorContext` and `builder`, and accepts
+`width`, `maxHeight` and `gap`. Keep the anchor mounted while presented. The
+popover follows layout changes, flips/clamps within available keyboard-safe
+space and dismisses when its anchor is removed. Nested presentation, replacement
+and removal keep underlying native views hidden until the outgoing route's
+transition finishes. Locally scoped themes are captured when opening; place a
+live application-wide theme above the Navigator for global appearance updates.
 
 ## Custom colors
 
@@ -140,9 +341,10 @@ final glassData = LiquidGlassThemeData(
 ```
 
 The host can create its scheme with `ColorScheme.fromSeed`, use a hand-built
-scheme or supply individual color tokens. The example's Neutral, Blue and Green
-choices are demonstration presets only. Neutral keeps the original unbranded
-appearance; the seed examples generate separate light and dark schemes.
+scheme or supply individual color tokens. The component catalog's optional teal
+palette and the material probe's Neutral, Blue and Green choices are demonstration
+presets only. Neutral keeps the original unbranded appearance; seed examples
+generate separate light and dark schemes.
 
 Both theme data and colors support `copyWith`, preserving fields not supplied.
 Use this for a local override without dropping accessibility preferences or the
@@ -179,7 +381,10 @@ therefore not expected to produce identical pixels for a custom palette.
 | `fallback` | Flutter approximation | Flutter approximation |
 | `opaque` | Solid accessible surfaces | Solid accessible surfaces |
 
-The table applies to surfaces, buttons, segmented controls and navigation bars.
+The table applies to adaptive surfaces and controls. Search fields and popup
+contents retain Flutter editing, layout and routing in every mode; their
+backgrounds follow the material policy. Value controls use the applicable UIKit,
+SwiftUI or Flutter SDK control instead of adding a glass wrapper to every element.
 **Bottom tabs always use the system `UITabBarController` / `UITabBar` on iOS 26+,**
 including `fallback` and `opaque`. They retain UIKit selection, hit testing and
 system accessibility materials. `opaque` or `reduceTransparency` places a solid
@@ -266,12 +471,14 @@ flutter pub get
 flutter run
 ```
 
-The independent example contains iOS/Android host projects. Its sliders action
-opens rendering mode, system/light/dark appearance, independent color palettes,
-reduced-motion and reduced-transparency controls. Scroll content behind the shared toolbar capsule,
-floating segmented control, Flutter composer and bottom tabs to inspect changing
-backgrounds. The reading area uses a neutral canvas, plain rows and solid code
-blocks. See [example acceptance steps](example/README.md) for the interactions.
+The independent example contains iOS/Android host projects and opens
+`ComponentCatalogApp` by default, with Controls, Pickers, Popups and Search pages.
+Its Appearance action changes rendering mode, system/light/dark appearance,
+custom color, reduced motion and reduced transparency. The original material and
+mixed-modal probes remain available through compile-time flags. See
+[example acceptance steps](example/README.md), the
+[coverage matrix](doc/component-coverage.md) and the
+[candidate validation record](doc/component-validation.md).
 CI/widget tests verify portable behavior;
 iOS 26 Release rendering, VoiceOver, real keyboard/IME, scrolling beneath glass,
 popup occlusion, rapid tab selection, old iOS and Android hardware remain device
@@ -284,7 +491,7 @@ preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Continuous integration
 
-The `Component checks` workflow runs on pushes, pull requests and manual dispatch.
+The `Component checks` workflow is configured for pushes, pull requests and manual dispatch.
 It pins Flutter 3.41.9, enforces the root/example lockfiles, formats and analyzes
 both, and runs both test suites. After quality passes, separate jobs build the
 example Debug APK (Java 17) and an arm64 iOS simulator application (macOS 26).
@@ -292,8 +499,12 @@ The iOS job generates Flutter configuration, enforces `Podfile.lock`, then invok
 `xcodebuild` directly to avoid the toolchain's combined-architecture parsing issue.
 Only the APK and archived simulator `.app` are retained as artifacts for 14 days.
 Build success does not establish native animation, IME, accessibility or GPU
-performance. See the [validation record](doc/fallback-validation.md) for executed
-checks and remaining device acceptance.
+performance. Device integration scenarios are runnable locally; the configured
+CI formats/analyzes their source but does not run them on a device. Configuration
+is not evidence of a successful run for the current candidate. See the
+[candidate validation record](doc/component-validation.md) for executed checks;
+[fallback validation](doc/fallback-validation.md) preserves the earlier release's
+validation record.
 
 ## GitHub releases
 

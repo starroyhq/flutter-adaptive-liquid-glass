@@ -10,6 +10,17 @@ import 'native_button_layout.dart';
 import 'native_capsule.dart';
 
 class LiquidGlassButton extends StatelessWidget {
+  /// An icon-only button with a required accessibility label.
+  const LiquidGlassButton.icon({
+    super.key,
+    required IconData this.icon,
+    required String this.semanticLabel,
+    this.sfSymbol,
+    this.onPressed,
+    this.prominent = false,
+    this.loading = false,
+  }) : label = null;
+
   const LiquidGlassButton({
     super.key,
     this.label,

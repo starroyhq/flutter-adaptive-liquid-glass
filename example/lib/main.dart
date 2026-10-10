@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart';
 
 import 'native_modal_example.dart';
+import 'component_catalog.dart';
 
 void main() => runApp(
   const bool.fromEnvironment('GLASS_MODAL_PROBE')
       ? const NativeModalExample()
-      : const GlassExample(),
+      : const bool.fromEnvironment('GLASS_MATERIAL_PROBE')
+      ? const GlassExample()
+      : const ComponentCatalogApp(),
 );
 
 enum _Palette {

@@ -209,7 +209,9 @@ Each drag holds the thumb for 0.2 seconds, moves at the SDK's `.slow` velocity,
 then holds its destination for 0.2 seconds. Four consecutive drags alternate
 between 0.8 and 0.2 from an initial 0.4. Every drag must increment Flutter's start
 and end counters exactly once, reach the requested detent within 0.051, and
-report the same final value through `onChangeEnd`. The fixture waits for the
+report the same final value through `onChangeEnd`. Two subsequent stationary
+thumb presses must each produce one start/end pair without changing the value.
+The fixture waits for the
 slider's frame to stop moving after revealing it; XCTest's normal idle detection
 does not observe Flutter scroll tickers. Screenshots and the initial native
 accessibility hierarchy are retained in the `.xcresult` bundle.
@@ -229,6 +231,7 @@ xcodebuild -workspace Runner.xcworkspace -scheme NativeSliderAcceptance \
   -derivedDataPath ../build/ios-parity \
   -parallel-testing-enabled NO \
   -maximum-concurrent-test-simulator-destinations 1 \
+  -collect-test-diagnostics never \
   -resultBundlePath ../build/native-slider-acceptance.xcresult \
   ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO test
 ```

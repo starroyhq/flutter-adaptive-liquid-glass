@@ -95,6 +95,31 @@ final class NativeSliderUITests: XCTestCase {
       XCTAssertEqual(snapshot.value, destination, accuracy: 0.051, "The controlled value must reach the requested slider detent")
       XCTAssertEqual(try XCTUnwrap(snapshot.lastEnd), snapshot.value, accuracy: 0.001, "Flutter's final callback must match its displayed controlled value")
     }
+
+    // A real press that does not change the value is still an editing cycle.
+    // Repeat it to ensure a committed touch identity does not block the next
+    // physical interaction while rejecting late system editing callbacks.
+    for index in 1...2 {
+      let previous = snapshot
+      slider.coordinate(withNormalizedOffset: CGVector(dx: previous.value, dy: 0.5))
+        .press(forDuration: 0.2)
+      let completed = NSPredicate { [weak self] _, _ in
+        guard let current = try? self?.readSnapshot() else { return false }
+        return current.ends >= previous.ends + 1
+      }
+      let outcome = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: completed, object: nil)], timeout: 30)
+      snapshot = try readSnapshot()
+      let observed = "Stationary press \(index): value \(snapshot.value), starts \(snapshot.starts), ends \(snapshot.ends), lastEnd \(String(describing: snapshot.lastEnd))"
+      let attachment = XCTAttachment(string: observed)
+      attachment.name = "Stationary slider callback snapshot \(index)"
+      attachment.lifetime = .keepAlways
+      add(attachment)
+      XCTAssertEqual(outcome, .completed, observed)
+      XCTAssertEqual(snapshot.starts, previous.starts + 1, observed)
+      XCTAssertEqual(snapshot.ends, previous.ends + 1, observed)
+      XCTAssertEqual(snapshot.value, previous.value, accuracy: 0.001, observed)
+      XCTAssertEqual(try XCTUnwrap(snapshot.lastEnd), snapshot.value, accuracy: 0.001, observed)
+    }
   }
 
   private struct Snapshot {

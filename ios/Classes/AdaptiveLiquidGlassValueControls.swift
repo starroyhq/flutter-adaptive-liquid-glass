@@ -189,11 +189,12 @@ private final class AdaptiveLiquidGlassValueControl: NSObject, FlutterPlatformVi
   }
 }
 
-/// SwiftUI owns the native slider's editing lifecycle. Modern UISlider can
-/// deliver touch-up before its final valueChanged inside a Flutter platform
-/// view, so observing UIKit touch phases cannot define a reliable commit.
+/// SwiftUI delivers the final value and editing boundary. A separate touch
+/// identity prevents a late system editing(true) from reopening that gesture;
+/// UIKit touch-up itself is never used as the value/commit boundary.
 private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformView {
   private let container = AdaptiveGlassHostingContainer()
+  private let touchSequence = AdaptiveGlassSliderTouchSequence()
   private let channel: FlutterMethodChannel
   private let model = AdaptiveGlassSliderModel()
   private let hosting: UIHostingController<AdaptiveGlassSliderView>
@@ -205,6 +206,8 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   private var generation = 0
   private var nextGesture = 0
   private var activeGesture: Int?
+  private var activeTouchSequence: Int?
+  private var completedTouchSequence: Int?
   private var popupOwner = false
   private var routeSuppressed = false
   private var enabled = true
@@ -216,6 +219,10 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     super.init()
     container.frame = frame
     container.backgroundColor = .clear
+    container.addGestureRecognizer(touchSequence)
+    touchSequence.onCancellation = { [weak self] in self?.cancelTouchGesture() }
+    touchSequence.onNewSequence = { [weak self] in self?.cancelTouchGesture() }
+    touchSequence.onTrace = { [weak self] event in self?.trace(event) }
     hosting.view.backgroundColor = .clear
     hosting.view.translatesAutoresizingMaskIntoConstraints = false
     hostingConstraints = [
@@ -268,7 +275,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     if incomingRevision != revision {
       // Recreate only the SwiftUI interaction identity on authoritative reset.
       // Accepted echoes retain both the hosted control and the current gesture.
-      activeGesture = nil
+      invalidateInteraction()
       generation += 1
     }
     revision = incomingRevision
@@ -296,7 +303,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     let effectiveEnabled = enabled && !hidden
     var next = model.configuration
     if next.enabled != effectiveEnabled {
-      activeGesture = nil
+      invalidateInteraction()
       generation += 1
       next.generation = generation
     }
@@ -334,7 +341,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     isAttached = false
     // A delayed begin or binding write can arrive before an active gesture was
     // recorded. Every actual detach invalidates the old SwiftUI closures.
-    activeGesture = nil
+    invalidateInteraction()
     generation += 1
     var next = model.configuration
     next.generation = generation
@@ -345,12 +352,37 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     hosting.removeFromParent()
   }
 
-  private func begin() {
+  private func invalidateInteraction() {
+    activeGesture = nil
+    activeTouchSequence = nil
+    touchSequence.invalidate()
+  }
+
+  private func cancelTouchGesture() {
+    if activeGesture != nil { emit("cancel", model.configuration.value) }
+    activeGesture = nil
+    activeTouchSequence = nil
+  }
+
+  @discardableResult
+  private func begin(accessibility: Bool = false) -> Bool {
     trace("begin")
-    guard activeGesture == nil else { return }
+    if activeGesture != nil { return true }
+    if !accessibility {
+      // Flutter can release a tap to UIKit after its finger has already lifted.
+      // The unconsumed sequence remains eligible, but a cancelled or committed
+      // sequence cannot create another operation from late SwiftUI callbacks.
+      guard !touchSequence.isCancelled, let sequence = touchSequence.current,
+            sequence != completedTouchSequence else {
+        trace("begin.rejected")
+        return false
+      }
+      activeTouchSequence = sequence
+    }
     nextGesture += 1
     activeGesture = nextGesture
     emit("start", model.configuration.value)
+    return true
   }
 
   private func propose(_ value: Double, generation: Int) {
@@ -368,7 +400,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     // create a second start with no corresponding end. A real no-change press
     // still starts through editing(true).
     guard candidate != next.value else { return }
-    begin()
+    guard begin() else { return }
     next.value = candidate
     model.configuration = next
     emit("change", candidate)
@@ -381,18 +413,22 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     if editing {
       begin()
     } else if activeGesture != nil {
+      if let activeTouchSequence { completedTouchSequence = activeTouchSequence }
       emit("end", model.configuration.value)
       activeGesture = nil
+      activeTouchSequence = nil
     }
   }
 
   private func adjust(_ direction: Int, generation: Int) {
     guard isAttached, container.window != nil, generation == self.generation,
-          model.configuration.enabled else { return }
+          model.configuration.enabled, activeGesture == nil else { return }
     let state = model.configuration
     let increment = (state.maximum - state.minimum) / Double(state.divisions ?? 20)
     let candidate = min(state.maximum, max(state.minimum, state.value + Double(direction) * increment))
     guard candidate != state.value else { return }
+    touchSequence.invalidate()
+    begin(accessibility: true)
     propose(candidate, generation: generation)
     editing(false, generation: generation)
   }
@@ -406,7 +442,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   private func trace(_ event: String, value: Double? = nil) {
     #if DEBUG
     guard ProcessInfo.processInfo.arguments.contains("--liquid-glass-slider-trace") else { return }
-    let message = "t=\(ProcessInfo.processInfo.systemUptime) \(event) input=\(String(describing: value)) value=\(model.configuration.value) revision=\(revision) generation=\(generation) gesture=\(String(describing: activeGesture)) attached=\(isAttached) enabled=\(model.configuration.enabled)"
+    let message = "t=\(ProcessInfo.processInfo.systemUptime) \(event) input=\(String(describing: value)) value=\(model.configuration.value) revision=\(revision) generation=\(generation) gesture=\(String(describing: activeGesture)) touch=\(String(describing: touchSequence.current)) completedTouch=\(String(describing: completedTouchSequence)) touchCancelled=\(touchSequence.isCancelled) attached=\(isAttached) enabled=\(model.configuration.enabled)"
     Logger(subsystem: "dev.flutter-adaptive-liquid-glass.slider", category: "acceptance")
       .notice("\(message, privacy: .public)")
     #endif
@@ -415,6 +451,9 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   func view() -> UIView { container }
 
   deinit {
+    touchSequence.onCancellation = nil
+    touchSequence.onNewSequence = nil
+    touchSequence.onTrace = nil
     container.onHierarchyChanged = nil
     channel.setMethodCallHandler(nil)
     if let suppressionObserver { suppression.remove(suppressionObserver) }
@@ -430,6 +469,77 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     guard let number = value as? NSNumber else { return nil }
     let argb = number.uint32Value
     return UIColor(red: CGFloat((argb >> 16) & 255) / 255, green: CGFloat((argb >> 8) & 255) / 255, blue: CGFloat(argb & 255) / 255, alpha: CGFloat((argb >> 24) & 255) / 255)
+  }
+}
+
+/// Observes touch identity only. Remaining possible until all fingers finish
+/// avoids competing with SwiftUI's slider or Flutter's gesture arena. Neither
+/// recognition nor touch-up emits a business start, change, or end callback.
+private final class AdaptiveGlassSliderTouchSequence: UIGestureRecognizer {
+  private var touches: Set<UITouch> = []
+  private var nextSequence = 0
+  private(set) var current: Int?
+  private(set) var isCancelled = false
+  var onCancellation: (() -> Void)?
+  var onNewSequence: (() -> Void)?
+  var onTrace: ((String) -> Void)?
+
+  init() {
+    super.init(target: nil, action: nil)
+    cancelsTouchesInView = false
+    delaysTouchesBegan = false
+    delaysTouchesEnded = false
+  }
+
+  override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool { false }
+  override func canBePrevented(by preventingGestureRecognizer: UIGestureRecognizer) -> Bool { false }
+
+  override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+    // A removed/hidden view may never receive its old terminal event. The next
+    // real event, rather than a timeout, identifies which old fingers remain.
+    self.touches = self.touches.filter {
+      $0.phase != .ended && $0.phase != .cancelled &&
+        (event.allTouches?.contains($0) ?? true)
+    }
+    if self.touches.isEmpty {
+      nextSequence += 1
+      current = nextSequence
+      isCancelled = false
+      onNewSequence?()
+    }
+    self.touches.formUnion(touches)
+    if self.touches.count > 1 {
+      isCancelled = true
+      onCancellation?()
+    }
+    onTrace?("touch.began count=\(self.touches.count)")
+  }
+
+  override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+    guard !self.touches.isDisjoint(with: touches) else { return }
+    self.touches.subtract(touches)
+    onTrace?("touch.ended count=\(self.touches.count)")
+    if self.touches.isEmpty { state = .failed }
+  }
+
+  override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+    guard !self.touches.isDisjoint(with: touches) else { return }
+    self.touches.subtract(touches)
+    isCancelled = true
+    onTrace?("touch.cancelled count=\(self.touches.count)")
+    onCancellation?()
+    if self.touches.isEmpty { state = .failed }
+  }
+
+  func invalidate() {
+    current = nil
+    isCancelled = true
+  }
+
+  override func reset() {
+    super.reset()
+    // Keep a released fresh identity for UIKit's delayed tap delivery. Live
+    // fingers, if reset interrupted them, are reconciled by the next UIEvent.
   }
 }
 

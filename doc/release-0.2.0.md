@@ -34,8 +34,9 @@ Native glass requires Xcode 26 or later. No new production dependency is added.
   helpers, with keyboard constraints, nested-route visibility and anchor tracking.
 - A 21-capability example catalog, plus the existing material and mixed-popup
   probes.
-- Native slider binding writes are deduplicated before opening a gesture, so a
-  repeated final value cannot leave an unmatched start callback after completion.
+- Native slider editing callbacks retain their touch identity, so a late iOS 26
+  editing-begin cannot reopen an already completed drag. Duplicate binding
+  writes are ignored and accessibility adjustments use independent transactions.
 
 Fallback sliders, switches, stepper buttons, date wheels and activity indicators
 are drawn and operated by this package rather than Cupertino control widgets.
@@ -86,7 +87,8 @@ not establish GPU performance.
 
 The dedicated native XCTest uses a 0.2-second initial hold, slow system drag
 and 0.2-second final hold. It checks four forward/reverse gestures, target values,
-one start/end pair per drag and the final Flutter callback value. The release CI
+one start/end pair per drag and the final Flutter callback value. Two subsequent
+stationary presses verify complete editing cycles without a value change. The release CI
 adds a separate iOS 26 runtime gate for this scenario. Results and commands are
 recorded in [release validation](https://github.com/starroyhq/flutter-adaptive-liquid-glass/blob/v0.2.0/doc/release-validation.md).
 

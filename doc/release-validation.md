@@ -16,7 +16,7 @@ their unpublished status and open gates describe those checkpoints.
 - Ordinary Android Debug APK and arm64 iOS simulator builds passed.
 
 These baseline checks are detailed in the interaction record. Release preparation
-adds native XCTest and CI configuration, plus the native slider duplicate-write
+adds native XCTest and CI configuration, plus the native slider editing-lifecycle
 fix described below. No consuming application is changed.
 
 ## Normal-duration native slider input
@@ -31,6 +31,8 @@ then holds for another 0.2 seconds before release. Four alternating gestures
 exercise `0.4 -> 0.8 -> 0.2 -> 0.8 -> 0.2`. Assertions check direction, proximity
 to the requested target, exactly one additional start and end per drag, and
 equality between the last end callback and the displayed controlled value.
+Two consecutive stationary thumb presses then verify a fresh start/end pair
+for each touch without changing the value.
 
 The local iOS 27 run passed. An initial test attempt missed the thumb because
 Flutter's list was still settling after the revealing scroll. The test now holds
@@ -43,14 +45,20 @@ readiness deadline therefore allows three exact-frame samples even under that
 latency, and callback observation has a separate bounded wait. These waits do not
 repeat gestures or relax the target-value or one-start/one-end assertions.
 
-The first remote iOS 26.5 run exposed a separate bridge bug: after reaching 0.8,
-the screenshot showed starts/ends of `2 / 1` and a last end value of 0.8. The
-binding setter opened a new gesture before checking whether a proposed value
-actually changed. A repeated final binding write could therefore emit an
-unmatched start. The bridge now normalizes and deduplicates a binding write
-before opening a gesture. An explicit system editing-begin still represents a
-legitimate no-change interaction. The target-value and exact-count XCTest
-assertions remain intact; a retry must pass them before delivery.
+The first remote iOS 26.5 run showed starts/ends of `2 / 1` after reaching 0.8.
+Normalizing and deduplicating binding writes removed one possible source of an
+unmatched start, but did not resolve that failure. A scoped diagnostic run then
+captured `editing(false) -> end -> editing(true) -> start` for the same physical
+drag. No configuration update, revision change or detach occurred between these
+callbacks. The extra editing-begin preceded the next Flutter echo.
+
+The bridge now associates editing with an actual touch sequence. Once that
+sequence has committed, a late editing-begin cannot reopen it. A passive
+recognizer supplies identity only; it does not cancel or delay system gestures,
+and touch-up does not replace SwiftUI's final value/commit boundary. A subsequent
+real touch has a new identity, including a press that leaves the value unchanged.
+Accessibility adjustments use independent transactions. The target-value and
+exact-count XCTest assertions remain intact and must pass before delivery.
 
 The XCTest scheme is separate from the ordinary `Runner` scheme. Its test runner
 requires iOS 26+, while the example application retains its iOS 16 deployment

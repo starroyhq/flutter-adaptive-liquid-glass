@@ -1,7 +1,9 @@
 ## 0.2.0
 
-- Normalize and deduplicate native slider binding writes before opening a
-  gesture, so a repeated final value cannot emit an unmatched start after end.
+- Bind native slider editing callbacks to the actual touch sequence, preventing
+  a late iOS 26 editing-begin from reopening an already completed drag. Normalize
+  and deduplicate binding writes before opening a gesture; accessibility
+  adjustments retain their own complete editing cycle.
 - Replace Cupertino fallback controls with owned slider/switch rendering,
   repeating stepper buttons, localized date wheels and an activity painter.
 - Add independent package haptic/sound permissions, platform feedback dispatch,

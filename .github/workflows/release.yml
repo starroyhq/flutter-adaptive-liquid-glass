@@ -1,0 +1,78 @@
+name: Publish release assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag with a prepared draft release
+        required: true
+        type: string
+      run_id:
+        description: Successful Component checks run for the tagged commit
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      SOURCE_RUN: ${{ inputs.run_id }}
+    steps:
+      - name: Validate input
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - name: Verify source commit and draft
+        run: |
+          test "$(awk '$1 == "version:" { print $2 }' pubspec.yaml)" = "${RELEASE_TAG#v}"
+          gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/source-run.json"
+          jq -e --arg sha "$(git rev-parse HEAD)" --arg repo "$GH_REPO" '
+            .head_sha == $sha and .head_repository.full_name == $repo and
+            .path == ".github/workflows/ci.yml" and
+            (.event == "push" or .event == "workflow_dispatch") and
+            .status == "completed" and .conclusion == "success"
+          ' "$RUNNER_TEMP/source-run.json"
+          gh release view "$RELEASE_TAG" --json isDraft | jq -e '.isDraft == true'
+      - name: Transfer verified CI artifacts on the runner
+        run: |
+          mkdir -p release-assets
+          gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN/artifacts" > "$RUNNER_TEMP/artifacts.json"
+          for name in android-example-debug-apk ios-example-simulator-app; do
+            jq -e --arg name "$name" '
+              [.artifacts[] | select(.name == $name and .expired == false)] | length == 1
+            ' "$RUNNER_TEMP/artifacts.json"
+            id=$(jq -r --arg name "$name" '.artifacts[] | select(.name == $name) | .id' "$RUNNER_TEMP/artifacts.json")
+            digest=$(jq -r --arg name "$name" '.artifacts[] | select(.name == $name) | .digest' "$RUNNER_TEMP/artifacts.json")
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            archive="$RUNNER_TEMP/$name.zip"
+            gh api "repos/$GH_REPO/actions/artifacts/$id/zip" > "$archive"
+            printf '%s  %s\n' "${digest#sha256:}" "$archive" | sha256sum --check
+            if test "$name" = android-example-debug-apk; then
+              unzip -p "$archive" app-debug.apk > release-assets/flutter-adaptive-liquid-glass-example-android-debug.apk
+            else
+              unzip -p "$archive" ios-simulator-app.tar.gz > release-assets/flutter-adaptive-liquid-glass-example-ios-simulator-arm64.tar.gz
+            fi
+          done
+          (cd release-assets && sha256sum *.apk *.tar.gz > SHA256SUMS)
+      - name: Upload and publish prepared release
+        run: |
+          gh release upload "$RELEASE_TAG" release-assets/*
+          gh release edit "$RELEASE_TAG" --draft=false --latest
+          gh release view "$RELEASE_TAG" --json url,isDraft,assets

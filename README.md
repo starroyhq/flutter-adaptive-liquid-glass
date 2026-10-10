@@ -278,3 +278,16 @@ Only the APK and archived simulator `.app` are retained as artifacts for 14 days
 Build success does not establish native animation, IME, accessibility or GPU
 performance. See the [validation record](docs/fallback-validation.md) for executed
 checks and remaining device acceptance.
+
+## GitHub releases
+
+Prepare a version tag and a draft GitHub Release with reviewed notes, then run
+`Publish release assets` manually with that tag and a successful `Component checks`
+run ID for the same commit. The workflow verifies the package version, source
+commit, workflow identity and artifact SHA256 digests before uploading the example
+APK, simulator archive and `SHA256SUMS`, then publishing the draft.
+
+Artifact transfer happens entirely on a GitHub runner; no local download or rebuild
+is needed. The regular CI remains read-only. Only the manually dispatched publish
+job has release write access. Existing release assets are not overwritten; if a
+partial upload needs recovery, inspect the draft before retrying.

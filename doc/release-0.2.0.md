@@ -34,6 +34,8 @@ Native glass requires Xcode 26 or later. No new production dependency is added.
   helpers, with keyboard constraints, nested-route visibility and anchor tracking.
 - A 21-capability example catalog, plus the existing material and mixed-popup
   probes.
+- Native slider binding writes are deduplicated before opening a gesture, so a
+  repeated final value cannot leave an unmatched start callback after completion.
 
 Fallback sliders, switches, stepper buttons, date wheels and activity indicators
 are drawn and operated by this package rather than Cupertino control widgets.

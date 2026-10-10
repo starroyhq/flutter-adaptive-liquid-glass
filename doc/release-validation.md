@@ -16,8 +16,8 @@ their unpublished status and open gates describe those checkpoints.
 - Ordinary Android Debug APK and arm64 iOS simulator builds passed.
 
 These baseline checks are detailed in the interaction record. Release preparation
-adds native XCTest and CI configuration; it does not change production Dart or
-Swift controls or a consuming application.
+adds native XCTest and CI configuration, plus the native slider duplicate-write
+fix described below. No consuming application is changed.
 
 ## Normal-duration native slider input
 
@@ -37,6 +37,15 @@ Flutter's list was still settling after the revealing scroll. The test now holds
 at the end of that scroll and waits for a stable accessibility frame before
 resolving slider coordinates. No production callback debounce, event suppression
 or timing heuristic was added.
+
+The first remote iOS 26.5 run exposed a separate bridge bug: after reaching 0.8,
+the screenshot showed starts/ends of `2 / 1` and a last end value of 0.8. The
+binding setter opened a new gesture before checking whether a proposed value
+actually changed. A repeated final binding write could therefore emit an
+unmatched start. The bridge now normalizes and deduplicates a binding write
+before opening a gesture. An explicit system editing-begin still represents a
+legitimate no-change interaction. The target-value and exact-count XCTest
+assertions remain intact; a retry must pass them before delivery.
 
 The XCTest scheme is separate from the ordinary `Runner` scheme. Its test runner
 requires iOS 26+, while the example application retains its iOS 16 deployment

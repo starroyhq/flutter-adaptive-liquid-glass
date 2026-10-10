@@ -352,14 +352,18 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   private func propose(_ value: Double, generation: Int) {
     guard isAttached, container.window != nil, generation == self.generation,
           model.configuration.enabled, value.isFinite else { return }
-    begin()
     var next = model.configuration
     var candidate = min(next.maximum, max(next.minimum, value))
     if let divisions = next.divisions {
       let fraction = ((candidate - next.minimum) / (next.maximum - next.minimum) * Double(divisions)).rounded() / Double(divisions)
       candidate = next.minimum + fraction * (next.maximum - next.minimum)
     }
+    // SwiftUI can repeat its final binding write after editing(false). Check
+    // the normalized value before opening a gesture so that this echo cannot
+    // create a second start with no corresponding end. A real no-change press
+    // still starts through editing(true).
     guard candidate != next.value else { return }
+    begin()
     next.value = candidate
     model.configuration = next
     emit("change", candidate)

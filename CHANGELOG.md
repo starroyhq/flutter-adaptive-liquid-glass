@@ -1,5 +1,7 @@
 ## 0.2.0
 
+- Normalize and deduplicate native slider binding writes before opening a
+  gesture, so a repeated final value cannot emit an unmatched start after end.
 - Replace Cupertino fallback controls with owned slider/switch rendering,
   repeating stepper buttons, localized date wheels and an activity painter.
 - Add independent package haptic/sound permissions, platform feedback dispatch,

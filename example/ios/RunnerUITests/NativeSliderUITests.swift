@@ -61,9 +61,14 @@ final class NativeSliderUITests: XCTestCase {
       }
       let outcome = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: completed, object: nil)], timeout: 5)
       snapshot = try readSnapshot()
-      XCTAssertEqual(outcome, .completed, "Observed value \(snapshot.value), starts \(snapshot.starts), ends \(snapshot.ends); slider frame \(slider.frame)")
-      XCTAssertEqual(snapshot.starts, previous.starts + 1, "One continuous drag must begin once")
-      XCTAssertEqual(snapshot.ends, previous.ends + 1, "One continuous drag must end once")
+      let observed = "value \(snapshot.value), starts \(snapshot.starts), ends \(snapshot.ends), lastEnd \(String(describing: snapshot.lastEnd)); slider frame \(slider.frame)"
+      let callbackSnapshot = XCTAttachment(string: "Drag \(index + 1), target \(destination): \(observed)")
+      callbackSnapshot.name = "Flutter slider callback snapshot \(index + 1)"
+      callbackSnapshot.lifetime = .keepAlways
+      add(callbackSnapshot)
+      XCTAssertEqual(outcome, .completed, "Observed \(observed)")
+      XCTAssertEqual(snapshot.starts, previous.starts + 1, "One continuous drag must begin once; observed \(observed)")
+      XCTAssertEqual(snapshot.ends, previous.ends + 1, "One continuous drag must end once; observed \(observed)")
       if destination > previous.value {
         XCTAssertGreaterThan(snapshot.value, previous.value)
       } else {

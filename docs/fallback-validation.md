@@ -11,7 +11,10 @@ iOS 18.6 and iOS 27.0 dedicated test simulators.
 - Root and example `flutter pub get --enforce-lockfile`: passed.
 - Example `flutter build apk --debug`: passed.
 - iOS simulator arm64 Xcode build with `--config-only` and `pod install --deployment`: passed.
-- GitHub CI has been configured; its first remote run is pending at this commit.
+- GitHub CI for source commit `0dbd9cc99b86a8abdbb963700d8c335ae53f34df`: all three jobs passed.
+  [Run 38035711296](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38035711296)
+  includes quality, Android APK and iOS arm64 simulator builds. The two example
+  artifacts are retained for 14 days.
 
 Tests cover shared selection travel, interrupted/reversed travel, RTL, larger
 text, resizing, enabled/disabled semantics, system/application reduced motion,

@@ -20,6 +20,8 @@
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		3695A9AB43D04FC9BEB8C925 /* NativeFirstPaletteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FFE104ED89E4B6E9903F6B6 /* NativeFirstPaletteUITests.swift */; };
+		AFEAB136E23346999CE49F31 /* NativeColorBaselineUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9635AF19EB2477DB6B7F01A /* NativeColorBaselineUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -81,6 +83,8 @@
 		E010EB7B2BF9094622FE880A /* NativeSliderUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeSliderUITests.swift; sourceTree = "<group>"; };
 		D1810A9BCC484C98998E2831 /* NativeAccessibilityUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeAccessibilityUITests.swift; sourceTree = "<group>"; };
 		F77FEB2AAECA99CF91506152 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		9FFE104ED89E4B6E9903F6B6 /* NativeFirstPaletteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeFirstPaletteUITests.swift; sourceTree = "<group>"; };
+		F9635AF19EB2477DB6B7F01A /* NativeColorBaselineUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeColorBaselineUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -130,6 +134,8 @@
 			children = (
 				E010EB7B2BF9094622FE880A /* NativeSliderUITests.swift */,
 				D1810A9BCC484C98998E2831 /* NativeAccessibilityUITests.swift */,
+				F9635AF19EB2477DB6B7F01A /* NativeColorBaselineUITests.swift */,
+				9FFE104ED89E4B6E9903F6B6 /* NativeFirstPaletteUITests.swift */,
 			);
 			name = RunnerUITests;
 			path = RunnerUITests;
@@ -455,6 +461,8 @@
 			files = (
 				64DA5641E16DFBFCB7C55C66 /* NativeSliderUITests.swift in Sources */,
 				CC2C69AD55B045D68E832BA9 /* NativeAccessibilityUITests.swift in Sources */,
+				AFEAB136E23346999CE49F31 /* NativeColorBaselineUITests.swift in Sources */,
+				3695A9AB43D04FC9BEB8C925 /* NativeFirstPaletteUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

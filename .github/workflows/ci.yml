@@ -176,6 +176,8 @@ jobs:
           -resultBundlePath ../build/native-interaction.xcresult
           -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1
           -collect-test-diagnostics never
+          -only-testing:RunnerUITests/NativeAccessibilityUITests
+          -only-testing:RunnerUITests/NativeSliderUITests
           ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO test
         env:
           GLASS_SIMULATOR_ID: ${{ steps.simulator.outputs.device_id }}

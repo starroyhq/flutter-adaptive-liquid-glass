@@ -211,8 +211,15 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   private var popupOwner = false
   private var routeSuppressed = false
   private var enabled = true
+  #if DEBUG
+  private let diagnostics: AdaptiveGlassSliderSequenceDiagnostics?
+  #endif
 
   init(frame: CGRect, id: Int64, arguments: [String: Any], messenger: FlutterBinaryMessenger, suppression: AdaptiveLiquidGlassSuppression) {
+    #if DEBUG
+    diagnostics = ProcessInfo.processInfo.arguments.contains("-glass-slider-sequence-diagnostics")
+      ? AdaptiveGlassSliderSequenceDiagnostics(viewID: id) : nil
+    #endif
     self.suppression = suppression
     channel = FlutterMethodChannel(name: "flutter_adaptive_liquid_glass/value-control/\(id)", binaryMessenger: messenger)
     hosting = UIHostingController(rootView: AdaptiveGlassSliderView(model: model))
@@ -222,6 +229,13 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     container.addGestureRecognizer(touchSequence)
     touchSequence.onCancellation = { [weak self] in self?.cancelTouchGesture() }
     touchSequence.onNewSequence = { [weak self] in self?.cancelTouchGesture() }
+    #if DEBUG
+    if diagnostics != nil {
+      touchSequence.onDiagnosticTouch = { [weak self] phase, touch in
+        self?.recordDiagnostic(phase, touch: touch)
+      }
+    }
+    #endif
     hosting.view.backgroundColor = .clear
     hosting.view.translatesAutoresizingMaskIntoConstraints = false
     hostingConstraints = [
@@ -293,6 +307,9 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     next.generation = generation
     model.configuration = next
     updateVisibility()
+    #if DEBUG
+    recordDiagnostic(echo ? "configure.echo" : "configure.authoritative", inputValue: value)
+    #endif
     return nil
   }
 
@@ -350,6 +367,9 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   }
 
   private func invalidateInteraction() {
+    #if DEBUG
+    recordDiagnostic("invalidate")
+    #endif
     activeGesture = nil
     activeTouchSequence = nil
     pendingTerminalSequence = nil
@@ -357,6 +377,9 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   }
 
   private func cancelTouchGesture() {
+    #if DEBUG
+    recordDiagnostic("cancelTouchGesture")
+    #endif
     if activeGesture != nil { emit("cancel", model.configuration.value) }
     activeGesture = nil
     activeTouchSequence = nil
@@ -383,8 +406,19 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   }
 
   private func propose(_ value: Double, generation: Int) {
+    #if DEBUG
+    if diagnostics?.recordBinding(value, sequence: touchSequence.current, generation: generation) == true {
+      recordDiagnostic("binding", inputValue: value, callbackGeneration: generation)
+    }
+    #endif
     guard isAttached, container.window != nil, generation == self.generation,
-          model.configuration.enabled, value.isFinite else { return }
+          model.configuration.enabled, value.isFinite else {
+      #if DEBUG
+      recordDiagnostic("binding.rejected.state", inputValue: value, callbackGeneration: generation)
+      diagnostics?.scheduleDump()
+      #endif
+      return
+    }
     var next = model.configuration
     var candidate = min(next.maximum, max(next.minimum, value))
     if let divisions = next.divisions {
@@ -397,7 +431,14 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     let pendingTerminal = pendingTerminalSequence != nil &&
       pendingTerminalSequence == touchSequence.current && !touchSequence.isCancelled
     guard candidate != next.value || pendingTerminal else { return }
-    guard begin() else { return }
+    guard begin() else {
+      #if DEBUG
+      let sealed = touchSequence.current != nil && touchSequence.current == completedTouchSequence
+      recordDiagnostic(sealed ? "binding.rejected.sealed" : "binding.rejected.begin", inputValue: candidate, callbackGeneration: generation)
+      diagnostics?.scheduleDump()
+      #endif
+      return
+    }
     if candidate != next.value {
       next.value = candidate
       model.configuration = next
@@ -407,6 +448,9 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   }
 
   private func editing(_ editing: Bool, generation: Int) {
+    #if DEBUG
+    recordDiagnostic(editing ? "editing.true" : "editing.false", callbackGeneration: generation)
+    #endif
     guard isAttached, container.window != nil, generation == self.generation,
           model.configuration.enabled else { return }
     if editing {
@@ -423,10 +467,16 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
 
   private func finish() {
     if let activeTouchSequence { completedTouchSequence = activeTouchSequence }
+    #if DEBUG
+    recordDiagnostic("finish")
+    #endif
     emit("end", model.configuration.value)
     activeGesture = nil
     activeTouchSequence = nil
     pendingTerminalSequence = nil
+    #if DEBUG
+    diagnostics?.scheduleDump()
+    #endif
   }
 
   private func adjust(_ direction: Int, generation: Int) {
@@ -445,14 +495,47 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
 
   private func emit(_ phase: String, _ value: Double) {
     guard let activeGesture else { return }
+    #if DEBUG
+    recordDiagnostic(phase, inputValue: value)
+    #endif
     channel.invokeMethod("valueEvent", arguments: ["phase": phase, "value": value, "revision": revision, "gestureId": activeGesture])
   }
+
+  #if DEBUG
+  private func recordDiagnostic(_ phase: String, inputValue: Double? = nil, callbackGeneration: Int? = nil, touch: UITouch? = nil) {
+    guard let diagnostics else { return }
+    diagnostics.append(.init(
+      time: ProcessInfo.processInfo.systemUptime,
+      phase: phase,
+      value: model.configuration.value,
+      inputValue: inputValue,
+      revision: revision,
+      generation: generation,
+      callbackGeneration: callbackGeneration,
+      touchSequence: touchSequence.current,
+      activeTouchSequence: activeTouchSequence,
+      completedTouchSequence: completedTouchSequence,
+      pendingTerminalSequence: pendingTerminalSequence,
+      gesture: activeGesture,
+      released: touchSequence.isReleased,
+      cancelled: touchSequence.isCancelled,
+      attached: isAttached,
+      inWindow: container.window != nil,
+      enabled: model.configuration.enabled,
+      touchTime: touch?.timestamp,
+      touchPoint: touch?.location(in: container)
+    ))
+  }
+  #endif
 
   func view() -> UIView { container }
 
   deinit {
     touchSequence.onCancellation = nil
     touchSequence.onNewSequence = nil
+    #if DEBUG
+    touchSequence.onDiagnosticTouch = nil
+    #endif
     container.onHierarchyChanged = nil
     channel.setMethodCallHandler(nil)
     if let suppressionObserver { suppression.remove(suppressionObserver) }
@@ -482,6 +565,9 @@ private final class AdaptiveGlassSliderTouchSequence: UIGestureRecognizer {
   var isReleased: Bool { touches.isEmpty }
   var onCancellation: (() -> Void)?
   var onNewSequence: (() -> Void)?
+  #if DEBUG
+  var onDiagnosticTouch: ((String, UITouch?) -> Void)?
+  #endif
 
   init() {
     super.init(target: nil, action: nil)
@@ -511,12 +597,18 @@ private final class AdaptiveGlassSliderTouchSequence: UIGestureRecognizer {
       isCancelled = true
       onCancellation?()
     }
+    #if DEBUG
+    onDiagnosticTouch?("touch.began", touches.first)
+    #endif
   }
 
   override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
     guard !self.touches.isDisjoint(with: touches) else { return }
     self.touches.subtract(touches)
     if self.touches.isEmpty { state = .failed }
+    #if DEBUG
+    onDiagnosticTouch?("touch.ended", touches.first)
+    #endif
   }
 
   override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
@@ -525,6 +617,9 @@ private final class AdaptiveGlassSliderTouchSequence: UIGestureRecognizer {
     isCancelled = true
     onCancellation?()
     if self.touches.isEmpty { state = .failed }
+    #if DEBUG
+    onDiagnosticTouch?("touch.cancelled", touches.first)
+    #endif
   }
 
   func invalidate() {
@@ -538,6 +633,86 @@ private final class AdaptiveGlassSliderTouchSequence: UIGestureRecognizer {
     // fingers, if reset interrupted them, are reconciled by the next UIEvent.
   }
 }
+
+#if DEBUG
+/// Temporary, opt-in sequence diagnostics. Recording never formats or writes a
+/// log during input delivery; the delayed dump cannot change interaction state.
+private final class AdaptiveGlassSliderSequenceDiagnostics {
+  struct Event {
+    let time: TimeInterval
+    let phase: String
+    let value: Double
+    let inputValue: Double?
+    let revision: Int
+    let generation: Int
+    let callbackGeneration: Int?
+    let touchSequence: Int?
+    let activeTouchSequence: Int?
+    let completedTouchSequence: Int?
+    let pendingTerminalSequence: Int?
+    let gesture: Int?
+    let released: Bool
+    let cancelled: Bool
+    let attached: Bool
+    let inWindow: Bool
+    let enabled: Bool
+    let touchTime: TimeInterval?
+    let touchPoint: CGPoint?
+  }
+
+  private let viewID: Int64
+  private var ring = [Event?](repeating: nil, count: 256)
+  private var nextEvent = 0
+  private var nextDumpEvent = 0
+  private var dumpScheduled = false
+  private var lastBindingValue: Double?
+  private var lastBindingSequence: Int?
+  private var lastBindingGeneration: Int?
+
+  init(viewID: Int64) { self.viewID = viewID }
+
+  func recordBinding(_ value: Double, sequence: Int?, generation: Int) -> Bool {
+    let changed = value != lastBindingValue || sequence != lastBindingSequence || generation != lastBindingGeneration
+    lastBindingValue = value
+    lastBindingSequence = sequence
+    lastBindingGeneration = generation
+    return changed
+  }
+
+  func append(_ event: Event) {
+    ring[nextEvent % ring.count] = event
+    nextEvent += 1
+  }
+
+  func scheduleDump() {
+    guard !dumpScheduled else { return }
+    dumpScheduled = true
+    // Keep only the diagnostic buffer alive, never its slider or platform view.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
+      dumpScheduled = false
+      let first = max(nextDumpEvent, nextEvent - ring.count)
+      guard first < nextEvent else { return }
+      let skipped = first - nextDumpEvent
+      var lines = ["[GlassSliderSequence] view=\(viewID) events=\(first)..<\(nextEvent) skipped=\(skipped)"]
+      for number in first..<nextEvent {
+        guard let event = ring[number % ring.count] else { continue }
+        let input = event.inputValue.map { String($0) } ?? "-"
+        let callbackGeneration = event.callbackGeneration.map { String($0) } ?? "-"
+        let sequence = event.touchSequence.map { String($0) } ?? "-"
+        let active = event.activeTouchSequence.map { String($0) } ?? "-"
+        let completed = event.completedTouchSequence.map { String($0) } ?? "-"
+        let pending = event.pendingTerminalSequence.map { String($0) } ?? "-"
+        let gesture = event.gesture.map { String($0) } ?? "-"
+        let touchTime = event.touchTime.map { String($0) } ?? "-"
+        let point = event.touchPoint.map { "\($0.x),\($0.y)" } ?? "-"
+        lines.append("[GlassSliderSequence] #\(number) t=\(event.time) \(event.phase) value=\(event.value) input=\(input) revision=\(event.revision) generation=\(event.generation) callbackGeneration=\(callbackGeneration) touch=\(sequence) activeTouch=\(active) completedTouch=\(completed) pendingTerminal=\(pending) gesture=\(gesture) released=\(event.released) cancelled=\(event.cancelled) attached=\(event.attached) window=\(event.inWindow) enabled=\(event.enabled) touchTime=\(touchTime) point=\(point)")
+      }
+      nextDumpEvent = nextEvent
+      NSLog("%@", lines.joined(separator: "\n"))
+    }
+  }
+}
+#endif
 
 private final class AdaptiveGlassHostingContainer: UIView {
   var onHierarchyChanged: (() -> Void)?

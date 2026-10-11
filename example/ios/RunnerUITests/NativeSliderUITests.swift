@@ -7,7 +7,7 @@ final class NativeSliderUITests: XCTestCase {
 
   override func setUpWithError() throws {
     continueAfterFailure = false
-    app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+    app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-glass-slider-sequence-diagnostics"]
     app.launch()
   }
 

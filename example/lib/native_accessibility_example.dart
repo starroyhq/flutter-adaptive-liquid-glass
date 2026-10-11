@@ -18,7 +18,10 @@ class _NativeAccessibilityExampleState
   bool _showColorWell = true;
   int _colorGeneration = 0;
   int _navigationCalls = 0, _colorCalls = 0;
-  Color _color = const Color(0xff808080);
+  static const _catalogConfiguration = bool.fromEnvironment(
+    'GLASS_MATCH_CATALOG_COLOR',
+  );
+  Color _color = const Color(_catalogConfiguration ? 0xff2463b8 : 0xff808080);
   String _activation = 'none';
 
   String get _colorLabel => _renamed ? 'Accent color' : 'Sample color';
@@ -62,6 +65,8 @@ class _NativeAccessibilityExampleState
             Text('Color value: ${_color.toARGB32().toRadixString(16)}'),
             Text('Accessibility activation: $_activation'),
             Text('Color label: ${_explicitColorLabel ? 'custom' : 'system'}'),
+            if (_catalogConfiguration)
+              const Text('Palette configuration: catalog'),
             Text('Color source: ${_showColorWell ? 'mounted' : 'removed'}'),
             const SizedBox(height: 24),
             if (_showColorWell)
@@ -69,11 +74,13 @@ class _NativeAccessibilityExampleState
                 alignment: Alignment.centerLeft,
                 child: LiquidGlassColorPicker(
                   title: _colorGeneration == 0
-                      ? 'Sample palette'
+                      ? (_catalogConfiguration
+                            ? 'Preview color'
+                            : 'Sample palette')
                       : 'Sample palette $_colorGeneration',
                   semanticLabel: _explicitColorLabel ? _colorLabel : null,
                   selectedColor: _color,
-                  supportsAlpha: false,
+                  supportsAlpha: _catalogConfiguration,
                   onChanged: !_enabled
                       ? null
                       : (value) => setState(() {

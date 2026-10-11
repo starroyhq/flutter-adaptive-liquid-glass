@@ -4,9 +4,10 @@ This records the 0.2.1 accessibility patch against 0.2.0. The previous package
 archive remains unchanged; registry publication and commit-specific CI results
 are tracked separately from these local execution records.
 
-The final implementation uses explicit native presentation ownership and contains
-no temporary diagnostic hooks. The local results below are distinct from the
-iOS 26 CI gate; use the published release's associated run for its final commit.
+The current candidate uses explicit native presentation ownership. Publication
+is blocked by the cloud results recorded below. A temporary diagnostic build
+compares first-use presentation on separate simulators; it is not a release.
+Local results do not replace the iOS 26 CI gate.
 
 ## Scope
 
@@ -79,6 +80,8 @@ xcodebuild -workspace Runner.xcworkspace -scheme NativeSliderAcceptance \
   -resultBundlePath ../build/native-accessibility.xcresult \
   -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
   -collect-test-diagnostics never \
+  -only-testing:RunnerUITests/NativeAccessibilityUITests \
+  -only-testing:RunnerUITests/NativeSliderUITests \
   ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO test
 ```
 
@@ -180,9 +183,9 @@ watchdog was also recorded; the logs do not establish causality between those
 events. A synchronous local-variable lifetime extension alone cannot cover this
 asynchronous presentation interval.
 
-## Final ownership follow-up
+## Ownership follow-up
 
-The final implementation gives the platform component explicit ownership of its
+Candidate `e142e8c` gives the platform component explicit ownership of its
 presentation session and controller. The well and controller reference the
 session weakly; callbacks to the platform owner are also weak. A well retained by
 a system popover cannot create another session after its platform owner is gone.
@@ -204,6 +207,51 @@ colors, and exact callback counts; no retries or relaxed assertions were added.
 Final uninstrumented local results are recorded above. Publication requires a
 successful iOS 26 CI run for the final commit, independently of the earlier local
 and instrumented runs.
+
+## First-use presentation investigation
+
+Candidate `e142e8c` still failed the iOS 26 gate in push run
+[38120009494](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38120009494)
+and PR run
+[38120013040](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38120013040).
+Both passed quality and Android/iOS builds. Both failed the first catalog palette
+opening; the push run also ended the second slider drag at 0.3 instead of 0.2.
+The other five color/accessibility cases passed. The PR slider case passed.
+
+The push recording shows the catalog remaining visible after the color-well tap,
+with no visible palette through the failure. The absence is therefore not only
+an accessibility-locator mismatch. System-service appearance events alone do not
+prove that the application's picker appeared. Existing tests launch fresh app
+processes but share a simulator; their differing color/alpha settings and order
+prevent attributing the failure solely to a cold system service.
+
+A temporary diagnostic workflow runs three independent iOS 26.5 simulators:
+
+- The existing catalog case, with its unchanged single physical activation.
+- A standalone probe with the catalog's exact starting color, alpha support and
+  palette title, also opened once by physical touch.
+- A separate pure UIKit app, without Flutter, with the same palette settings
+  and no explicit access to the picker view before presentation.
+
+DEBUG-only, explicitly enabled package logs record presentation ownership,
+configuration, appearance and cancellation. The slider diagnostic buffers touch,
+binding and editing events and emits them only after a gesture. It does not
+change the value state machine, retry inputs or relax final-value assertions.
+These hooks must be removed before the final release gate. The normal CI still
+runs all seven existing native cases; separate diagnostic classes require their
+own matched configuration or standalone host.
+
+The new matched probe passed on a fresh local iOS 26.5 (23F73) simulator.
+The pure UIKit local recording also showed a visible first palette and a black
+selection. That system selection emitted both a continuous and a terminal
+delegate callback with the same color. Its diagnostic fixture therefore records
+raw callbacks separately from the package's deduplicated business callback and
+requires closing to preserve the pre-close count. The original component tests
+still require exactly one business callback. UIKit loaded the baseline picker
+view within initialization even without an explicit view access; the three-arm
+comparison cannot isolate view preloading as a cause. The corrected raw-count
+fixture passed on the already-used local baseline device; that rerun validates
+the fixture assertions, not another cold-start attempt.
 
 ## Limits
 

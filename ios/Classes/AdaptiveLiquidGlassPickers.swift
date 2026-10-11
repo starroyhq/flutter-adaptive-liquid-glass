@@ -1,6 +1,20 @@
 import Flutter
 import UIKit
 
+private enum AdaptiveColorDiagnostics {
+  static var enabled: Bool {
+    #if DEBUG
+    ProcessInfo.processInfo.arguments.contains("-glass-color-lifecycle-diagnostics")
+    #else
+    false
+    #endif
+  }
+  static func record(_ event: @autoclosure () -> String) {
+    guard enabled else { return }
+    NSLog("[GlassColorLifecycle] %@", event())
+  }
+}
+
 enum AdaptiveLiquidGlassPickerKind { case date, color }
 
 /// Cancellation outlives the originating platform view. UIKit can finish an
@@ -10,6 +24,7 @@ private final class AdaptiveManagedColorPicker: UIColorPickerViewController {
   private var presentationCancelled = false
 
   func cancelPresentation() {
+    AdaptiveColorDiagnostics.record("picker cancelPresentation")
     presentationCancelled = true
     dismissCancelledPresentation()
   }
@@ -32,17 +47,30 @@ private final class AdaptiveManagedColorPicker: UIColorPickerViewController {
     }
   }
 
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    AdaptiveColorDiagnostics.record("picker didLoad id=\(ObjectIdentifier(self))")
+  }
+
+  override func viewWillAppear(_ animated: Bool) {
+    super.viewWillAppear(animated)
+    AdaptiveColorDiagnostics.record("picker willAppear id=\(ObjectIdentifier(self))")
+  }
+
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
+    AdaptiveColorDiagnostics.record("picker didAppear")
     presentationCompleted()
   }
 
   override func viewDidDisappear(_ animated: Bool) {
     super.viewDidDisappear(animated)
+    AdaptiveColorDiagnostics.record("picker didDisappear")
     presentationSession?.disappearanceCompleted()
   }
 
   deinit {
+    AdaptiveColorDiagnostics.record("picker deinit")
     presentationSession?.pickerDeinitialized()
   }
 }
@@ -66,30 +94,42 @@ private final class AdaptiveColorPickerPresentation: NSObject,
     self.picker = picker
     retainedPicker = picker
     super.init()
+    AdaptiveColorDiagnostics.record("session init id=\(ObjectIdentifier(self)) owner=\(ObjectIdentifier(owner)) picker=\(ObjectIdentifier(picker))")
     picker.presentationSession = self
     picker.delegate = self
     picker.presentationController?.delegate = self
     inactiveObserver = NotificationCenter.default.addObserver(
       forName: UIApplication.willResignActiveNotification, object: nil, queue: .main
-    ) { [weak self] _ in self?.cancel() }
+    ) { [weak self] _ in AdaptiveColorDiagnostics.record("willResignActive"); self?.cancel() }
   }
 
   func present(from presenter: UIViewController) {
     guard phase == .presenting, !cancelled, let picker else { return }
+    AdaptiveColorDiagnostics.record("present type=\(type(of: presenter)) viewLoaded=\(picker.isViewLoaded) source=\(owner?.canPresentPicker == true)")
     presenter.present(picker, animated: true) { [weak picker] in
       picker?.presentationCompleted()
+    }
+    if AdaptiveColorDiagnostics.enabled {
+      for delay in [1.0, 5.0, 15.0] {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+          guard let self else { AdaptiveColorDiagnostics.record("delayed session gone"); return }
+          AdaptiveColorDiagnostics.record("delayed phase=\(self.phase) pickerAlive=\(self.picker != nil) attached=\(self.picker?.viewIfLoaded?.window != nil) presenter=\(self.picker?.presentingViewController != nil) owner=\(self.owner != nil) eligible=\(self.owner?.canPresentPicker == true)")
+        }
+      }
     }
     // UIKit may forward presentation through an internal host. A synchronous
     // presentedViewController identity check cannot determine whether it worked.
   }
 
   func presentationCompleted() {
+    AdaptiveColorDiagnostics.record("presentationCompleted phase=\(phase) cancelled=\(cancelled)")
     guard phase != .finished else { return }
     if phase == .presenting { phase = .presented }
     if cancelled || owner?.canPresentPicker != true { cancel() }
   }
 
   func cancel() {
+    AdaptiveColorDiagnostics.record("session cancel phase=\(phase) owner=\(owner != nil) eligible=\(owner?.canPresentPicker == true) attached=\(picker?.viewIfLoaded?.window != nil)")
     guard phase != .finished else { return }
     cancelled = true
     guard let picker else { finish(); return }
@@ -157,6 +197,7 @@ private final class AdaptiveColorPickerPresentation: NSObject,
   }
 
   private func finish(detachPicker: Bool = true) {
+    AdaptiveColorDiagnostics.record("session finish phase=\(phase) detach=\(detachPicker)")
     guard phase != .finished else { return }
     phase = .finished
     if let inactiveObserver { NotificationCenter.default.removeObserver(inactiveObserver) }
@@ -240,6 +281,7 @@ private final class AdaptiveAccessibleColorWell: UIColorWell {
 
   @discardableResult
   func presentColorPicker() -> Bool {
+    AdaptiveColorDiagnostics.record("activate eligible=\(canPresentPicker) existing=\(colorPresentation != nil) alpha=\(supportsAlpha)")
     guard canPresentPicker, colorPresentation == nil else { return false }
     var responder: UIResponder? = next
     while responder != nil && !(responder is UIViewController) {
@@ -302,15 +344,17 @@ private final class AdaptiveAccessibleColorWell: UIColorWell {
     let value = supportsAlpha ? color : color.withAlphaComponent(1)
     if picker.selectedColor != value { picker.selectedColor = value }
     picker.overrideUserInterfaceStyle = traitCollection.userInterfaceStyle
+    AdaptiveColorDiagnostics.record("configure before view access loaded=\(picker.isViewLoaded)")
     picker.view.tintColor = tintColor
     picker.view.semanticContentAttribute = semanticContentAttribute
+    AdaptiveColorDiagnostics.record("configure after view access loaded=\(picker.isViewLoaded)")
   }
 
   func cancelAccessibilityPresentation() { colorPresentation?.cancel() }
 
   override func didMoveToWindow() {
     super.didMoveToWindow()
-    if window == nil { cancelAccessibilityPresentation() }
+    if window == nil { AdaptiveColorDiagnostics.record("well detached"); cancelAccessibilityPresentation() }
   }
 
   func colorPickerDidSelect(_ presentation: AdaptiveColorPickerPresentation, color: UIColor) {
@@ -330,7 +374,7 @@ private final class AdaptiveAccessibleColorWell: UIColorWell {
     }
   }
 
-  deinit { colorPresentation?.cancel() }
+  deinit { AdaptiveColorDiagnostics.record("well deinit"); colorPresentation?.cancel() }
 }
 
 final class AdaptiveLiquidGlassPickerFactory: NSObject, FlutterPlatformViewFactory {
@@ -582,6 +626,7 @@ private final class AdaptiveLiquidGlassPicker: NSObject, FlutterPlatformView {
   }
 
   deinit {
+    AdaptiveColorDiagnostics.record("platform deinit kind=\(kind) id=\(ObjectIdentifier(self)) control=\(ObjectIdentifier(control))")
     colorPresentation?.cancel()
     channel.setMethodCallHandler(nil)
     control.removeTarget(self, action: #selector(changed), for: .valueChanged)

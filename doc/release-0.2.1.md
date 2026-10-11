@@ -1,5 +1,8 @@
 # flutter_adaptive_liquid_glass 0.2.1
 
+Unpublished candidate: the current cloud iOS 26 interaction gate fails. Do not
+use the draft validation below as evidence of release readiness.
+
 This patch fixes accessibility labels and activation while retaining native
 UIKit navigation, Liquid Glass materials and system color selection.
 
@@ -26,7 +29,8 @@ fallback appearance, dependencies and minimum platform versions are unchanged.
   controller across UIKit's asynchronous handoff. Reverse references are weak.
   Cancellation keeps the activation gate closed until the old controller exits
   or is released; a late presentation also closes after its source is removed.
-  Temporary diagnostic hooks and launch flags have been removed.
+  Temporary diagnostic hooks must be removed after the ongoing cloud first-use
+  investigation and before the final release gate.
 - Fallback color wells expose a semantic tap action and reject stale activation
   after route coverage, backgrounding or disposal.
 

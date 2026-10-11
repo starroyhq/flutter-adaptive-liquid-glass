@@ -4,6 +4,10 @@ This records the 0.2.1 accessibility patch against 0.2.0. The previous package
 archive remains unchanged; registry publication and commit-specific CI results
 are tracked separately from these local execution records.
 
+The final implementation uses explicit native presentation ownership and contains
+no temporary diagnostic hooks. The local results below are distinct from the
+iOS 26 CI gate; use the published release's associated run for its final commit.
+
 ## Scope
 
 - Native navigation buttons announce the supplied action label instead of an SF
@@ -13,8 +17,15 @@ are tracked separately from these local execution records.
 - A labeled native color well exposes its label and the system's localized color
   description. Its physical and accessibility actions share an owned public
   UIKit color-picker presentation with an independent delegate. Unlabeled wells
-  retain UIKit's default physical and accessibility interaction. Native palette selection remains controlled by
-  the caller. Disabled, covered, detached and inactive wells reject activation.
+  retain UIKit's default physical and accessibility interaction. Native palette
+  selection remains controlled by the caller. Disabled, covered, detached and
+  inactive wells reject activation.
+- The platform component owns the presentation session, which retains its color
+  picker through asynchronous presentation. Reverse references from the well and
+  picker are weak, including the path through an iPad popover's source view.
+  Cancellation does not reopen the well until dismissal or controller release is
+  confirmed. Removing the platform component leaves a cancellation flag on any
+  controller still held by UIKit, so a late appearance closes itself.
 - The fallback color sample exposes an actionable semantics node, in addition
   to its existing physical touch and keyboard input.
 
@@ -29,24 +40,33 @@ and callback counters. Its example-only platform channel calls the public
 accessibility action. It opens the system palette, selects one native black
 swatch, and asserts one callback with opaque black. It then selects white through
 the accessibility-opened system palette and checks exactly one additional
-callback. Reopening and canceling must not add callbacks. A separate scenario reopens the catalog palette after native
-tab recreation. System palette labels may use the device language rather than
+callback. Reopening and canceling must not add callbacks. A separate scenario
+reopens the catalog palette after native tab recreation. Another removes the
+source widget immediately after activation, requires no remaining palette and no
+callback, then restores it and verifies one physical opening and a callback-free
+close. System palette labels may use the device language rather than
 the application's locale, so tests identify the supplied palette title and use
 localized system action labels.
 
 The existing `NativeSliderAcceptance` scheme includes both the slider and
-accessibility XCTest classes. The CI native-interaction job requires an actual
-iOS 26 runtime and creates its own simulator; it does not substitute iOS 27.
+accessibility XCTest classes: six color/accessibility cases plus one slider case,
+for seven in total. The slider case retains four drags and two stationary presses
+with strict value and callback-count assertions. The CI native-interaction job
+requires an actual iOS 26 runtime and creates its own simulator; it does not
+substitute iOS 27.
 
-Local checks on Flutter 3.41.9 / Dart 3.11.5, Xcode 27.0:
+Local checks on Flutter 3.41.9 / Dart 3.11.5, Xcode 27.0. Package/example checks
+were rerun after the ownership follow-up without temporary diagnostics. Final
+native reruns are listed separately from earlier candidates' results.
 
 | Check | Result |
 | --- | --- |
 | Root and example format / static analysis | Passed, no issues. |
-| `flutter test --no-pub --reporter expanded` | 224 package tests passed. |
+| `flutter test --no-pub` | 224 package tests passed. |
 | Same test command from `example` | 7 example tests passed. |
-| `flutter build apk --debug --no-pub` from `example` | Debug APK built. |
-| Arm64 iOS simulator build and XCTest on dedicated iOS 27.0 | Final rebuilt color/accessibility suite: 5 tests passed. The unchanged 6-operation slider scenario also passed in the preceding full run. |
+| `flutter build apk --debug --no-pub` from `example` | Debug APK built during patch validation. |
+| Final uninstrumented arm64 iOS build and XCTest on dedicated iOS 26.5 | All 7 tests passed: 6 color/accessibility cases and 1 slider case. |
+| Final uninstrumented arm64 iOS build and XCTest on dedicated iOS 27.0 | All 7 tests passed: 6 color/accessibility cases and 1 slider case. |
 | `git diff --check` and local public-source scan | Passed. |
 
 The iOS command, from `example/ios`, is:
@@ -62,8 +82,11 @@ xcodebuild -workspace Runner.xcworkspace -scheme NativeSliderAcceptance \
   ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO test
 ```
 
-The local runtime is iOS 27, not iOS 26. Commit-specific iOS 26 results are
-reported by the separate `native-interaction` CI check; a simulator build alone
+Local coverage now includes iOS 27 and a separately installed iOS 26.5 runtime
+(build 23F73), compiled with the installed Xcode 27 SDK. The cloud iOS 26.5
+runtime (23F77) and Xcode 26.6 / SDK 26.5 are a separate environment.
+Commit-specific cloud iOS 26 results are reported by the separate
+`native-interaction` CI check; a simulator build alone
 does not establish interaction success. The tab recreation test does not claim
 to cover every preceding date-picker editing sequence in a consuming app.
 
@@ -80,7 +103,7 @@ All three revised accessibility tests passed locally on iOS 27.
 
 One catalog attempt did not open the palette, while the other did. The slider
 also reported the wrong final detent despite matching gesture counts and stable
-input coordinates. These are unresolved release gates, not successful checks.
+input coordinates. These were unresolved release gates at that candidate.
 Candidate `e63d025` corrected the palette locator. Run
 [38110718367](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38110718367)
 passed every job; run
@@ -89,14 +112,13 @@ passed the probe, label and slider tests but still failed the catalog's first
 palette opening. Both runs' slider diagnostics contained valid start/change/end
 sequences, including late UIKit editing notifications correctly ignored by the
 existing state machine. This does not establish the cause of the earlier slider
-failure, and its temporary tracing has now been removed for an unchanged strict
-regression run.
+failure. Temporary slider tracing was then removed before the unchanged strict
+regression was rerun.
 
-The next diagnostic run samples public color-well visibility, hit testing and
-presentation state in the example only, under an explicit DEBUG launch option.
-It does not add gestures, open the picker, retry taps, or change production
-controls. No retry or relaxed value/count assertion has been introduced. The
-package remains unpublished pending an uninstrumented release-gate run.
+The subsequent diagnostic run sampled public color-well visibility, hit testing
+and presentation state in the example only, under an explicit DEBUG launch option.
+It did not add gestures, open the picker, retry taps, or change production
+controls. No retry or relaxed value/count assertion was introduced.
 
 On `bab4ca0`, the push run
 [38112312471](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38112312471)
@@ -106,9 +128,9 @@ failed both physical palette openings. Both uninstrumented slider cases passed.
 The failed color traces kept the wells attached, visible, enabled and hit-testable
 at their centers, with no sustained presentation-state change. A 250 ms sample
 cannot rule out a short intermediate state or prove delivery of a completed tap.
-The next diagnostic compares a settled, single measured-center catalog tap with
-the original probe element tap and observes control touch/action events without
-replaying an action or weakening the palette/selection assertions.
+The following diagnostic compared a settled, single measured-center catalog tap
+with the original probe element tap and observed control touch/action events
+without replaying an action or weakening the palette/selection assertions.
 
 On `6730b45`, both the push run
 [38113678208](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38113678208)
@@ -121,17 +143,67 @@ palette. The frame was stable, attached and enabled. These observations rule out
 a missing completed tap in these attempts, but do not identify UIKit's internal
 presentation failure.
 
-The follow-up limits the presentation adaptation to wells with an explicit
+The follow-up limited the presentation adaptation to wells with an explicit
 `semanticLabel`. Their native well remains the visual and accessibility element;
 one package-owned native trigger presents `UIColorPickerViewController` for both
 touch and accessibility. It does not retry the system action or run two opening
-paths. Omitting the label retains the system behavior. Temporary event tracing
-and its DEBUG flag have been removed; the strict palette, selection and callback
-assertions remain. Duplicate activation, background cancellation, and clearing a
-label during presentation have separate native coverage. The final rebuilt five
-color/accessibility scenarios passed on iOS 27; the unchanged slider passed in
-the preceding full run. The release requires a successful clean iOS 26 gate for
-the final commit, linked from the published release.
+paths. Omitting the label retained the system behavior. Temporary event tracing
+and its DEBUG flag were removed for that candidate; strict palette, selection and
+callback assertions were preserved. Duplicate activation, background cancellation,
+and clearing a label during presentation received separate native coverage. That
+candidate's rebuilt five color/accessibility scenarios passed on iOS 27; the
+unchanged slider passed in the preceding full run. These results preceded the
+ownership follow-up below.
+
+On `e07b64c`, both the push run
+[38115634422](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38115634422)
+and PR run
+[38115639993](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38115639993)
+passed quality and both build jobs, but the catalog's first opening still failed.
+The other five native cases passed. In the failed attempt the system palette
+service briefly appeared and disappeared without a user close action; the
+available logs did not identify the cancellation source. This remained a release
+blocker at that stage. The unchanged candidate passed the catalog case on a newly
+created local iOS 26.5 (23F73) simulator, followed by all six native cases. That local result
+did not replace the failing cloud gate. The next diagnostic recorded the owned
+presentation's entry checks and cancellation lifecycle under an explicit test
+launch argument, without changing gestures, retries or assertions.
+
+On `7bc8826`, the diagnostic PR run
+[38117119312](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38117119312)
+again failed only the first catalog opening. Its trace records a completed native
+tap and a call to `present`, followed approximately three seconds later by picker
+deinitialization while the session is still presenting. No package guard
+rejection, cancellation, background event, appearance callback or presentation
+completion preceded that deinitialization. A later system color-service launch
+watchdog was also recorded; the logs do not establish causality between those
+events. A synchronous local-variable lifetime extension alone cannot cover this
+asynchronous presentation interval.
+
+## Final ownership follow-up
+
+The final implementation gives the platform component explicit ownership of its
+presentation session and controller. The well and controller reference the
+session weakly; callbacks to the platform owner are also weak. A well retained by
+a system popover cannot create another session after its platform owner is gone.
+
+Cancelling an unfinished presentation releases the session's strong controller
+reference while retaining the well's activation gate. If UIKit never adopted the
+controller, its deinitialization completes cancellation; otherwise the session
+observes the late controller until its actual dismissal. The controller keeps its
+own cancellation flag, so it can close even after the source platform component
+has been disposed. Normal visible presentations and their closing transitions
+retain the controller until exit completes. Selection after cancellation does
+not enter the controlled-value bridge.
+
+The additional source-removal regression brings the native suite to seven cases.
+All temporary visibility sampling, control-event targets, presentation tracing
+and diagnostic launch/compiler flags have been removed. Tests still require a
+single physical activation, the actual named system palette, exact selected
+colors, and exact callback counts; no retries or relaxed assertions were added.
+Final uninstrumented local results are recorded above. Publication requires a
+successful iOS 26 CI run for the final commit, independently of the earlier local
+and instrumented runs.
 
 ## Limits
 

@@ -15,6 +15,8 @@ class _NativeAccessibilityExampleState
     extends State<NativeAccessibilityExample> {
   bool _dark = false, _renamed = false, _enabled = true;
   bool _explicitColorLabel = true;
+  bool _showColorWell = true;
+  int _colorGeneration = 0;
   int _navigationCalls = 0, _colorCalls = 0;
   Color _color = const Color(0xff808080);
   String _activation = 'none';
@@ -60,22 +62,26 @@ class _NativeAccessibilityExampleState
             Text('Color value: ${_color.toARGB32().toRadixString(16)}'),
             Text('Accessibility activation: $_activation'),
             Text('Color label: ${_explicitColorLabel ? 'custom' : 'system'}'),
+            Text('Color source: ${_showColorWell ? 'mounted' : 'removed'}'),
             const SizedBox(height: 24),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: LiquidGlassColorPicker(
-                title: 'Sample palette',
-                semanticLabel: _explicitColorLabel ? _colorLabel : null,
-                selectedColor: _color,
-                supportsAlpha: false,
-                onChanged: !_enabled
-                    ? null
-                    : (value) => setState(() {
-                        _color = value;
-                        _colorCalls++;
-                      }),
+            if (_showColorWell)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: LiquidGlassColorPicker(
+                  title: _colorGeneration == 0
+                      ? 'Sample palette'
+                      : 'Sample palette $_colorGeneration',
+                  semanticLabel: _explicitColorLabel ? _colorLabel : null,
+                  selectedColor: _color,
+                  supportsAlpha: false,
+                  onChanged: !_enabled
+                      ? null
+                      : (value) => setState(() {
+                          _color = value;
+                          _colorCalls++;
+                        }),
+                ),
               ),
-            ),
             const SizedBox(height: 24),
             TextButton(
               onPressed: () => setState(() => _renamed = !_renamed),
@@ -88,6 +94,34 @@ class _NativeAccessibilityExampleState
             TextButton(
               onPressed: () => setState(() => _color = const Color(0xffff0000)),
               child: const Text('Set red programmatically'),
+            ),
+            TextButton(
+              onPressed:
+                  LiquidGlassTheme.modeOf(context) != LiquidGlassMode.native
+                  ? null
+                  : () async {
+                      if (!_showColorWell) {
+                        setState(() {
+                          _colorGeneration++;
+                          _showColorWell = true;
+                        });
+                        return;
+                      }
+                      final activated = await const MethodChannel(
+                        'glass_example/accessibility',
+                      ).invokeMethod<bool>('activateColor', _colorLabel);
+                      if (mounted) {
+                        setState(() {
+                          _activation = activated.toString();
+                          _showColorWell = false;
+                        });
+                      }
+                    },
+              child: Text(
+                _showColorWell
+                    ? 'Open then remove color well'
+                    : 'Restore color well',
+              ),
             ),
             TextButton(
               onPressed:

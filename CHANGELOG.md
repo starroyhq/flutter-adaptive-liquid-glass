@@ -7,6 +7,9 @@
 - Explicitly present the system palette for labeled native color wells, using
   one owned activation path for touch and accessibility. Unlabeled wells retain
   UIKit's default interaction and accessibility behavior.
+- Retain the owned palette across asynchronous presentation and keep its
+  activation gate closed until cancellation or dismissal actually completes.
+  A removed source cannot leave a late palette active or emit stale selections.
 - Add native accessibility example and XCTest regressions for labels, theme
   updates, actual palette selection and accessibility activation.
 - Make the fallback color sample accessible through its semantic tap action,

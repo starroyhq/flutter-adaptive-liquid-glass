@@ -5,7 +5,7 @@ final class NativeAccessibilityUITests: XCTestCase {
 
   override func setUpWithError() throws {
     continueAfterFailure = false
-    app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-glass-color-diagnostics"]
+    app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
     app.launch()
     let probe = app.buttons["Open accessibility probe"]
     XCTAssertTrue(probe.waitForExistence(timeout: 30))
@@ -138,6 +138,22 @@ final class NativeAccessibilityUITests: XCTestCase {
     XCTAssertTrue(app.buttons["Sample color"].waitForExistence(timeout: 10))
     app.buttons["Sample color"].tap()
     _ = waitForPalette(title: "Sample palette")
+    closePalette(palette)
+    expectText("Color calls: 0")
+  }
+
+  func testRemovingSourceDuringPresentationCancelsOwnedPalette() throws {
+    app.buttons["Open then remove color well"].tap()
+    expectText("Accessibility activation: true")
+    expectText("Color source: removed")
+    XCTAssertFalse(app.buttons["Sample color"].exists)
+    XCTAssertTrue(app.otherElements["UIColorPicker"].waitForNonExistence(timeout: 10))
+    expectText("Color calls: 0")
+    app.buttons["Restore color well"].tap()
+    expectText("Color source: mounted")
+    app.buttons["Sample color"].tap()
+    let palette = waitForPalette(title: "Sample palette 1")
+    XCTAssertEqual(app.otherElements.matching(identifier: "UIColorPicker").count, 1)
     closePalette(palette)
     expectText("Color calls: 0")
   }

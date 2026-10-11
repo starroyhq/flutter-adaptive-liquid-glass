@@ -22,22 +22,32 @@ fallback appearance, dependencies and minimum platform versions are unchanged.
   An independent delegate preserves controlled touch selection and avoids
   duplicate callbacks when closing. Native configuration updates preserve color,
   alpha, title and appearance settings.
+- The platform component retains its presentation session and color-picker
+  controller across UIKit's asynchronous handoff. Reverse references are weak.
+  Cancellation keeps the activation gate closed until the old controller exits
+  or is released; a late presentation also closes after its source is removed.
+  Temporary diagnostic hooks and launch flags have been removed.
 - Fallback color wells expose a semantic tap action and reject stale activation
   after route coverage, backgrounding or disposal.
 
 ## Validation
 
-Local package and example format/static checks passed, with 224 package tests
-and 7 example tests. The Android Debug APK and arm64 iOS simulator app built.
-Five color/accessibility XCTest cases passed after the final rebuild on a
-dedicated iOS 27 simulator: labels/theme updates, physical and accessibility
-selection with exact callback counts, reopening after tab recreation, duplicate
-activation/background cancellation, and clearing a label during presentation.
-The unchanged six-operation slider scenario passed in the preceding full run.
+The final implementation passed local format/static analysis, 224 package
+tests and 7 example tests. The Android Debug APK and arm64 iOS simulator app
+built during patch validation. The complete seven-case native suite passed
+without diagnostics on dedicated iOS 26.5 and iOS 27 simulators after the
+ownership follow-up.
 
-The complete six-case native suite is required by the dedicated iOS 26 CI gate, alongside
-quality and Android/iOS build jobs. See the release's linked CI run for its
-commit-specific results. Full commands and boundaries are recorded in
+The native suite now contains six color/accessibility cases and one unchanged
+slider case. It covers labels/theme updates, physical and accessibility selection
+with exact callback counts, tab recreation, duplicate activation/background
+cancellation, clearing a label during presentation, and source removal followed
+by restoration. The slider case checks four drags and two stationary presses.
+
+All seven cases are required by the dedicated iOS 26 CI gate, alongside quality
+and Android/iOS build jobs. Use the release's associated CI run for the final
+tag's results; local or historical runs do not replace that gate. Full commands
+and boundaries are recorded in
 [native accessibility validation](native-accessibility-validation.md).
 
 The tab recreation scenario does not establish compatibility with every

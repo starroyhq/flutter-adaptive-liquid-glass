@@ -2,39 +2,15 @@ import XCTest
 
 final class NativeAccessibilityUITests: XCTestCase {
   private let app = XCUIApplication()
-  private var traceURL: URL?
 
   override func setUpWithError() throws {
     continueAfterFailure = false
-    let trace = FileManager.default.temporaryDirectory
-      .appendingPathComponent("native-color-well-\(UUID().uuidString).log")
-    XCTAssertTrue(FileManager.default.createFile(atPath: trace.path, contents: nil))
-    traceURL = trace
-    app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US",
-                           "--glass-color-well-trace", trace.path]
+    app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
     app.launch()
     let probe = app.buttons["Open accessibility probe"]
     XCTAssertTrue(probe.waitForExistence(timeout: 30))
     probe.tap()
     XCTAssertTrue(app.staticTexts["Accessibility renderer: native"].waitForExistence(timeout: 20))
-  }
-
-  override func tearDownWithError() throws {
-    defer {
-      if let traceURL { try? FileManager.default.removeItem(at: traceURL) }
-      traceURL = nil
-    }
-    guard let traceURL else { return }
-    let trace = (try? String(contentsOf: traceURL, encoding: .utf8)) ?? ""
-    let attachment = XCTAttachment(string: trace.isEmpty
-      ? "Native color diagnostics unavailable: the app did not write the opt-in simulator trace."
-      : trace)
-    // Synthetic, bounded state only. Keep it available in the job log as well
-    // as the result bundle, without downloading the whole bundle to inspect it.
-    print("COLOR_WELL_TRACE_BEGIN\n\(trace)COLOR_WELL_TRACE_END")
-    attachment.name = "Native color well state trace"
-    attachment.lifetime = .keepAlways
-    add(attachment)
   }
 
   func testNativeLabelsUpdateWithoutExtraCallbacks() throws {
@@ -123,6 +99,47 @@ final class NativeAccessibilityUITests: XCTestCase {
     pickersTab.tap()
     openCatalogColorPicker()
     closePalette(app.otherElements["UIColorPicker"])
+  }
+
+  func testDuplicateActivationAndBackgroundCancelOnlyOwnedPalette() throws {
+    app.buttons["Activate color accessibility twice"].tap()
+    let palette = waitForPalette(title: "Sample palette")
+    XCTAssertEqual(app.otherElements.matching(identifier: "UIColorPicker").count, 1)
+    closePalette(palette)
+    expectText("Accessibility activation: true,false")
+    expectText("Color calls: 0")
+
+    app.buttons["Sample color"].tap()
+    _ = waitForPalette(title: "Sample palette")
+    XCUIDevice.shared.press(.home)
+    app.activate()
+    XCTAssertTrue(palette.waitForNonExistence(timeout: 10))
+    expectText("Color calls: 0")
+    app.buttons["Sample color"].tap()
+    _ = waitForPalette(title: "Sample palette")
+    closePalette(palette)
+    expectText("Color calls: 0")
+  }
+
+  func testClearingLabelDuringPresentationRestoresSystemActivation() throws {
+    app.buttons["Open then clear color label"].tap()
+    expectText("Color label: system")
+    let defaultWell = app.buttons.matching(
+      NSPredicate(format: "label IN %@", ["Color", "颜色", "顏色"])
+    ).firstMatch
+    XCTAssertTrue(defaultWell.waitForExistence(timeout: 15))
+    XCTAssertTrue(app.otherElements["UIColorPicker"].waitForNonExistence(timeout: 10))
+    expectText("Color calls: 0")
+    defaultWell.tap()
+    let palette = waitForPalette(title: "Sample palette")
+    closePalette(palette)
+    expectText("Color calls: 0")
+    app.buttons["Restore custom color label"].tap()
+    XCTAssertTrue(app.buttons["Sample color"].waitForExistence(timeout: 10))
+    app.buttons["Sample color"].tap()
+    _ = waitForPalette(title: "Sample palette")
+    closePalette(palette)
+    expectText("Color calls: 0")
   }
 
   private func openCatalogColorPicker() {

@@ -4,6 +4,9 @@
   Symbol descriptions. Keep UIKit navigation and native button rendering.
 - Expose a caller-supplied color-well label together with UIKit's localized color
   value, while retaining the native color picker and controlled callback contract.
+- Explicitly present the system palette for labeled native color wells, using
+  one owned activation path for touch and accessibility. Unlabeled wells retain
+  UIKit's default interaction and accessibility behavior.
 - Add native accessibility example and XCTest regressions for labels, theme
   updates, actual palette selection and accessibility activation.
 - Make the fallback color sample accessible through its semantic tap action,

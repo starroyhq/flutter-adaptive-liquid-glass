@@ -249,7 +249,10 @@ a callback. Calendar reconstruction follows Dart/platform local-time rules,
 including daylight-saving transitions; this is not a named-time-zone API.
 
 Colors are controlled **sRGB** values. The fallback sheet has RGB/alpha sliders
-and HEX editing; native rendering uses `UIColorWell` and its system picker.
+and HEX editing; native rendering uses `UIColorWell` and the system picker.
+With an explicit `semanticLabel`, physical and accessibility activation share
+one package-owned `UIColorPickerViewController` presentation. Unlabeled native
+wells retain UIKit's default interaction and accessibility behavior.
 HEX accepts `RRGGBB` or `RRGGBBAA`, optionally prefixed with `#`; alpha is last,
 unlike Dart's integer `AARRGGBB` notation. Invalid HEX does not emit an edit.
 `supportsAlpha: false` hides alpha editing and emits opaque colors. Changes are

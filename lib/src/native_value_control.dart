@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'feedback.dart';
 import 'native_visibility.dart';
 
 /// Internal bridge shared by the three controlled native value controls.
@@ -40,7 +41,8 @@ class NativeValueControl extends StatefulWidget {
   State<NativeValueControl> createState() => _NativeValueControlState();
 }
 
-class _NativeValueControlState extends State<NativeValueControl> {
+class _NativeValueControlState extends State<NativeValueControl>
+    with WidgetsBindingObserver {
   MethodChannel? _channel;
   Map<String, Object?> _configuration = {};
   Future<void> _pending = Future<void>.value();
@@ -50,6 +52,64 @@ class _NativeValueControlState extends State<NativeValueControl> {
   bool _proposalPending = false;
   int? _activeGesture;
   int _lastGesture = 0;
+  bool _applicationActive = true;
+  List<Route<dynamic>> _coverageRoutes = const [];
+  bool _routeCovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _applicationActive =
+        lifecycle == null || lifecycle == AppLifecycleState.resumed;
+    WidgetsBinding.instance.addObserver(this);
+    nativeRouteCoverage.addListener(_coverageChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _coverageRoutes = _ancestorRoutes();
+    _coverageChanged();
+  }
+
+  void _invalidateInteraction() {
+    ++_revision;
+    _activeGesture = null;
+    _lastProposedValue = null;
+    _proposalPending = false;
+    // Keep the gesture watermark: an old start relabeled with a newer revision
+    // must not reopen a gesture invalidated by lifecycle or route coverage.
+  }
+
+  void _coverageChanged() {
+    final covered = _coverageRoutes.any(nativeRouteCoverage.covers);
+    if (_routeCovered == covered) return;
+    _routeCovered = covered;
+    // A popup can open and finish before Flutter builds. Invalidate on entry,
+    // rather than allowing a later message to revive its interrupted gesture.
+    if (covered) _invalidateInteraction();
+    _scheduleReconcile();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final active = state == AppLifecycleState.resumed;
+    if (_applicationActive == active) return;
+    _applicationActive = active;
+    if (!active) _invalidateInteraction();
+    _scheduleReconcile();
+  }
+
+  void _scheduleReconcile() {
+    if (!mounted || _reconcileScheduled) return;
+    _reconcileScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _reconcileScheduled = false;
+      if (mounted) _send(force: true);
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
 
   List<Route<dynamic>> _ancestorRoutes() {
     Route<dynamic>? route = ModalRoute.of(context);
@@ -86,7 +146,10 @@ class _NativeValueControlState extends State<NativeValueControl> {
       // A nested Navigator can keep its own page current while an ancestor
       // popup/page is covered. UIKit must cancel tracking in that case too.
       // Inactive popped routes retain their native control during the exit.
-      if (route.isActive && !route.isCurrent) return true;
+      if ((route.isActive && !route.isCurrent) ||
+          nativeRouteCoverage.covers(route)) {
+        return true;
+      }
       final navigator = route.navigator;
       route = navigator == null ? null : ModalRoute.of(navigator.context);
     }
@@ -126,9 +189,7 @@ class _NativeValueControlState extends State<NativeValueControl> {
         (props['value'] != _configuration['value'] && !echo) ||
         (_proposalPending && !echo);
     if (reset) {
-      ++_revision;
-      _activeGesture = null;
-      _lastProposedValue = null;
+      _invalidateInteraction();
     }
     _proposalPending = false;
     _configuration = props;
@@ -166,7 +227,12 @@ class _NativeValueControlState extends State<NativeValueControl> {
   }
 
   Future<void> _handle(MethodCall call) async {
-    if (!mounted || call.method != 'valueEvent') return;
+    if (!mounted ||
+        call.method != 'valueEvent' ||
+        !_applicationActive ||
+        !LiquidGlassFeedback.canInteract(context)) {
+      return;
+    }
     final event = call.arguments;
     if (event is! Map || event['revision'] != _revision) return;
     final raw = event['value'];
@@ -203,14 +269,7 @@ class _NativeValueControlState extends State<NativeValueControl> {
     }
     // The parent may reject an edit without rebuilding. Re-apply its value after
     // callbacks and the next frame so UIKit cannot retain an unaccepted edit.
-    if (!_reconcileScheduled) {
-      _reconcileScheduled = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _reconcileScheduled = false;
-        if (mounted) _send(force: true);
-      });
-      WidgetsBinding.instance.scheduleFrame();
-    }
+    _scheduleReconcile();
   }
 
   void _created(int id) {
@@ -229,6 +288,8 @@ class _NativeValueControlState extends State<NativeValueControl> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    nativeRouteCoverage.removeListener(_coverageChanged);
     _channel?.setMethodCallHandler(null);
     _channel = null;
     super.dispose();

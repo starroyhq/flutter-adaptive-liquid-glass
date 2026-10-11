@@ -1,7 +1,12 @@
 ## 0.2.1
 
+- Use system `UISlider` values and tracking for native slider edits. Preserve
+  final detents and complete stationary presses exactly once, while cancelled
+  touch identities cannot reopen an editing cycle.
 - Give native navigation actions their explicit business labels instead of SF
   Symbol descriptions. Keep UIKit navigation and native button rendering.
+- Invalidate queued navigation activations immediately when a route is covered,
+  including coverage and restoration within the same Flutter frame.
 - Expose a caller-supplied color-well label together with UIKit's localized color
   value, while retaining the native color picker and controlled callback contract.
 - Explicitly present the system palette for labeled native color wells, using
@@ -10,6 +15,11 @@
 - Retain the owned palette across asynchronous presentation and keep its
   activation gate closed until cancellation or dismissal actually completes.
   A removed source cannot leave a late palette active or emit stale selections.
+- Release a palette after programmatic dismissal while preserving its session
+  when a nested full-screen controller temporarily covers it.
+- Reject queued native picker and value-control edits after backgrounding,
+  covered-route transitions and authoritative interaction resets. Ordinary
+  label/theme updates and accepted controlled-value echoes preserve valid edits.
 - Add native accessibility example and XCTest regressions for labels, theme
   updates, actual palette selection and accessibility activation.
 - Make the fallback color sample accessible through its semantic tap action,

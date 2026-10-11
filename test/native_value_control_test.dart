@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_adaptive_liquid_glass/src/native_value_control.dart';
+import 'package:flutter_adaptive_liquid_glass/src/native_visibility.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -433,6 +434,211 @@ void main() {
     await tester.pumpAndSettle();
     expect(first, [1]);
     expect(second, [.75]);
+  });
+
+  for (final kind in ['slider', 'switch', 'stepper']) {
+    testWidgets(
+      '$kind rejects queued events during background and after resume',
+      (tester) async {
+        final events = <String>[];
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        addTearDown(
+          () =>
+              binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed),
+        );
+        await tester.pumpWidget(
+          host(
+            NativeValueControl(
+              kind: kind,
+              value: .5,
+              enabled: true,
+              onChangeStart: (_) => events.add('start'),
+              onChanged: (_) => events.add('change'),
+              onChangeEnd: (_) => events.add('end'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final previousRevision = config()['revision'] as int;
+        if (kind == 'slider') await event('start', .5);
+        events.clear();
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+        await event('change', .75, revision: previousRevision);
+        await event('end', .75, revision: previousRevision);
+        expect(events, isEmpty);
+        // No frame observes inactivity; resuming cannot revive the old gesture.
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        await event('change', .8, revision: previousRevision);
+        await event('end', .8, revision: previousRevision);
+        expect(events, isEmpty);
+        await tester.pumpAndSettle();
+        expect(config()['revision'], greaterThan(previousRevision));
+        if (kind == 'slider') {
+          // A recycled gesture identity must fail even with the newest revision.
+          await event('start', .5);
+          await event('change', .9);
+          await event('end', .9);
+          expect(events, isEmpty);
+          await event('start', .5, gestureId: 2);
+        }
+        await event('change', .75, gestureId: 2);
+        expect(events, kind == 'slider' ? ['start', 'change'] : ['change']);
+        await tester.pumpWidget(const SizedBox());
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('$kind rejects events until retained route coverage finishes', (
+      tester,
+    ) async {
+      final events = <String>[];
+      await tester.pumpWidget(
+        host(
+          NativeValueControl(
+            kind: kind,
+            value: .5,
+            enabled: true,
+            onChangeStart: (_) => events.add('start'),
+            onChanged: (_) => events.add('change'),
+            onChangeEnd: (_) => events.add('end'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final previousRevision = config()['revision'] as int;
+      if (kind == 'slider') await event('start', .5);
+      events.clear();
+      final route = ModalRoute.of(
+        tester.element(find.byType(NativeValueControl)),
+      )!;
+      final coverage = Object();
+      addTearDown(() => nativeRouteCoverage.release(coverage));
+      expect(route.isCurrent, isTrue);
+      nativeRouteCoverage.retain(coverage, [route]);
+      await event('change', .75, revision: previousRevision);
+      await event('end', .75, revision: previousRevision);
+      expect(events, isEmpty);
+      await tester.pumpAndSettle();
+      expect(config()['suppressed'], isTrue);
+      await event('start', .5, gestureId: 2);
+      await event('change', .75, gestureId: 2);
+      await event('end', .75, gestureId: 2);
+      expect(events, isEmpty);
+      nativeRouteCoverage.release(coverage);
+      await tester.pumpAndSettle();
+      expect(config()['suppressed'], isFalse);
+      if (kind == 'slider') {
+        await event('start', .5);
+        await event('change', .75);
+        await event('end', .75);
+        expect(events, isEmpty);
+        await event('start', .5, gestureId: 3);
+      }
+      await event('change', .75, gestureId: 3);
+      expect(events, kind == 'slider' ? ['start', 'change'] : ['change']);
+    });
+
+    testWidgets('$kind invalidates a cover and uncover before any frame', (
+      tester,
+    ) async {
+      final events = <String>[];
+      await tester.pumpWidget(
+        host(
+          NativeValueControl(
+            kind: kind,
+            value: .5,
+            enabled: true,
+            onChangeStart: (_) => events.add('start'),
+            onChanged: (_) => events.add('change'),
+            onChangeEnd: (_) => events.add('end'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final previousRevision = config()['revision'] as int;
+      if (kind == 'slider') await event('start', .5);
+      events.clear();
+      final route = ModalRoute.of(
+        tester.element(find.byType(NativeValueControl)),
+      )!;
+      final coverage = Object();
+      nativeRouteCoverage.retain(coverage, [route]);
+      nativeRouteCoverage.release(coverage);
+      await event('change', .75, revision: previousRevision);
+      await event('end', .75, revision: previousRevision);
+      expect(events, isEmpty);
+      await tester.pumpAndSettle();
+      expect(config()['revision'], greaterThan(previousRevision));
+      expect(config()['suppressed'], isFalse);
+      if (kind == 'slider') {
+        await event('start', .5);
+        await event('change', .75);
+        await event('end', .75);
+        expect(events, isEmpty);
+        await event('start', .5, gestureId: 2);
+      }
+      await event('change', .75, gestureId: 2);
+      expect(events, kind == 'slider' ? ['start', 'change'] : ['change']);
+    });
+  }
+
+  testWidgets('theme and label updates retain an active slider editing cycle', (
+    tester,
+  ) async {
+    final events = <String>[];
+    var dark = false;
+    var value = .5;
+    var label = 'Level';
+    late StateSetter update;
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          update = setState;
+          return MaterialApp(
+            theme: ThemeData(
+              brightness: dark ? Brightness.dark : Brightness.light,
+            ),
+            home: Scaffold(
+              body: SizedBox(
+                width: 300,
+                child: NativeValueControl(
+                  kind: 'slider',
+                  value: value,
+                  semanticLabel: label,
+                  enabled: true,
+                  onChangeStart: (_) => events.add('start'),
+                  onChanged: (next) {
+                    events.add('change:$next');
+                    update(() => value = next);
+                  },
+                  onChangeEnd: (next) => events.add('end:$next'),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    final revision = config()['revision'] as int;
+    await event('start', .5);
+    update(() {
+      dark = true;
+      label = 'Updated level';
+    });
+    await tester.pumpAndSettle();
+    expect(config()['revision'], revision);
+    expect(config()['dark'], isTrue);
+    expect(config()['semanticLabel'], label);
+    await event('change', .75, revision: revision);
+    await tester.pumpAndSettle();
+    expect(config()['revision'], revision);
+    expect(config()['valueIsEcho'], isTrue);
+    await event('end', .75, revision: revision);
+    expect(events, ['start', 'change:0.75', 'end:0.75']);
+    expect(calls, hasLength(1));
   });
 
   testWidgets('native popup controls stay unsuppressed through their exit', (

@@ -186,6 +186,17 @@ class _NativeAccessibilityExampleState
                     : 'Restore custom color label',
               ),
             ),
+            TextButton(
+              onPressed:
+                  LiquidGlassTheme.modeOf(context) != LiquidGlassMode.native
+                  ? null
+                  : () => const MethodChannel('glass_example/accessibility')
+                        .invokeMethod<bool>(
+                          'enableColorLifecycleControls',
+                          _colorLabel,
+                        ),
+              child: const Text('Enable native lifecycle controls'),
+            ),
           ],
         ),
       ),

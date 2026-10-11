@@ -32,6 +32,8 @@ jobs:
             test: RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack
           - arm: uikit-plain
             test: RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack
+          - arm: uikit-bare-subclass
+            test: RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack
     steps:
       - uses: actions/checkout@v4
       - name: Verify runner and record toolchain
@@ -60,13 +62,19 @@ jobs:
       - run: pod install --deployment
         working-directory: example/ios
       - name: Build standalone UIKit control app
-        if: matrix.arm == 'uikit-baseline' || matrix.arm == 'uikit-plain'
+        if: matrix.arm == 'uikit-baseline' || matrix.arm == 'uikit-plain' || matrix.arm == 'uikit-bare-subclass'
         run: bash example/ios/ColorPickerBaseline/build.sh
       - name: Select the unmodified UIKit controller for the plain arm
         if: matrix.arm == 'uikit-plain'
         run: |
           baseline_app=example/build/color-picker-baseline/ColorPickerBaseline.app
           /usr/libexec/PlistBuddy -c 'Add :GlassUsePlainColorPicker bool true' "$baseline_app/Info.plist"
+          codesign --force --sign - --timestamp=none "$baseline_app"
+      - name: Select the bare UIKit subclass without lifecycle overrides
+        if: matrix.arm == 'uikit-bare-subclass'
+        run: |
+          baseline_app=example/build/color-picker-baseline/ColorPickerBaseline.app
+          /usr/libexec/PlistBuddy -c 'Add :GlassUseBareColorPickerSubclass bool true' "$baseline_app/Info.plist"
           codesign --force --sign - --timestamp=none "$baseline_app"
       - name: Create and verify a dedicated iOS 26.5 simulator
         id: simulator
@@ -117,7 +125,7 @@ jobs:
               summary.write(f"First palette ({os.environ['GLASS_DIAGNOSTIC_ARM']}): {destination}.\n")
           PY
       - name: Install the UIKit control app without launching it
-        if: matrix.arm == 'uikit-baseline' || matrix.arm == 'uikit-plain'
+        if: matrix.arm == 'uikit-baseline' || matrix.arm == 'uikit-plain' || matrix.arm == 'uikit-bare-subclass'
         env:
           GLASS_SIMULATOR_ID: ${{ steps.simulator.outputs.device_id }}
         run: >-

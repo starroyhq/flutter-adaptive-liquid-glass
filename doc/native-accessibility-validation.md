@@ -342,6 +342,139 @@ rejected `-test-iterations 1`, which only accepts values greater than one. The
 workflow removes that argument and uses the default single attempt. This setup
 failure is not evidence for any of the three presentation hypotheses.
 
+### Complete cloud traces at `25c5622`
+
+The [PR run](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38125063678)
+passed every job. The same commit's
+[push run](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38125059839)
+passed quality, both builds and all six color/accessibility cases, but failed the
+second slider drag: the controlled value and final callback were both `0.3`
+instead of the required `0.2`. A passing companion run does not erase that failure.
+
+The failed slider trace has 55 consecutive events with no dropped entries. The
+container received the specified release position after a normal-duration drag.
+Its last SwiftUI binding write was `0.3`; there was no `0.2` binding and no rejected
+binding, cancellation, revision change or detachment. The editing-end callback
+arrived 417 ms after touch release. Thus this failure is not an early package
+commit discarding a later final binding. It does not distinguish SwiftUI's
+tracking, platform input forwarding and model updates. Screenshot, video and
+Flutter callback labels agree on the observed value; the value assertion remains
+unchanged.
+
+The preceding `194bfc1` PR failure occurred earlier: the physical click on the
+Flutter **Open accessibility probe** button did not leave the catalog. The color
+scenario was never entered, so that run is not evidence of another picker
+presentation or ownership failure.
+
+The `194bfc1` standalone UIKit result was also recovered and checked against its
+artifact SHA-256 and ZIP CRC. Its screenshot shows the host without a palette.
+The recorded button target ran once, retained and configured its picker, and
+called `present` once. No picker appearance or presentation completion followed;
+selection callbacks remained zero. This rules out Flutter and this package as
+necessary conditions for that particular failure, but the fixture still shares
+a picker subclass and page-sheet presentation with the package. Neither an Apple
+known issue nor either remaining shared variable has been established as its cause.
+
+### Matched first-use probe at `25c5622`
+
+The isolated [diagnostic run](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38125059814)
+also failed the matched probe's first-palette assertion. Artifact `11697910255`
+was recovered in full, verified against its SHA-256
+`452bd47b6af0a31beb583ed75f9bda2012616068eb463eea71e1f0aedc4140ff`
+and ZIP CRC, and inspected through its application log, synthesized-input record,
+accessibility tree and screenshot. The probe uses the catalog's initial color,
+alpha support and palette title; it makes one physical tap without accessibility
+activation, a warm-up opening or an input retry.
+
+The well's screen frame was `(20, 350, 48, 48)`. The recorded touch pressed and
+released at `(44, 374)` over 50 ms, exactly its center; native hit testing recorded
+the corresponding local point `(24, 24)`. The per-instance touch trace contains
+16 consecutive events with no skipped entries: configuration, successful hit
+testing, touch begin/end, recognizer state `recognized`, `target.enter`,
+`target.accepted`, and reset. Throughout the tap, the container was attached,
+visible and enabled, and its configuration revision remained unchanged. This
+attempt therefore reached the presentation target through an actual completed
+touch; it did not fail because the tap missed or was rejected by the target.
+
+The lifecycle log records eligible activation, picker initialization, retained
+session creation and one `present` call from the Flutter view controller. At
+approximately one, five and fifteen seconds afterward, the session was still
+`presenting`, the picker and owner remained alive and eligible, and the picker
+had neither a window attachment nor a presenting controller. No cancellation,
+deinitialization, appearance callback or presentation completion was recorded
+before the failed assertion. The screenshot shows only the probe, and its
+counter remains zero, so the absent palette is not merely an accessibility
+locator mismatch.
+
+The same run's pure UIKit baseline also reached its button target and called
+`present` once, with no subsequent picker appearance or completion. Its final
+screenshot contains only the host and its selection count remains zero, matching
+the earlier `194bfc1` baseline. Both environments therefore exhibit a failure
+after presentation is requested; this does not establish a shared root cause.
+Both fixtures still share the picker subclass and page-sheet configuration. A
+separate plain, unsubclassed UIKit arm tests the subclass hypothesis while keeping
+the configuration and strict single-tap assertions unchanged. These observations
+do not establish an Apple known issue or a production fix.
+
+### UIKit slider and programmatic palette dismissal follow-up
+
+The native slider candidate uses public `UISlider` tracking and its final system
+value instead of the SwiftUI binding bridge. The unchanged local iOS 26.5 test
+reached all four requested detents with exactly one start/end callback per drag.
+Its first stationary press still failed: UIKit delivered `endTracking`,
+`touchUpInside`, `valueChanged` and `primaryActionTriggered`, but no
+`beginTracking` or `touchDown`. The value stayed at `0.2` and callback counts
+stayed at four. This is an unresolved interaction branch, not a passing gate.
+No assertion, input duration or gesture repetition was changed.
+
+The next targeted run passes the same four drags and both stationary presses.
+The fix accepts a stationary activation only when public UIKit terminal events
+belong to an unconsumed, released physical touch sequence. A passive recognizer
+observes identity without winning Flutter's gesture arena or deriving values
+from coordinates. The drag consumes its sequence before trailing activation;
+cancel, authoritative reset, coverage and backgrounding invalidate permission.
+The final cleanup also invalidates permission before every UIKit
+`cancelTracking`, including the no-tracking-identity path, and removes temporary
+production logging and sampling timers. The full clean gate remains separate
+from this passing targeted run.
+
+A new eighth native case passes locally on iOS 26.5. It covers the owned palette
+with another full-screen UIKit controller, returns to the same palette, makes a
+selection, dismisses it programmatically, and opens it again. The production
+fix observes actual dismissal through `isBeingDismissed`; temporary coverage
+does not end the presentation session. The initial test fixture overlapped the
+palette's close control; moving its own toolbar to the bottom resolved that
+fixture obstruction without changing the original seven cases.
+
+Native value-control bridge regressions now also cover queued events after
+backgrounding and route coverage that begins and ends in one Flutter frame.
+The previous bridge fails nine of these regressions; the fix passes all 23
+bridge tests and all 244 package tests. These unit results do not replace the
+pending final clean native and cloud gates.
+
+Independent review additionally found that a navigation event could survive
+coverage and restoration in the same Flutter frame. Its regression fails on
+the previous implementation with two unexpected actions; synchronously advancing
+the native navigation epoch fixes it. All 245 package tests and static analysis
+pass after that correction.
+
+The clean follow-up suite passes all nine cases on dedicated iOS 26.5 and iOS 27
+simulators (281.401 and 293.642 seconds respectively). In addition to the original
+seven inputs/assertions, it covers programmatic dismissal and background
+cancellation while a full-screen child still covers the palette. Cancellation
+now closes the identity-verified presenter-owned stack, and confirms the palette
+itself departed before releasing its activation gate. Temporary production
+diagnostics and test launch flags are removed. These local results still require
+verification by the associated cloud candidate checks before publication.
+
+At `79c9ee1`, the separate first-use matrix adds an unmodified
+`UIColorPickerViewController` arm. That arm passes, while the instrumented
+subclass arm fails its first-palette-existence assertion, before selection or
+closing. This comparison warrants separating subclass identity from lifecycle
+overrides; it does not by itself establish an Apple defect. The subsequent matrix
+therefore also includes an empty subclass, with no overridden methods, using the
+same physical single-tap XCTest as the other standalone UIKit arms.
+
 ## Limits
 
 Simulator accessibility trees and activation tests do not establish the complete

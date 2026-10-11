@@ -35,11 +35,40 @@ class _NativeNavigationBarState extends State<NativeNavigationBar>
   Future<void> _pending = Future<void>.value();
   int _epoch = 0;
   int _lastEvent = 0;
+  List<Route<dynamic>> _coverageRoutes = const [];
+  bool _routeCovered = false;
+  bool _syncScheduled = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    nativeRouteCoverage.addListener(_coverageChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _coverageRoutes = _routes();
+    _coverageChanged();
+  }
+
+  void _coverageChanged() {
+    final covered = _coverageRoutes.any(nativeRouteCoverage.covers);
+    if (_routeCovered == covered) return;
+    _routeCovered = covered;
+    // Coverage may begin and end before the next frame. Invalidate queued
+    // activations synchronously so restoring visibility cannot revive them.
+    if (covered) ++_epoch;
+    if (!mounted || _syncScheduled) return;
+    _syncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncScheduled = false;
+      // A same-frame cover/uncover leaves visual props unchanged, but UIKit
+      // still needs the advanced epoch before accepting a new activation.
+      if (mounted) _sync(force: true);
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   List<Route<dynamic>> _routes() {
@@ -192,6 +221,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    nativeRouteCoverage.removeListener(_coverageChanged);
     _channel?.setMethodCallHandler(null);
     _channel = null;
     super.dispose();

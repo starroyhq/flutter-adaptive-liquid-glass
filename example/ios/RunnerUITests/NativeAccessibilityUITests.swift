@@ -5,7 +5,7 @@ final class NativeAccessibilityUITests: XCTestCase {
 
   override func setUpWithError() throws {
     continueAfterFailure = false
-    app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-glass-color-lifecycle-diagnostics"]
+    app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
     app.launch()
     let probe = app.buttons["Open accessibility probe"]
     XCTAssertTrue(probe.waitForExistence(timeout: 30))
@@ -156,6 +156,111 @@ final class NativeAccessibilityUITests: XCTestCase {
     XCTAssertEqual(app.otherElements.matching(identifier: "UIColorPicker").count, 1)
     closePalette(palette)
     expectText("Color calls: 0")
+  }
+
+  func testProgrammaticDismissalReleasesOnlyTheDepartingPalette() throws {
+    let enable = app.buttons["Enable native lifecycle controls"]
+    for _ in 0..<4 {
+      if enable.exists && enable.isHittable { break }
+      app.swipeUp()
+    }
+    XCTAssertTrue(enable.exists && enable.isHittable)
+    enable.tap()
+    expectText("Native lifecycle controls ready")
+    let well = app.buttons["Sample color"]
+    for _ in 0..<4 {
+      if well.exists && well.isHittable { break }
+      app.swipeDown()
+    }
+    XCTAssertTrue(well.exists && well.isHittable)
+    well.tap()
+    let palette = waitForPalette(title: "Sample palette")
+
+    // A full-screen child removes the palette from view without dismissing it.
+    // Return to the same controller and verify its real delegate still works.
+    app.buttons["Cover palette"].tap()
+    expectText("Nested native cover")
+    expectText("Native palette covered")
+    app.buttons["Return to palette"].tap()
+    expectText("Original native palette restored")
+    _ = waitForPalette(title: "Sample palette")
+    let blackSwatch = app.otherElements.matching(
+      NSPredicate(format: "label MATCHES[c] %@", "(black|黑色) 0")
+    ).firstMatch
+    XCTAssertTrue(blackSwatch.waitForExistence(timeout: 10))
+    blackSwatch.tap()
+    closePalette(palette)
+    expectText("Color calls: 1")
+    expectText("Color value: ff000000")
+
+    well.tap()
+    _ = waitForPalette(title: "Sample palette")
+    app.buttons["Dismiss palette"].tap()
+    expectText("Native palette programmatically dismissed")
+    XCTAssertTrue(palette.waitForNonExistence(timeout: 10))
+    // This is a new physical activation, without remounting the source well.
+    well.tap()
+    _ = waitForPalette(title: "Sample palette")
+    app.buttons["Cover palette"].tap()
+    expectText("Nested native cover")
+    expectText("Native palette covered")
+    app.buttons["Close lifecycle controls"].tap()
+    XCTAssertTrue(app.buttons["Dismiss palette"].waitForNonExistence(timeout: 10))
+    XCTAssertTrue(app.staticTexts["Nested native cover"].waitForNonExistence(timeout: 10))
+    _ = waitForPalette(title: "Sample palette")
+    let whiteSwatch = app.otherElements.matching(
+      NSPredicate(format: "label MATCHES[c] %@", "(white|白色) 100")
+    ).firstMatch
+    XCTAssertTrue(whiteSwatch.waitForExistence(timeout: 10))
+    whiteSwatch.tap()
+    closePalette(palette)
+    expectText("Color calls: 2")
+    expectText("Color value: ffffffff")
+  }
+
+  func testBackgroundCancelsPaletteWhileItsFullScreenChildIsPresented() throws {
+    let enable = app.buttons["Enable native lifecycle controls"]
+    for _ in 0..<4 {
+      if enable.exists && enable.isHittable { break }
+      app.swipeUp()
+    }
+    XCTAssertTrue(enable.exists && enable.isHittable)
+    enable.tap()
+    expectText("Native lifecycle controls ready")
+    let well = app.buttons["Sample color"]
+    for _ in 0..<4 {
+      if well.exists && well.isHittable { break }
+      app.swipeDown()
+    }
+    XCTAssertTrue(well.exists && well.isHittable)
+    well.tap()
+    let palette = waitForPalette(title: "Sample palette")
+    app.buttons["Cover palette"].tap()
+    expectText("Nested native cover")
+    expectText("Native palette covered")
+
+    // Keep the child presented when cancellation starts. Dismissing only that
+    // child must not be mistaken for completion of the owned palette's exit.
+    XCUIDevice.shared.press(.home)
+    app.activate()
+    XCTAssertTrue(app.staticTexts["Nested native cover"].waitForNonExistence(timeout: 10))
+    XCTAssertTrue(palette.waitForNonExistence(timeout: 10))
+    expectText("Color calls: 0")
+    XCTAssertTrue(well.exists && well.isHittable)
+
+    // The original source remains mounted. A new physical activation must own
+    // a fresh palette with its delegate intact, without replaying old events.
+    well.tap()
+    _ = waitForPalette(title: "Sample palette")
+    XCTAssertEqual(app.otherElements.matching(identifier: "UIColorPicker").count, 1)
+    let blackSwatch = app.otherElements.matching(
+      NSPredicate(format: "label MATCHES[c] %@", "(black|黑色) 0")
+    ).firstMatch
+    XCTAssertTrue(blackSwatch.waitForExistence(timeout: 10))
+    blackSwatch.tap()
+    closePalette(palette)
+    expectText("Color calls: 1")
+    expectText("Color value: ff000000")
   }
 
   private func openCatalogColorPicker() {

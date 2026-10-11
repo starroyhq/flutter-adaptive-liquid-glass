@@ -17,7 +17,8 @@ See the [release notes](doc/release-0.2.0.md) and
 checks, platform coverage and remaining physical-device acceptance.
 
 The **0.2.1** patch fixes native navigation action labels, color-well accessibility
-activation and fallback semantic activation. See its
+and presentation, queued-event cancellation and native slider editing cycles.
+Fallback color wells also expose semantic activation. See its
 [release notes](doc/release-0.2.1.md) and
 [native accessibility validation](doc/native-accessibility-validation.md).
 

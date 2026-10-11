@@ -77,6 +77,9 @@ private final class BaselineColorPicker: UIColorPickerViewController {
   deinit { baselineTrace("picker deinit") }
 }
 
+/// Isolate subclass identity from all lifecycle overrides and instrumentation.
+private final class BareBaselineColorPicker: UIColorPickerViewController {}
+
 private final class BaselineViewController: UIViewController,
   UIColorPickerViewControllerDelegate, UIAdaptivePresentationControllerDelegate {
   private let openButton = UIButton(type: .system)
@@ -89,6 +92,9 @@ private final class BaselineViewController: UIViewController,
   // built app. The original arm keeps its instrumented controller subclass.
   private var usesPlainPicker: Bool {
     Bundle.main.object(forInfoDictionaryKey: "GlassUsePlainColorPicker") as? Bool ?? false
+  }
+  private var usesBareSubclass: Bool {
+    Bundle.main.object(forInfoDictionaryKey: "GlassUseBareColorPickerSubclass") as? Bool ?? false
   }
   private var closing = false
   private var colorCalls = 0
@@ -150,6 +156,9 @@ private final class BaselineViewController: UIViewController,
     if usesPlainPicker {
       record("controller class plain UIColorPickerViewController")
       controller = UIColorPickerViewController()
+    } else if usesBareSubclass {
+      record("controller class bare UIColorPickerViewController subclass")
+      controller = BareBaselineColorPicker()
     } else {
       controller = BaselineColorPicker()
     }
@@ -203,8 +212,8 @@ private final class BaselineViewController: UIViewController,
     guard viewController === picker else { return }
     closing = true
     record("delegate didFinish")
-    if usesPlainPicker {
-      // This arm has no viewDidDisappear override. Release the same owned
+    if usesPlainPicker || usesBareSubclass {
+      // These arms have no viewDidDisappear override. Release the same owned
       // controller after dismissal rather than retaining it past the close.
       viewController.dismiss(animated: true) { [weak self, weak viewController] in
         guard let viewController else { return }

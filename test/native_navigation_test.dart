@@ -293,4 +293,39 @@ void main() {
     await event('theme', sequence: 3);
     expect(presses, 1);
   });
+
+  testWidgets(
+    'coverage within one frame permanently rejects queued activations',
+    (tester) async {
+      var presses = 0;
+      await tester.pumpWidget(host(onPressed: () => presses++));
+      await tester.pumpAndSettle();
+      final oldEpoch = config()['epoch'] as int;
+      final route = ModalRoute.of(
+        tester.element(find.byType(NativeNavigationBar)),
+      )!;
+      final token = Object();
+      addTearDown(() => nativeRouteCoverage.release(token));
+
+      nativeRouteCoverage.retain(token, [route]);
+      await event('theme', epoch: oldEpoch);
+      expect(presses, 0);
+      // No rendered frame occurs between covering and uncovering the route.
+      // A rejected message, or one still queued in the platform channel, must
+      // not become valid again when the current route is visible once more.
+      nativeRouteCoverage.release(token);
+      await event('theme', epoch: oldEpoch);
+      await event('theme', epoch: oldEpoch, sequence: 2);
+      expect(presses, 0);
+
+      await tester.pumpAndSettle();
+      expect(config()['suppressed'], false);
+      expect(config()['epoch'], isNot(oldEpoch));
+      await event('theme', epoch: oldEpoch, sequence: 3);
+      expect(presses, 0);
+      await event('theme', sequence: 4);
+      await event('theme', sequence: 4);
+      expect(presses, 1);
+    },
+  );
 }

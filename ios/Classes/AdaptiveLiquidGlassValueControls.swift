@@ -1,6 +1,5 @@
 import Flutter
 import UIKit
-import SwiftUI
 
 final class AdaptiveLiquidGlassValueControlFactory: NSObject, FlutterPlatformViewFactory {
   private let messenger: FlutterBinaryMessenger
@@ -188,77 +187,100 @@ private final class AdaptiveLiquidGlassValueControl: NSObject, FlutterPlatformVi
   }
 }
 
-/// SwiftUI delivers the final value and editing boundary. A separate touch
-/// identity prevents a late system editing(true) from reopening that gesture;
-/// UIKit touch-up itself is never used as the value/commit boundary.
+/// UIKit owns slider tracking, including its final value. The bridge never
+/// derives a business value from touch coordinates or a delayed timer.
 private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformView {
-  private let container = AdaptiveGlassHostingContainer()
+  private let container = AdaptiveGlassSliderContainer()
+  private let slider = AdaptiveGlassTrackedSlider()
   private let touchSequence = AdaptiveGlassSliderTouchSequence()
   private let channel: FlutterMethodChannel
-  private let model = AdaptiveGlassSliderModel()
-  private let hosting: UIHostingController<AdaptiveGlassSliderView>
-  private var hostingConstraints: [NSLayoutConstraint] = []
-  private var isAttached = false
   private let suppression: AdaptiveLiquidGlassSuppression
   private var suppressionObserver: UUID?
+  private var lifecycleObservers: [NSObjectProtocol] = []
+  private var applicationActive = UIApplication.shared.applicationState == .active
+  private var routeSuppressed = false
+  private var popupOwner = false
+  private var enabled = true
+  private var configuring = false
   private var revision = 0
-  private var generation = 0
   private var nextGesture = 0
   private var activeGesture: Int?
+  private var activeTracking: Int?
   private var activeTouchSequence: Int?
-  private var completedTouchSequence: Int?
-  private var pendingTerminalSequence: Int?
-  private var popupOwner = false
-  private var routeSuppressed = false
-  private var enabled = true
-  #if DEBUG
-  private let diagnostics: AdaptiveGlassSliderSequenceDiagnostics?
-  #endif
+  private var pendingActivation: Int?
+  private var activationInside = false
+  private var activationPrimary = false
+  private var activationEndComplete = false
+  private var minimum = 0.0
+  private var maximum = 1.0
+  private var divisions: Int?
+  private var value = 0.0
+  private var lastNativeUnit: Float = 0
+  private var semanticValue: String?
 
   init(frame: CGRect, id: Int64, arguments: [String: Any], messenger: FlutterBinaryMessenger, suppression: AdaptiveLiquidGlassSuppression) {
-    #if DEBUG
-    diagnostics = ProcessInfo.processInfo.arguments.contains("-glass-slider-sequence-diagnostics")
-      ? AdaptiveGlassSliderSequenceDiagnostics(viewID: id) : nil
-    #endif
     self.suppression = suppression
     channel = FlutterMethodChannel(name: "flutter_adaptive_liquid_glass/value-control/\(id)", binaryMessenger: messenger)
-    hosting = UIHostingController(rootView: AdaptiveGlassSliderView(model: model))
     super.init()
     container.frame = frame
     container.backgroundColor = .clear
+    slider.translatesAutoresizingMaskIntoConstraints = false
+    // UISlider's Float is only a unit coordinate; Dart's business range and
+    // snapped detents remain Double, including ranges outside Float's limits.
+    slider.minimumValue = 0
+    slider.maximumValue = 1
+    slider.isContinuous = true
+    container.addSubview(slider)
+    NSLayoutConstraint.activate([
+      slider.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
+      slider.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
+      slider.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+    ])
     container.addGestureRecognizer(touchSequence)
-    touchSequence.onCancellation = { [weak self] in self?.cancelTouchGesture() }
-    touchSequence.onNewSequence = { [weak self] in self?.cancelTouchGesture() }
-    #if DEBUG
-    if diagnostics != nil {
-      touchSequence.onDiagnosticTouch = { [weak self] phase, touch in
-        self?.recordDiagnostic(phase, touch: touch)
+    touchSequence.onNewSequence = { [weak self] in
+      guard let self else { return false }
+      if self.activeGesture != nil || self.slider.trackingIdentity != nil {
+        self.cancelInteraction()
+      } else {
+        self.clearPendingActivation()
       }
+      return self.canInteract
     }
-    #endif
-    hosting.view.backgroundColor = .clear
-    hosting.view.translatesAutoresizingMaskIntoConstraints = false
-    hostingConstraints = [
-      hosting.view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-      hosting.view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-      hosting.view.topAnchor.constraint(equalTo: container.topAnchor),
-      hosting.view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-    ]
-    model.onValue = { [weak self] value, generation in self?.propose(value, generation: generation) }
-    model.onEditing = { [weak self] editing, generation in self?.editing(editing, generation: generation) }
-    model.onAdjust = { [weak self] direction, generation in self?.adjust(direction, generation: generation) }
-    container.onHierarchyChanged = { [weak self] in self?.updateHostingParent() }
+    touchSequence.onCancellation = { [weak self] in self?.cancelInteraction() }
+    touchSequence.onRelease = { [weak self] _ in self?.finishPendingActivation() }
+    slider.shouldBegin = { [weak self] in self?.canInteract == true }
+    slider.onBegin = { [weak self] tracking in self?.beginTracking(tracking) }
+    slider.onEnd = { [weak self] tracking in self?.endTracking(tracking) }
+    slider.onCancel = { [weak self] tracking in self?.cancelTracking(tracking) }
+    slider.onWillCancel = { [weak self] in
+      self?.touchSequence.invalidate()
+      self?.clearPendingActivation()
+    }
+    slider.onUntrackedEnd = { [weak self] completed in self?.untrackedEnd(completed: completed) }
+    slider.onAccessibilityAdjust = { [weak self] direction in self?.adjust(direction) }
+    slider.addTarget(self, action: #selector(changed), for: .valueChanged)
+    slider.addTarget(self, action: #selector(activatedInside), for: .touchUpInside)
+    slider.addTarget(self, action: #selector(primaryActivated), for: .primaryActionTriggered)
+    slider.addTarget(self, action: #selector(cancelledActivation), for: [.touchUpOutside, .touchCancel])
+    container.onHierarchyChanged = { [weak self] in self?.updateVisibility() }
+    for (name, active) in [(UIApplication.willResignActiveNotification, false),
+                           (UIApplication.didBecomeActiveNotification, true)] {
+      lifecycleObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+        self?.applicationActive = active
+        self?.updateVisibility()
+      })
+    }
     _ = configure(arguments)
     suppressionObserver = suppression.observe { [weak self] in self?.updateVisibility() }
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self else { result(nil); return }
       switch call.method {
       case "configure":
-        guard let configuration = call.arguments as? [String: Any] else {
+        guard let config = call.arguments as? [String: Any] else {
           result(FlutterError(code: "invalid_value_configuration", message: "Expected a slider configuration", details: nil))
           return
         }
-        result(self.configure(configuration))
+        result(self.configure(config))
       case "setSuppressed":
         self.routeSuppressed = (call.arguments as? [String: Any])?["suppressed"] as? Bool ?? false
         self.updateVisibility()
@@ -268,283 +290,274 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     }
   }
 
-  private func configure(_ configuration: [String: Any]) -> FlutterError? {
-    guard configuration["kind"] as? String == "slider",
-          let minimum = (configuration["min"] as? NSNumber)?.doubleValue,
-          let maximum = (configuration["max"] as? NSNumber)?.doubleValue,
-          let value = (configuration["value"] as? NSNumber)?.doubleValue,
+  private var canInteract: Bool {
+    !configuring && enabled && applicationActive && container.window != nil &&
+      !routeSuppressed && !(suppression.active && !popupOwner)
+  }
+
+  private func configure(_ config: [String: Any]) -> FlutterError? {
+    guard config["kind"] as? String == "slider",
+          let minimum = (config["min"] as? NSNumber)?.doubleValue,
+          let maximum = (config["max"] as? NSNumber)?.doubleValue,
+          let value = (config["value"] as? NSNumber)?.doubleValue,
           minimum.isFinite, maximum.isFinite, value.isFinite,
           minimum < maximum, (maximum - minimum).isFinite,
           value >= minimum, value <= maximum else {
       return FlutterError(code: "invalid_value_configuration", message: "Invalid finite slider range or value", details: nil)
     }
-    let divisions = configuration["divisions"] as? Int
+    let divisions = config["divisions"] as? Int
     if let divisions, divisions <= 0 {
       return FlutterError(code: "invalid_value_configuration", message: "Slider divisions must be positive", details: nil)
     }
-    let incomingRevision = configuration["revision"] as? Int ?? revision
-    let echo = configuration["valueIsEcho"] as? Bool == true && incomingRevision == revision
-    if incomingRevision != revision {
-      // Recreate only the SwiftUI interaction identity on authoritative reset.
-      // Accepted echoes retain both the hosted control and the current gesture.
-      invalidateInteraction()
-      generation += 1
+    let incomingRevision = config["revision"] as? Int ?? revision
+    let echo = config["valueIsEcho"] as? Bool == true && incomingRevision == revision
+    // Even if a caller omits a revision, changed tracking geometry must never
+    // continue an operation that began with a different range or direction.
+    let rtl = config["rtl"] as? Bool == true
+    let direction: UISemanticContentAttribute = rtl ? .forceRightToLeft : .forceLeftToRight
+    let rangeChanged = self.minimum != minimum || self.maximum != maximum || self.divisions != divisions
+    if incomingRevision != revision || rangeChanged || slider.semanticContentAttribute != direction || (!echo && value != self.value) {
+      cancelInteraction()
     }
+    configuring = true
+    defer { configuring = false }
     revision = incomingRevision
-    enabled = configuration["enabled"] as? Bool ?? true
-    popupOwner = configuration["popupOwner"] as? Bool ?? false
-    routeSuppressed = configuration["suppressed"] as? Bool ?? false
-    var next = model.configuration
-    next.minimum = minimum
-    next.maximum = maximum
-    next.divisions = divisions
-    if !echo { next.value = value }
-    next.accent = Self.color(configuration["accent"])
-    next.label = configuration["semanticLabel"] as? String
-    next.semanticValue = configuration["semanticValue"] as? String
-    next.dark = configuration["dark"] as? Bool ?? false
-    next.rtl = configuration["rtl"] as? Bool ?? false
-    next.generation = generation
-    model.configuration = next
+    self.minimum = minimum
+    self.maximum = maximum
+    self.divisions = divisions
+    enabled = config["enabled"] as? Bool ?? true
+    routeSuppressed = config["suppressed"] as? Bool ?? false
+    popupOwner = config["popupOwner"] as? Bool ?? false
+    semanticValue = config["semanticValue"] as? String
+    container.overrideUserInterfaceStyle = config["dark"] as? Bool == true ? .dark : .light
+    container.semanticContentAttribute = direction
+    slider.semanticContentAttribute = direction
+    slider.accessibilityLabel = config["semanticLabel"] as? String
+    let accent = Self.color(config["accent"])
+    slider.tintColor = accent
+    // UISlider's filled track has its own public tint override. nil restores
+    // the system default rather than retaining the last explicit theme color.
+    slider.minimumTrackTintColor = accent
+    if rangeChanged, #available(iOS 26.0, *) {
+      // Bound visual tick allocation independently of the public numeric range.
+      // Above 256 divisions, keep the standard system track and business snapping;
+      // hundreds of subpixel tick marks do not add useful visual information.
+      if let divisions, divisions <= 256 {
+        slider.trackConfiguration = .init(numberOfTicks: divisions + 1)
+      } else {
+        slider.trackConfiguration = nil
+      }
+    }
+    if !echo || rangeChanged {
+      self.value = value
+      lastNativeUnit = unitValue(value)
+      slider.setValue(lastNativeUnit, animated: false)
+    }
+    updateAccessibilityValue()
     updateVisibility()
-    #if DEBUG
-    recordDiagnostic(echo ? "configure.echo" : "configure.authoritative", inputValue: value)
-    #endif
     return nil
   }
 
   private func updateVisibility() {
     let hidden = routeSuppressed || (suppression.active && !popupOwner)
-    let effectiveEnabled = enabled && !hidden
-    var next = model.configuration
-    if next.enabled != effectiveEnabled {
-      invalidateInteraction()
-      generation += 1
-      next.generation = generation
-    }
-    next.enabled = effectiveEnabled
-    model.configuration = next
+    let effectiveEnabled = enabled && applicationActive && !hidden && container.window != nil
+    if !effectiveEnabled { cancelInteraction() }
     container.isHidden = hidden
     container.accessibilityElementsHidden = hidden
+    slider.isEnabled = effectiveEnabled
   }
 
-  private func updateHostingParent() {
-    guard container.window != nil else {
-      detachHosting()
+  private func unitValue(_ value: Double) -> Float {
+    if value <= minimum { return 0 }
+    if value >= maximum { return 1 }
+    return Float((value - minimum) / (maximum - minimum))
+  }
+
+  private func businessValue(_ unit: Double) -> Double {
+    var fraction = min(1.0, max(0.0, unit))
+    if let divisions { fraction = (fraction * Double(divisions)).rounded() / Double(divisions) }
+    // Preserve exact endpoints and avoid rounding a wide range beyond its bounds.
+    if fraction <= 0 { return minimum }
+    if fraction >= 1 { return maximum }
+    return min(maximum, max(minimum, minimum + fraction * (maximum - minimum)))
+  }
+
+  private func beginTracking(_ tracking: Int) {
+    guard canInteract, activeGesture == nil,
+          let sequence = touchSequence.current, touchSequence.isEligible(sequence) else {
+      slider.cancelTracking(with: nil)
       return
     }
-    var responder: UIResponder? = container.superview
-    while let current = responder {
-      if let parent = current as? UIViewController {
-        guard hosting.parent !== parent else { return }
-        detachHosting()
-        parent.addChild(hosting)
-        container.addSubview(hosting.view)
-        NSLayoutConstraint.activate(hostingConstraints)
-        hosting.didMove(toParent: parent)
-        isAttached = true
-        return
-      }
-      responder = current.next
-    }
-    detachHosting()
-  }
-
-  private func detachHosting() {
-    guard isAttached else { return }
-    isAttached = false
-    // A delayed begin or binding write can arrive before an active gesture was
-    // recorded. Every actual detach invalidates the old SwiftUI closures.
-    invalidateInteraction()
-    generation += 1
-    var next = model.configuration
-    next.generation = generation
-    model.configuration = next
-    hosting.willMove(toParent: nil)
-    NSLayoutConstraint.deactivate(hostingConstraints)
-    hosting.view.removeFromSuperview()
-    hosting.removeFromParent()
-  }
-
-  private func invalidateInteraction() {
-    #if DEBUG
-    recordDiagnostic("invalidate")
-    #endif
-    activeGesture = nil
-    activeTouchSequence = nil
-    pendingTerminalSequence = nil
-    touchSequence.invalidate()
-  }
-
-  private func cancelTouchGesture() {
-    #if DEBUG
-    recordDiagnostic("cancelTouchGesture")
-    #endif
-    if activeGesture != nil { emit("cancel", model.configuration.value) }
-    activeGesture = nil
-    activeTouchSequence = nil
-    pendingTerminalSequence = nil
-  }
-
-  @discardableResult
-  private func begin(accessibility: Bool = false) -> Bool {
-    if activeGesture != nil { return true }
-    if !accessibility {
-      // Flutter can release a tap to UIKit after its finger has already lifted.
-      // The unconsumed sequence remains eligible, but a cancelled or committed
-      // sequence cannot create another operation from late SwiftUI callbacks.
-      guard !touchSequence.isCancelled, let sequence = touchSequence.current,
-            sequence != completedTouchSequence else {
-        return false
-      }
-      activeTouchSequence = sequence
-    }
+    clearPendingActivation()
     nextGesture += 1
     activeGesture = nextGesture
-    emit("start", model.configuration.value)
-    return true
+    activeTracking = tracking
+    activeTouchSequence = sequence
+    emit("start", value)
+    // UIKit may update the value during beginTracking before it accepts the
+    // gesture. Read that native result after acceptance, never infer it ourselves.
+    acceptNativeValue()
   }
 
-  private func propose(_ value: Double, generation: Int) {
-    #if DEBUG
-    if diagnostics?.recordBinding(value, sequence: touchSequence.current, generation: generation) == true {
-      recordDiagnostic("binding", inputValue: value, callbackGeneration: generation)
-    }
-    #endif
-    guard isAttached, container.window != nil, generation == self.generation,
-          model.configuration.enabled, value.isFinite else {
-      #if DEBUG
-      recordDiagnostic("binding.rejected.state", inputValue: value, callbackGeneration: generation)
-      diagnostics?.scheduleDump()
-      #endif
-      return
-    }
-    var next = model.configuration
-    var candidate = min(next.maximum, max(next.minimum, value))
-    if let divisions = next.divisions {
-      let fraction = ((candidate - next.minimum) / (next.maximum - next.minimum) * Double(divisions)).rounded() / Double(divisions)
-      candidate = next.minimum + fraction * (next.maximum - next.minimum)
-    }
-    // On iOS 26 a released press can arrive as false -> true -> binding. Keep
-    // that terminal signal until the binding supplies its value, even when it
-    // is unchanged. Committing at the early false would use the old value.
-    let pendingTerminal = pendingTerminalSequence != nil &&
-      pendingTerminalSequence == touchSequence.current && !touchSequence.isCancelled
-    guard candidate != next.value || pendingTerminal else { return }
-    guard begin() else {
-      #if DEBUG
-      let sealed = touchSequence.current != nil && touchSequence.current == completedTouchSequence
-      recordDiagnostic(sealed ? "binding.rejected.sealed" : "binding.rejected.begin", inputValue: candidate, callbackGeneration: generation)
-      diagnostics?.scheduleDump()
-      #endif
-      return
-    }
-    if candidate != next.value {
-      next.value = candidate
-      model.configuration = next
-      emit("change", candidate)
-    }
-    if pendingTerminal, pendingTerminalSequence == activeTouchSequence { finish() }
+  @objc private func changed() {
+    guard canInteract, activeGesture != nil, activeTracking == slider.trackingIdentity else { return }
+    acceptNativeValue()
   }
 
-  private func editing(_ editing: Bool, generation: Int) {
-    #if DEBUG
-    recordDiagnostic(editing ? "editing.true" : "editing.false", callbackGeneration: generation)
-    #endif
-    guard isAttached, container.window != nil, generation == self.generation,
-          model.configuration.enabled else { return }
-    if editing {
-      begin()
-    } else if activeGesture != nil {
-      // A duplicate terminal signal must not commit the old value while a
-      // false-first press is still waiting for its binding write.
-      if pendingTerminalSequence == nil || pendingTerminalSequence != activeTouchSequence { finish() }
-    } else if touchSequence.isReleased, !touchSequence.isCancelled, let sequence = touchSequence.current,
-              sequence != completedTouchSequence {
-      pendingTerminalSequence = sequence
-    }
+  private func acceptNativeValue() {
+    // Merely pressing an unchanged thumb must not round a Double controlled
+    // value through Float. Only a different system unit value proposes an edit.
+    let nativeUnit = slider.value
+    guard nativeUnit != lastNativeUnit else { return }
+    lastNativeUnit = nativeUnit
+    let candidate = businessValue(Double(nativeUnit))
+    guard candidate != value else { return }
+    value = candidate
+    updateAccessibilityValue()
+    emit("change", candidate)
   }
 
-  private func finish() {
-    if let activeTouchSequence { completedTouchSequence = activeTouchSequence }
-    #if DEBUG
-    recordDiagnostic("finish")
-    #endif
-    emit("end", model.configuration.value)
+  private func endTracking(_ tracking: Int) {
+    guard activeTracking == tracking, activeGesture != nil else { return }
+    guard canInteract else { cancelInteraction(); return }
+    // Called only after UISlider.endTracking has completed its system work.
+    // Whether this is a reliable boundary is verified by physical-input XCTest.
+    acceptNativeValue()
+    if let sequence = activeTouchSequence { touchSequence.consume(sequence) }
+    emit("end", value)
     activeGesture = nil
+    activeTracking = nil
     activeTouchSequence = nil
-    pendingTerminalSequence = nil
-    #if DEBUG
-    diagnostics?.scheduleDump()
-    #endif
   }
 
-  private func adjust(_ direction: Int, generation: Int) {
-    guard isAttached, container.window != nil, generation == self.generation,
-          model.configuration.enabled, activeGesture == nil else { return }
-    let state = model.configuration
-    let increment = (state.maximum - state.minimum) / Double(state.divisions ?? 20)
-    let candidate = min(state.maximum, max(state.minimum, state.value + Double(direction) * increment))
-    guard candidate != state.value else { return }
-    pendingTerminalSequence = nil
+  private func cancelTracking(_ tracking: Int) {
+    guard activeTracking == tracking else { return }
+    if activeGesture != nil { emit("cancel", value) }
+    activeGesture = nil
+    activeTracking = nil
+    activeTouchSequence = nil
     touchSequence.invalidate()
-    begin(accessibility: true)
-    propose(candidate, generation: generation)
-    editing(false, generation: generation)
+    clearPendingActivation()
   }
 
-  private func emit(_ phase: String, _ value: Double) {
+  private func cancelInteraction() {
+    touchSequence.invalidate()
+    clearPendingActivation()
+    slider.cancelTracking(with: nil)
+    if activeGesture != nil { emit("cancel", value) }
+    activeGesture = nil
+    activeTracking = nil
+    activeTouchSequence = nil
+  }
+
+  private func clearPendingActivation() {
+    pendingActivation = nil
+    activationInside = false
+    activationPrimary = false
+    activationEndComplete = false
+  }
+
+  private func untrackedEnd(completed: Bool) {
+    // Flutter can deliver a stationary press after release. UIKit then emits
+    // endTracking(nil), touchUpInside and primaryAction without beginTracking.
+    // Associate that public activation chain with a fresh real touch identity.
+    guard canInteract, activeGesture == nil, let sequence = touchSequence.current,
+          touchSequence.isEligible(sequence) else { return }
+    if pendingActivation != sequence {
+      clearPendingActivation()
+      pendingActivation = sequence
+    }
+    if completed { activationEndComplete = true }
+    finishPendingActivation()
+  }
+
+  @objc private func activatedInside() {
+    guard pendingActivation != nil else { return }
+    activationInside = true
+    finishPendingActivation()
+  }
+
+  @objc private func primaryActivated() {
+    guard pendingActivation != nil else { return }
+    activationPrimary = true
+    finishPendingActivation()
+  }
+
+  @objc private func cancelledActivation() {
+    // This notification already comes from UIKit's terminal path. Do not call
+    // cancelTracking again from inside its own action dispatch.
+    touchSequence.invalidate()
+    clearPendingActivation()
+    if activeGesture != nil { emit("cancel", value) }
+    activeGesture = nil
+    activeTracking = nil
+    activeTouchSequence = nil
+  }
+
+  private func finishPendingActivation() {
+    guard canInteract, activeGesture == nil,
+          let sequence = pendingActivation, touchSequence.isEligible(sequence),
+          touchSequence.isReleased, activationInside, activationPrimary,
+          activationEndComplete else { return }
+    // Consume before callbacks. The drag's trailing activation and duplicate
+    // terminals cannot create a second cycle; no timer or inferred value is used.
+    touchSequence.consume(sequence)
+    clearPendingActivation()
+    nextGesture += 1
+    activeGesture = nextGesture
+    emit("start", value)
+    acceptNativeValue()
+    emit("end", value)
+    activeGesture = nil
+  }
+
+  private func adjust(_ direction: Int) {
+    guard canInteract, activeGesture == nil else { return }
+    cancelInteraction()
+    let unit = (value - minimum) / (maximum - minimum)
+    let nextUnit = min(1.0, max(0.0, unit + Double(direction) / Double(divisions ?? 20)))
+    let candidate = businessValue(nextUnit)
+    guard candidate != value else { return }
+    nextGesture += 1
+    activeGesture = nextGesture
+    emit("start", value)
+    value = candidate
+    lastNativeUnit = unitValue(candidate)
+    slider.setValue(lastNativeUnit, animated: false)
+    updateAccessibilityValue()
+    emit("change", candidate)
+    emit("end", candidate)
+    activeGesture = nil
+  }
+
+  private func updateAccessibilityValue() {
+    slider.accessibilityValue = semanticValue ?? "\(Int((Double(unitValue(value)) * 100).rounded()))%"
+  }
+
+  private func emit(_ phase: String, _ candidate: Double) {
     guard let activeGesture else { return }
-    #if DEBUG
-    recordDiagnostic(phase, inputValue: value)
-    #endif
-    channel.invokeMethod("valueEvent", arguments: ["phase": phase, "value": value, "revision": revision, "gestureId": activeGesture])
+    channel.invokeMethod("valueEvent", arguments: ["phase": phase, "value": candidate, "revision": revision, "gestureId": activeGesture])
   }
-
-  #if DEBUG
-  private func recordDiagnostic(_ phase: String, inputValue: Double? = nil, callbackGeneration: Int? = nil, touch: UITouch? = nil) {
-    guard let diagnostics else { return }
-    diagnostics.append(.init(
-      time: ProcessInfo.processInfo.systemUptime,
-      phase: phase,
-      value: model.configuration.value,
-      inputValue: inputValue,
-      revision: revision,
-      generation: generation,
-      callbackGeneration: callbackGeneration,
-      touchSequence: touchSequence.current,
-      activeTouchSequence: activeTouchSequence,
-      completedTouchSequence: completedTouchSequence,
-      pendingTerminalSequence: pendingTerminalSequence,
-      gesture: activeGesture,
-      released: touchSequence.isReleased,
-      cancelled: touchSequence.isCancelled,
-      attached: isAttached,
-      inWindow: container.window != nil,
-      enabled: model.configuration.enabled,
-      touchTime: touch?.timestamp,
-      touchPoint: touch?.location(in: container)
-    ))
-  }
-  #endif
 
   func view() -> UIView { container }
 
   deinit {
-    touchSequence.onCancellation = nil
+    slider.onBegin = nil
+    slider.onEnd = nil
+    slider.onCancel = nil
+    slider.onWillCancel = nil
+    slider.onUntrackedEnd = nil
+    slider.shouldBegin = nil
+    slider.onAccessibilityAdjust = nil
     touchSequence.onNewSequence = nil
-    #if DEBUG
-    touchSequence.onDiagnosticTouch = nil
-    #endif
+    touchSequence.onCancellation = nil
+    touchSequence.onRelease = nil
+    touchSequence.invalidate()
+    slider.cancelTracking(with: nil)
     container.onHierarchyChanged = nil
     channel.setMethodCallHandler(nil)
     if let suppressionObserver { suppression.remove(suppressionObserver) }
-    if hosting.parent != nil {
-      hosting.willMove(toParent: nil)
-      NSLayoutConstraint.deactivate(hostingConstraints)
-      hosting.view.removeFromSuperview()
-      hosting.removeFromParent()
-    }
+    for observer in lifecycleObservers { NotificationCenter.default.removeObserver(observer) }
   }
 
   private static func color(_ value: Any?) -> UIColor? {
@@ -554,20 +567,18 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   }
 }
 
-/// Observes touch identity only. Remaining possible until all fingers finish
-/// avoids competing with SwiftUI's slider or Flutter's gesture arena. Neither
-/// recognition nor touch-up emits a business start, change, or end callback.
+/// Observes real touch identity without ever recognizing or preventing a gesture.
+/// Values and completion still come exclusively from UISlider's public events.
 private final class AdaptiveGlassSliderTouchSequence: UIGestureRecognizer {
   private var touches: Set<UITouch> = []
   private var nextSequence = 0
+  private var consumedSequence: Int?
+  private var cancelled = false
   private(set) var current: Int?
-  private(set) var isCancelled = false
   var isReleased: Bool { touches.isEmpty }
+  var onNewSequence: (() -> Bool)?
   var onCancellation: (() -> Void)?
-  var onNewSequence: (() -> Void)?
-  #if DEBUG
-  var onDiagnosticTouch: ((String, UITouch?) -> Void)?
-  #endif
+  var onRelease: ((Int) -> Void)?
 
   init() {
     super.init(target: nil, action: nil)
@@ -579,158 +590,108 @@ private final class AdaptiveGlassSliderTouchSequence: UIGestureRecognizer {
   override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool { false }
   override func canBePrevented(by preventingGestureRecognizer: UIGestureRecognizer) -> Bool { false }
 
+  func isEligible(_ sequence: Int) -> Bool {
+    current == sequence && !cancelled && consumedSequence != sequence
+  }
+
+  func consume(_ sequence: Int) {
+    if current == sequence { consumedSequence = sequence }
+  }
+
+  func invalidate() {
+    current = nil
+    cancelled = true
+  }
+
   override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
-    // A removed/hidden view may never receive its old terminal event. The next
-    // real event, rather than a timeout, identifies which old fingers remain.
     self.touches = self.touches.filter {
       $0.phase != .ended && $0.phase != .cancelled &&
         (event.allTouches?.contains($0) ?? true)
     }
     if self.touches.isEmpty {
+      // Cancel an unfinished older control operation before minting permission
+      // for this new real touch; programmatic updates cannot mint permission.
+      let allowed = onNewSequence?() == true
       nextSequence += 1
-      current = nextSequence
-      isCancelled = false
-      onNewSequence?()
+      current = allowed ? nextSequence : nil
+      cancelled = !allowed
     }
     self.touches.formUnion(touches)
     if self.touches.count > 1 {
-      isCancelled = true
+      invalidate()
       onCancellation?()
     }
-    #if DEBUG
-    onDiagnosticTouch?("touch.began", touches.first)
-    #endif
   }
 
   override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
     guard !self.touches.isDisjoint(with: touches) else { return }
     self.touches.subtract(touches)
-    if self.touches.isEmpty { state = .failed }
-    #if DEBUG
-    onDiagnosticTouch?("touch.ended", touches.first)
-    #endif
+    if self.touches.isEmpty {
+      state = .failed
+      if let current { onRelease?(current) }
+    }
   }
 
   override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
     guard !self.touches.isDisjoint(with: touches) else { return }
     self.touches.subtract(touches)
-    isCancelled = true
+    invalidate()
     onCancellation?()
     if self.touches.isEmpty { state = .failed }
-    #if DEBUG
-    onDiagnosticTouch?("touch.cancelled", touches.first)
-    #endif
-  }
-
-  func invalidate() {
-    current = nil
-    isCancelled = true
   }
 
   override func reset() {
     super.reset()
-    // Keep a released fresh identity for UIKit's delayed tap delivery. Live
-    // fingers, if reset interrupted them, are reconciled by the next UIEvent.
+    // A released identity survives until UIKit's activation chain consumes it.
+    // The next actual begin reconciles old fingers after detach/cancellation.
   }
 }
 
-#if DEBUG
-/// Temporary, opt-in sequence diagnostics. Recording never formats or writes a
-/// log during input delivery; the delayed dump cannot change interaction state.
-private final class AdaptiveGlassSliderSequenceDiagnostics {
-  struct Event {
-    let time: TimeInterval
-    let phase: String
-    let value: Double
-    let inputValue: Double?
-    let revision: Int
-    let generation: Int
-    let callbackGeneration: Int?
-    let touchSequence: Int?
-    let activeTouchSequence: Int?
-    let completedTouchSequence: Int?
-    let pendingTerminalSequence: Int?
-    let gesture: Int?
-    let released: Bool
-    let cancelled: Bool
-    let attached: Bool
-    let inWindow: Bool
-    let enabled: Bool
-    let touchTime: TimeInterval?
-    let touchPoint: CGPoint?
+private final class AdaptiveGlassTrackedSlider: UISlider {
+  var shouldBegin: (() -> Bool)?
+  var onBegin: ((Int) -> Void)?
+  var onEnd: ((Int) -> Void)?
+  var onCancel: ((Int) -> Void)?
+  var onWillCancel: (() -> Void)?
+  var onUntrackedEnd: ((Bool) -> Void)?
+  var onAccessibilityAdjust: ((Int) -> Void)?
+  private var nextTrackingIdentity = 0
+  private(set) var trackingIdentity: Int?
+
+  override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+    let accepted = shouldBegin?() == true && super.beginTracking(touch, with: event)
+    guard accepted else { return false }
+    nextTrackingIdentity += 1
+    trackingIdentity = nextTrackingIdentity
+    onBegin?(nextTrackingIdentity)
+    return trackingIdentity != nil
   }
 
-  private let viewID: Int64
-  private var ring = [Event?](repeating: nil, count: 256)
-  private var nextEvent = 0
-  private var nextDumpEvent = 0
-  private var dumpScheduled = false
-  private var latestTouchReleased = true
-  private var waitingForTouchRelease = false
-  private var lastBindingValue: Double?
-  private var lastBindingSequence: Int?
-  private var lastBindingGeneration: Int?
-
-  init(viewID: Int64) { self.viewID = viewID }
-
-  func recordBinding(_ value: Double, sequence: Int?, generation: Int) -> Bool {
-    let changed = value != lastBindingValue || sequence != lastBindingSequence || generation != lastBindingGeneration
-    lastBindingValue = value
-    lastBindingSequence = sequence
-    lastBindingGeneration = generation
-    return changed
+  override func endTracking(_ touch: UITouch?, with event: UIEvent?) {
+    let identity = trackingIdentity
+    if identity == nil { onUntrackedEnd?(false) }
+    super.endTracking(touch, with: event)
+    if identity == nil { onUntrackedEnd?(true) }
+    guard let identity, trackingIdentity == identity else { return }
+    onEnd?(identity)
+    if trackingIdentity == identity { trackingIdentity = nil }
   }
 
-  func append(_ event: Event) {
-    latestTouchReleased = event.released
-    ring[nextEvent % ring.count] = event
-    nextEvent += 1
-    if waitingForTouchRelease, latestTouchReleased,
-       event.phase == "touch.ended" || event.phase == "touch.cancelled" {
-      waitingForTouchRelease = false
-      scheduleDump()
-    }
+  override func cancelTracking(with event: UIEvent?) {
+    let identity = trackingIdentity
+    // UIKit may implement cancellation through endTracking(nil). Revoke even
+    // an untracked press before super can dispatch any terminal actions.
+    onWillCancel?()
+    trackingIdentity = nil
+    super.cancelTracking(with: event)
+    if let identity { onCancel?(identity) }
   }
 
-  func scheduleDump() {
-    guard !dumpScheduled, !waitingForTouchRelease else { return }
-    dumpScheduled = true
-    // Keep only the diagnostic buffer alive, never its slider or platform view.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
-      dumpScheduled = false
-      // Another drag may have started since finish scheduled this batch. Wait
-      // for its terminal touch event rather than write logs during that input.
-      guard latestTouchReleased else {
-        waitingForTouchRelease = true
-        return
-      }
-      let first = max(nextDumpEvent, nextEvent - ring.count)
-      guard first < nextEvent else { return }
-      let skipped = first - nextDumpEvent
-      var lines = ["[GlassSliderSequence] view=\(viewID) events=\(first)..<\(nextEvent) skipped=\(skipped)"]
-      for number in first..<nextEvent {
-        guard let event = ring[number % ring.count] else { continue }
-        let input = event.inputValue.map { String($0) } ?? "-"
-        let callbackGeneration = event.callbackGeneration.map { String($0) } ?? "-"
-        let sequence = event.touchSequence.map { String($0) } ?? "-"
-        let active = event.activeTouchSequence.map { String($0) } ?? "-"
-        let completed = event.completedTouchSequence.map { String($0) } ?? "-"
-        let pending = event.pendingTerminalSequence.map { String($0) } ?? "-"
-        let gesture = event.gesture.map { String($0) } ?? "-"
-        let touchTime = event.touchTime.map { String($0) } ?? "-"
-        let point = event.touchPoint.map { "\($0.x),\($0.y)" } ?? "-"
-        lines.append("[GlassSliderSequence] #\(number) t=\(event.time) \(event.phase) value=\(event.value) input=\(input) revision=\(event.revision) generation=\(event.generation) callbackGeneration=\(callbackGeneration) touch=\(sequence) activeTouch=\(active) completedTouch=\(completed) pendingTerminal=\(pending) gesture=\(gesture) released=\(event.released) cancelled=\(event.cancelled) attached=\(event.attached) window=\(event.inWindow) enabled=\(event.enabled) touchTime=\(touchTime) point=\(point)")
-      }
-      nextDumpEvent = nextEvent
-      // XCTest's captured NSLog transport truncates one large message. Keep
-      // each bounded event intact; all writes still happen in this delayed dump.
-      for line in lines { NSLog("%@", line) }
-    }
-  }
+  override func accessibilityIncrement() { onAccessibilityAdjust?(1) }
+  override func accessibilityDecrement() { onAccessibilityAdjust?(-1) }
 }
-#endif
 
-private final class AdaptiveGlassHostingContainer: UIView {
+private final class AdaptiveGlassSliderContainer: UIView {
   var onHierarchyChanged: (() -> Void)?
   override func didMoveToSuperview() {
     super.didMoveToSuperview()
@@ -739,63 +700,6 @@ private final class AdaptiveGlassHostingContainer: UIView {
   override func didMoveToWindow() {
     super.didMoveToWindow()
     onHierarchyChanged?()
-  }
-}
-
-private struct AdaptiveGlassSliderConfiguration {
-  var value = 0.0
-  var minimum = 0.0
-  var maximum = 1.0
-  var divisions: Int?
-  var enabled = true
-  var accent: UIColor?
-  var label: String?
-  var semanticValue: String?
-  var dark = false
-  var rtl = false
-  var generation = 0
-}
-
-private final class AdaptiveGlassSliderModel: ObservableObject {
-  @Published var configuration = AdaptiveGlassSliderConfiguration()
-  var onValue: ((Double, Int) -> Void)?
-  var onEditing: ((Bool, Int) -> Void)?
-  var onAdjust: ((Int, Int) -> Void)?
-}
-
-private struct AdaptiveGlassSliderView: View {
-  @ObservedObject var model: AdaptiveGlassSliderModel
-
-  var body: some View {
-    let state = model.configuration
-    let binding = Binding<Double>(
-      get: { model.configuration.value },
-      set: { model.onValue?($0, state.generation) }
-    )
-    let editing: (Bool) -> Void = { model.onEditing?($0, state.generation) }
-    Group {
-      if let divisions = state.divisions {
-        Slider(value: binding, in: state.minimum...state.maximum,
-               step: (state.maximum - state.minimum) / Double(divisions), onEditingChanged: editing)
-      } else {
-        Slider(value: binding, in: state.minimum...state.maximum, onEditingChanged: editing)
-      }
-    }
-    .id(state.generation)
-    .tint(state.accent.map { Color(uiColor: $0) })
-    .disabled(!state.enabled)
-    .accessibilityLabel(Text(state.label ?? ""))
-    .accessibilityValue(Text(state.semanticValue ?? "\(Int(((state.value - state.minimum) / (state.maximum - state.minimum) * 100).rounded()))%"))
-    .accessibilityAdjustableAction { direction in
-      switch direction {
-      case .increment: model.onAdjust?(1, state.generation)
-      case .decrement: model.onAdjust?(-1, state.generation)
-      @unknown default: break
-      }
-    }
-    .environment(\.layoutDirection, state.rtl ? .rightToLeft : .leftToRight)
-    .environment(\.colorScheme, state.dark ? .dark : .light)
-    .padding(.horizontal, 8)
   }
 }
 

@@ -1,176 +1,6 @@
 import Flutter
 import UIKit
 
-private enum AdaptiveColorDiagnostics {
-  static var enabled: Bool {
-    #if DEBUG
-    ProcessInfo.processInfo.arguments.contains("-glass-color-lifecycle-diagnostics")
-    #else
-    false
-    #endif
-  }
-  static func record(_ event: @autoclosure () -> String) {
-    guard enabled else { return }
-    NSLog("[GlassColorLifecycle] %@", event())
-  }
-}
-
-#if DEBUG
-/// Opt-in observation of the existing touch path, without another recognizer or
-/// target. Store bounded structural data and write logs outside touch delivery.
-private final class AdaptiveColorTouchDiagnostics {
-  struct Configuration {
-    let revision: Int
-    let custom: Bool
-    let controlEnabled: Bool
-    let controlInteractionEnabled: Bool
-    let containerEnabled: Bool
-    let tapEnabled: Bool
-    let tapState: Int?
-    let attached: Bool
-    let hidden: Bool
-    let configuring: Bool
-  }
-  private struct Event {
-    let time: TimeInterval
-    let phase: String
-    let sequence: Int?
-    let state: Int?
-    let point: CGPoint?
-    let eventType: Int?
-    let touchPhase: Int?
-    let hitType: String?
-    let hitID: ObjectIdentifier?
-    let configuration: Configuration?
-  }
-  var configuration: (() -> Configuration?)?
-  var touchInProgress = false
-  private let viewID: Int64
-  private var ring = [Event?](repeating: nil, count: 128)
-  private var nextEvent = 0
-  private var nextDumpEvent = 0
-  private var dumpScheduled = false
-
-  init(viewID: Int64) { self.viewID = viewID }
-
-  func append(_ phase: String, sequence: Int? = nil, state: UIGestureRecognizer.State? = nil,
-              point: CGPoint? = nil, event: UIEvent? = nil, touch: UITouch? = nil,
-              hit: UIView? = nil) {
-    ring[nextEvent % ring.count] = Event(
-      time: ProcessInfo.processInfo.systemUptime, phase: phase, sequence: sequence,
-      state: state?.rawValue, point: point, eventType: event?.type.rawValue,
-      touchPhase: touch?.phase.rawValue, hitType: hit.map { String(reflecting: type(of: $0)) },
-      hitID: hit.map(ObjectIdentifier.init), configuration: configuration?())
-    nextEvent += 1
-  }
-
-  func scheduleDump() {
-    guard !dumpScheduled else { return }
-    dumpScheduled = true
-    // Retain only the bounded buffer. Its configuration closure is weak and no
-    // record retains the view, recognizer, event, touch or platform component.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
-      dumpScheduled = false
-      // A hit-test fallback timer must not log in the middle of a touch which
-      // subsequently reached us. Its end/cancellation/reset schedules the dump.
-      guard !touchInProgress else { return }
-      let first = max(nextDumpEvent, nextEvent - ring.count)
-      guard first < nextEvent else { return }
-      NSLog("[GlassColorTouch] view=%lld events=%d..<%d skipped=%d", viewID, first, nextEvent, first - nextDumpEvent)
-      for number in first..<nextEvent {
-        guard let event = ring[number % ring.count] else { continue }
-        let sequence = event.sequence.map(String.init) ?? "-"
-        let state = event.state.map(String.init) ?? "-"
-        let point = event.point.map { "\($0.x),\($0.y)" } ?? "-"
-        let type = event.eventType.map(String.init) ?? "-"
-        let touch = event.touchPhase.map(String.init) ?? "-"
-        let hit = event.hitID.map { String(describing: $0) } ?? "nil"
-        let c = event.configuration
-        let config = c.map {
-          "rev=\($0.revision) custom=\($0.custom) control=\($0.controlEnabled) controlInput=\($0.controlInteractionEnabled) container=\($0.containerEnabled) tap=\($0.tapEnabled)/\($0.tapState.map(String.init) ?? "-") window=\($0.attached) hidden=\($0.hidden) configuring=\($0.configuring)"
-        } ?? "owner=nil"
-        NSLog("[GlassColorTouch] view=%lld #%d t=%.6f %@ seq=%@ state=%@ point=%@ event=%@ touch=%@ hit=%@/%@ %@",
-              viewID, number, event.time, event.phase, sequence, state, point, type,
-              touch, event.hitType ?? "nil", hit, config)
-      }
-      nextDumpEvent = nextEvent
-    }
-  }
-}
-
-private final class AdaptiveColorDiagnosticContainer: UIView {
-  private let diagnostics: AdaptiveColorTouchDiagnostics
-  init(diagnostics: AdaptiveColorTouchDiagnostics) {
-    self.diagnostics = diagnostics
-    super.init(frame: .zero)
-  }
-  required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
-
-  override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-    let hit = super.hitTest(point, with: event)
-    diagnostics.append("hitTest", point: point, event: event,
-                       touch: event?.allTouches?.first, hit: hit)
-    // Also flush a hit which never reaches the recognizer. The delayed output
-    // cannot forward the touch or alter the original hit-test result.
-    diagnostics.scheduleDump()
-    return hit
-  }
-}
-
-private final class AdaptiveColorDiagnosticTap: UITapGestureRecognizer {
-  private let diagnostics: AdaptiveColorTouchDiagnostics
-  private var sequence = 0
-  init(diagnostics: AdaptiveColorTouchDiagnostics, target: Any?, action: Selector?) {
-    self.diagnostics = diagnostics
-    super.init(target: target, action: action)
-  }
-
-  private func record(_ phase: String, touches: Set<UITouch>, event: UIEvent) {
-    let touch = touches.first
-    diagnostics.append(phase, sequence: sequence, state: state,
-                       point: touch.map { $0.location(in: view) }, event: event, touch: touch)
-  }
-
-  override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
-    diagnostics.touchInProgress = true
-    sequence += 1
-    record("began.before", touches: touches, event: event)
-    super.touchesBegan(touches, with: event)
-    record("began.after", touches: touches, event: event)
-  }
-
-  override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
-    record("moved.before", touches: touches, event: event)
-    super.touchesMoved(touches, with: event)
-    record("moved.after", touches: touches, event: event)
-  }
-
-  override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
-    record("ended.before", touches: touches, event: event)
-    super.touchesEnded(touches, with: event)
-    record("ended.after", touches: touches, event: event)
-    diagnostics.touchInProgress = false
-    diagnostics.scheduleDump()
-  }
-
-  override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
-    record("cancelled.before", touches: touches, event: event)
-    super.touchesCancelled(touches, with: event)
-    record("cancelled.after", touches: touches, event: event)
-    diagnostics.touchInProgress = false
-    diagnostics.scheduleDump()
-  }
-
-  override func reset() {
-    diagnostics.append("reset.before", sequence: sequence, state: state)
-    super.reset()
-    diagnostics.append("reset.after", sequence: sequence, state: state)
-    diagnostics.touchInProgress = false
-    diagnostics.scheduleDump()
-  }
-}
-#endif
-
 enum AdaptiveLiquidGlassPickerKind { case date, color }
 
 /// Cancellation outlives the originating platform view. UIKit can finish an
@@ -178,9 +8,9 @@ enum AdaptiveLiquidGlassPickerKind { case date, color }
 private final class AdaptiveManagedColorPicker: UIColorPickerViewController {
   weak var presentationSession: AdaptiveColorPickerPresentation?
   private var presentationCancelled = false
+  private var cancellationDismissalInFlight = false
 
   func cancelPresentation() {
-    AdaptiveColorDiagnostics.record("picker cancelPresentation")
     presentationCancelled = true
     dismissCancelledPresentation()
   }
@@ -194,39 +24,50 @@ private final class AdaptiveManagedColorPicker: UIColorPickerViewController {
   }
 
   private func dismissCancelledPresentation() {
-    guard presentationCancelled, !isBeingDismissed,
-          presentingViewController != nil || viewIfLoaded?.window != nil else { return }
-    // Only this controller is dismissed. In particular, a late completion must
-    // not dismiss a newer controller belonging to the same presenter.
-    dismiss(animated: false) { [weak self] in
-      self?.presentationSession?.disappearanceCompleted()
+    guard presentationCancelled, !cancellationDismissalInFlight, !isBeingDismissed,
+          let presenter = presentingViewController,
+          presenter.presentedViewController === self else { return }
+    // Dismissing the picker itself would only close its presented child when a
+    // nested controller covers it. Only its verified presenter owns this stack;
+    // never dismiss an unrelated controller that has since replaced the picker.
+    cancellationDismissalInFlight = true
+    presenter.dismiss(animated: false) { [weak self] in
+      guard let self else { return }
+      self.cancellationDismissalInFlight = false
+      // A child dismissal is not evidence that the palette has departed.
+      guard self.presentingViewController == nil,
+            self.viewIfLoaded?.window == nil else { return }
+      self.presentationSession?.disappearanceCompleted()
     }
-  }
-
-  override func viewDidLoad() {
-    super.viewDidLoad()
-    AdaptiveColorDiagnostics.record("picker didLoad id=\(ObjectIdentifier(self))")
-  }
-
-  override func viewWillAppear(_ animated: Bool) {
-    super.viewWillAppear(animated)
-    AdaptiveColorDiagnostics.record("picker willAppear id=\(ObjectIdentifier(self))")
   }
 
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
-    AdaptiveColorDiagnostics.record("picker didAppear")
     presentationCompleted()
+  }
+
+  override func viewWillDisappear(_ animated: Bool) {
+    super.viewWillDisappear(animated)
+    // Programmatic dismissal does not invoke the adaptive-presentation delegate.
+    // Observe an actual dismissal here, without treating a nested full-screen
+    // controller that merely covers the palette as the end of its session.
+    var controller: UIViewController? = self
+    var visited = Set<ObjectIdentifier>()
+    while let current = controller, visited.insert(ObjectIdentifier(current)).inserted {
+      if current.isBeingDismissed {
+        presentationSession?.dismissalWillBegin()
+        break
+      }
+      controller = current.parent ?? current.presentingViewController
+    }
   }
 
   override func viewDidDisappear(_ animated: Bool) {
     super.viewDidDisappear(animated)
-    AdaptiveColorDiagnostics.record("picker didDisappear")
     presentationSession?.disappearanceCompleted()
   }
 
   deinit {
-    AdaptiveColorDiagnostics.record("picker deinit")
     presentationSession?.pickerDeinitialized()
   }
 }
@@ -250,42 +91,30 @@ private final class AdaptiveColorPickerPresentation: NSObject,
     self.picker = picker
     retainedPicker = picker
     super.init()
-    AdaptiveColorDiagnostics.record("session init id=\(ObjectIdentifier(self)) owner=\(ObjectIdentifier(owner)) picker=\(ObjectIdentifier(picker))")
     picker.presentationSession = self
     picker.delegate = self
     picker.presentationController?.delegate = self
     inactiveObserver = NotificationCenter.default.addObserver(
       forName: UIApplication.willResignActiveNotification, object: nil, queue: .main
-    ) { [weak self] _ in AdaptiveColorDiagnostics.record("willResignActive"); self?.cancel() }
+    ) { [weak self] _ in self?.cancel() }
   }
 
   func present(from presenter: UIViewController) {
     guard phase == .presenting, !cancelled, let picker else { return }
-    AdaptiveColorDiagnostics.record("present type=\(type(of: presenter)) viewLoaded=\(picker.isViewLoaded) source=\(owner?.canPresentPicker == true)")
     presenter.present(picker, animated: true) { [weak picker] in
       picker?.presentationCompleted()
-    }
-    if AdaptiveColorDiagnostics.enabled {
-      for delay in [1.0, 5.0, 15.0] {
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-          guard let self else { AdaptiveColorDiagnostics.record("delayed session gone"); return }
-          AdaptiveColorDiagnostics.record("delayed phase=\(self.phase) pickerAlive=\(self.picker != nil) attached=\(self.picker?.viewIfLoaded?.window != nil) presenter=\(self.picker?.presentingViewController != nil) owner=\(self.owner != nil) eligible=\(self.owner?.canPresentPicker == true)")
-        }
-      }
     }
     // UIKit may forward presentation through an internal host. A synchronous
     // presentedViewController identity check cannot determine whether it worked.
   }
 
   func presentationCompleted() {
-    AdaptiveColorDiagnostics.record("presentationCompleted phase=\(phase) cancelled=\(cancelled)")
     guard phase != .finished else { return }
     if phase == .presenting { phase = .presented }
     if cancelled || owner?.canPresentPicker != true { cancel() }
   }
 
   func cancel() {
-    AdaptiveColorDiagnostics.record("session cancel phase=\(phase) owner=\(owner != nil) eligible=\(owner?.canPresentPicker == true) attached=\(picker?.viewIfLoaded?.window != nil)")
     guard phase != .finished else { return }
     cancelled = true
     guard let picker else { finish(); return }
@@ -314,15 +143,16 @@ private final class AdaptiveColorPickerPresentation: NSObject,
     // This callback starts dismissal; it is not its completion. Keep ownership
     // until viewDidDisappear/transition completion so a second action cannot open
     // another picker over the outgoing one.
-    observeDismissal()
+    dismissalWillBegin()
   }
 
   func presentationControllerWillDismiss(_ presentationController: UIPresentationController) {
     guard presentationController.presentedViewController === picker else { return }
-    observeDismissal()
+    dismissalWillBegin()
   }
 
-  private func observeDismissal() {
+  func dismissalWillBegin() {
+    guard phase != .finished else { return }
     phase = .dismissing
     picker?.transitionCoordinator?.animate(alongsideTransition: nil) { [weak self] context in
       guard let self, self.phase != .finished else { return }
@@ -343,7 +173,12 @@ private final class AdaptiveColorPickerPresentation: NSObject,
   func disappearanceCompleted() {
     // A nested system controller can temporarily cover the picker. Only an
     // actual dismissal that we observed may release the originating well.
-    if phase == .dismissing { finish() }
+    guard phase == .dismissing else { return }
+    if let picker {
+      guard picker.presentingViewController == nil,
+            picker.viewIfLoaded?.window == nil else { return }
+    }
+    finish()
   }
 
   func pickerDeinitialized() {
@@ -353,7 +188,6 @@ private final class AdaptiveColorPickerPresentation: NSObject,
   }
 
   private func finish(detachPicker: Bool = true) {
-    AdaptiveColorDiagnostics.record("session finish phase=\(phase) detach=\(detachPicker)")
     guard phase != .finished else { return }
     phase = .finished
     if let inactiveObserver { NotificationCenter.default.removeObserver(inactiveObserver) }
@@ -437,7 +271,6 @@ private final class AdaptiveAccessibleColorWell: UIColorWell {
 
   @discardableResult
   func presentColorPicker() -> Bool {
-    AdaptiveColorDiagnostics.record("activate eligible=\(canPresentPicker) existing=\(colorPresentation != nil) alpha=\(supportsAlpha)")
     guard canPresentPicker, colorPresentation == nil else { return false }
     var responder: UIResponder? = next
     while responder != nil && !(responder is UIViewController) {
@@ -500,17 +333,15 @@ private final class AdaptiveAccessibleColorWell: UIColorWell {
     let value = supportsAlpha ? color : color.withAlphaComponent(1)
     if picker.selectedColor != value { picker.selectedColor = value }
     picker.overrideUserInterfaceStyle = traitCollection.userInterfaceStyle
-    AdaptiveColorDiagnostics.record("configure before view access loaded=\(picker.isViewLoaded)")
     picker.view.tintColor = tintColor
     picker.view.semanticContentAttribute = semanticContentAttribute
-    AdaptiveColorDiagnostics.record("configure after view access loaded=\(picker.isViewLoaded)")
   }
 
   func cancelAccessibilityPresentation() { colorPresentation?.cancel() }
 
   override func didMoveToWindow() {
     super.didMoveToWindow()
-    if window == nil { AdaptiveColorDiagnostics.record("well detached"); cancelAccessibilityPresentation() }
+    if window == nil { cancelAccessibilityPresentation() }
   }
 
   func colorPickerDidSelect(_ presentation: AdaptiveColorPickerPresentation, color: UIColor) {
@@ -530,7 +361,7 @@ private final class AdaptiveAccessibleColorWell: UIColorWell {
     }
   }
 
-  deinit { AdaptiveColorDiagnostics.record("well deinit"); colorPresentation?.cancel() }
+  deinit { colorPresentation?.cancel() }
 }
 
 final class AdaptiveLiquidGlassPickerFactory: NSObject, FlutterPlatformViewFactory {
@@ -560,9 +391,6 @@ final class AdaptiveLiquidGlassPickerFactory: NSObject, FlutterPlatformViewFacto
 /// configuration replaces the old state, including nullable colors and bounds.
 private final class AdaptiveLiquidGlassPicker: NSObject, FlutterPlatformView {
   private let container: UIView
-  #if DEBUG
-  private let touchDiagnostics: AdaptiveColorTouchDiagnostics?
-  #endif
   private let control: UIControl
   private let kind: AdaptiveLiquidGlassPickerKind
   private let channel: FlutterMethodChannel
@@ -580,14 +408,7 @@ private final class AdaptiveLiquidGlassPicker: NSObject, FlutterPlatformView {
        suppression: AdaptiveLiquidGlassSuppression) {
     self.kind = kind
     self.suppression = suppression
-    #if DEBUG
-    let diagnostics = kind == .color && AdaptiveColorDiagnostics.enabled
-      ? AdaptiveColorTouchDiagnostics(viewID: identifier) : nil
-    touchDiagnostics = diagnostics
-    container = diagnostics.map { AdaptiveColorDiagnosticContainer(diagnostics: $0) } ?? UIView()
-    #else
     container = UIView()
-    #endif
     control = kind == .date ? UIDatePicker() : AdaptiveAccessibleColorWell()
     let name = kind == .date ? "date" : "color"
     channel = FlutterMethodChannel(
@@ -595,22 +416,6 @@ private final class AdaptiveLiquidGlassPicker: NSObject, FlutterPlatformView {
       binaryMessenger: messenger
     )
     super.init()
-    #if DEBUG
-    touchDiagnostics?.configuration = { [weak self] in
-      guard let self else { return nil }
-      return AdaptiveColorTouchDiagnostics.Configuration(
-        revision: self.revision,
-        custom: (self.control as? AdaptiveAccessibleColorWell)?.usesCustomActivation == true,
-        controlEnabled: self.control.isEnabled,
-        controlInteractionEnabled: self.control.isUserInteractionEnabled,
-        containerEnabled: self.container.isUserInteractionEnabled,
-        tapEnabled: self.colorTap?.isEnabled == true,
-        tapState: self.colorTap?.state.rawValue,
-        attached: self.container.window != nil,
-        hidden: self.container.isHidden,
-        configuring: self.configuring)
-    }
-    #endif
     container.frame = frame
     control.translatesAutoresizingMaskIntoConstraints = false
     container.addSubview(control)
@@ -622,17 +427,7 @@ private final class AdaptiveLiquidGlassPicker: NSObject, FlutterPlatformView {
     ])
     control.addTarget(self, action: #selector(changed), for: .valueChanged)
     if control is AdaptiveAccessibleColorWell {
-      let tap: UITapGestureRecognizer
-      #if DEBUG
-      if let touchDiagnostics {
-        tap = AdaptiveColorDiagnosticTap(diagnostics: touchDiagnostics,
-                                        target: self, action: #selector(activateColorPicker))
-      } else {
-        tap = UITapGestureRecognizer(target: self, action: #selector(activateColorPicker))
-      }
-      #else
-      tap = UITapGestureRecognizer(target: self, action: #selector(activateColorPicker))
-      #endif
+      let tap = UITapGestureRecognizer(target: self, action: #selector(activateColorPicker))
       tap.isEnabled = false
       container.addGestureRecognizer(tap)
       colorTap = tap
@@ -717,9 +512,6 @@ private final class AdaptiveLiquidGlassPicker: NSObject, FlutterPlatformView {
     }
 
     configuring = true
-    #if DEBUG
-    touchDiagnostics?.append("configure.begin", state: colorTap?.state)
-    #endif
     defer { configuring = false }
     let incomingRevision = (config["revision"] as? NSNumber)?.intValue ?? 0
     let valueIsEcho = config["valueIsEcho"] as? Bool == true && incomingRevision == revision
@@ -765,22 +557,11 @@ private final class AdaptiveLiquidGlassPicker: NSObject, FlutterPlatformView {
       }
     }
     updateVisibility()
-    #if DEBUG
-    touchDiagnostics?.append("configure.end", state: colorTap?.state)
-    touchDiagnostics?.scheduleDump()
-    #endif
     return nil
   }
 
   @objc private func activateColorPicker(_ recognizer: UITapGestureRecognizer) {
-    #if DEBUG
-    touchDiagnostics?.append("target.enter", state: recognizer.state)
-    defer { touchDiagnostics?.scheduleDump() }
-    #endif
     guard recognizer.state == .ended, !configuring else { return }
-    #if DEBUG
-    touchDiagnostics?.append("target.accepted", state: recognizer.state)
-    #endif
     (control as? AdaptiveAccessibleColorWell)?.presentColorPicker()
   }
 
@@ -833,7 +614,6 @@ private final class AdaptiveLiquidGlassPicker: NSObject, FlutterPlatformView {
   }
 
   deinit {
-    AdaptiveColorDiagnostics.record("platform deinit kind=\(kind) id=\(ObjectIdentifier(self)) control=\(ObjectIdentifier(control))")
     colorPresentation?.cancel()
     channel.setMethodCallHandler(nil)
     control.removeTarget(self, action: #selector(changed), for: .valueChanged)

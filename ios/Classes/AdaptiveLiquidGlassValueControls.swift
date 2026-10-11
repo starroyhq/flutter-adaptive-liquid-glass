@@ -665,6 +665,8 @@ private final class AdaptiveGlassSliderSequenceDiagnostics {
   private var nextEvent = 0
   private var nextDumpEvent = 0
   private var dumpScheduled = false
+  private var latestTouchReleased = true
+  private var waitingForTouchRelease = false
   private var lastBindingValue: Double?
   private var lastBindingSequence: Int?
   private var lastBindingGeneration: Int?
@@ -680,16 +682,28 @@ private final class AdaptiveGlassSliderSequenceDiagnostics {
   }
 
   func append(_ event: Event) {
+    latestTouchReleased = event.released
     ring[nextEvent % ring.count] = event
     nextEvent += 1
+    if waitingForTouchRelease, latestTouchReleased,
+       event.phase == "touch.ended" || event.phase == "touch.cancelled" {
+      waitingForTouchRelease = false
+      scheduleDump()
+    }
   }
 
   func scheduleDump() {
-    guard !dumpScheduled else { return }
+    guard !dumpScheduled, !waitingForTouchRelease else { return }
     dumpScheduled = true
     // Keep only the diagnostic buffer alive, never its slider or platform view.
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
       dumpScheduled = false
+      // Another drag may have started since finish scheduled this batch. Wait
+      // for its terminal touch event rather than write logs during that input.
+      guard latestTouchReleased else {
+        waitingForTouchRelease = true
+        return
+      }
       let first = max(nextDumpEvent, nextEvent - ring.count)
       guard first < nextEvent else { return }
       let skipped = first - nextDumpEvent
@@ -708,7 +722,9 @@ private final class AdaptiveGlassSliderSequenceDiagnostics {
         lines.append("[GlassSliderSequence] #\(number) t=\(event.time) \(event.phase) value=\(event.value) input=\(input) revision=\(event.revision) generation=\(event.generation) callbackGeneration=\(callbackGeneration) touch=\(sequence) activeTouch=\(active) completedTouch=\(completed) pendingTerminal=\(pending) gesture=\(gesture) released=\(event.released) cancelled=\(event.cancelled) attached=\(event.attached) window=\(event.inWindow) enabled=\(event.enabled) touchTime=\(touchTime) point=\(point)")
       }
       nextDumpEvent = nextEvent
-      NSLog("%@", lines.joined(separator: "\n"))
+      // XCTest's captured NSLog transport truncates one large message. Keep
+      // each bounded event intact; all writes still happen in this delayed dump.
+      for line in lines { NSLog("%@", line) }
     }
   }
 }

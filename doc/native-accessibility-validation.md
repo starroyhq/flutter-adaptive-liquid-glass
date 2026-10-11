@@ -254,6 +254,59 @@ comparison cannot isolate view preloading as a cause. The corrected raw-count
 fixture passed on the already-used local baseline device; that rerun validates
 the fixture assertions, not another cold-start attempt.
 
+## Instrumented cloud follow-up
+
+At `eaf718d`, the push run
+[38122453075](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38122453075)
+passed the catalog case but failed the final opening after restoring a custom
+color label. The PR run
+[38122455096](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38122455096)
+failed the first catalog opening and passed the label-restoration case. Each run
+passed the other six cases, including all four slider drags and both stationary
+presses. Neither run is a successful release gate.
+
+In the PR's failed first opening, the controller and its owner remained alive
+and eligible at one, five and fifteen seconds after `present`. It never attached
+to a window, and there was no package cancellation, deinitialization or appearance
+callback. Retaining the controller therefore does not by itself resolve the
+first-use failure. System-service appearance notifications do not establish that
+the app's palette became visible.
+
+The push's label-restoration failure is earlier in the activation path. The
+recording and XCTest coordinates show one physical tap at the restored well's
+center with no visible overlay. No owned-presentation activation entry followed
+that tap. Further observation must distinguish native touch forwarding,
+recognizer state and target guarding before changing the production behavior.
+
+The slider passed in both runs, but its buffered diagnostic batches were
+truncated by the captured `NSLog` transport. The next diagnostic emits each
+bounded event separately from the same delayed dump. This changes neither the
+input-time state machine nor test gestures and does not establish a fix for the
+earlier intermittent final-value failure.
+
+At `194bfc1`, the isolated first-use matrix
+[38123718183](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38123718183)
+passed the catalog and matched-probe scenarios. The pure UIKit scenario failed
+its first-palette presence assertion after one physical button tap. That app
+does not load Flutter or the component plugin. This establishes that the
+assertion can also fail outside this package; it does not identify an Apple bug
+or resolve the separate label-restoration input failure.
+
+The next opt-in diagnostic observes the existing color container's hit testing,
+the existing tap recognizer's touch/reset stages, configuration changes and the
+target's guard. It adds no recognizer, target or retry and preserves each
+superclass call and hit-test result. Without the DEBUG launch flag it creates
+the original UIKit types. New touch records use a bounded per-instance buffer
+and delayed short lines; earlier presentation lifecycle messages remain
+synchronous. Local label-restoration validation passed and recorded every stage
+through recognized, target accepted and actual picker appearance, with no gaps
+in the 24-event trace. This proves observability, not a cloud input fix.
+
+The revised slider dump produced 152 consecutive local events, including all
+six terminal callbacks without truncation. A further DEBUG-only guard defers a
+scheduled dump if another touch has begun, then reschedules after release or
+cancellation. The normal business state machine is unchanged.
+
 ## Queued-event review follow-up
 
 Independent review found that an already-sent picker event could outlive a
@@ -279,7 +332,9 @@ changes and invalidates on entry synchronously, using routes cached during
 dependency updates. Two additional date/color regressions reproduce that case
 without an intervening frame: both failed before the fix and passed afterward.
 All 33 picker tests and all 234 package tests passed, with clean static analysis
-and independent review. Reliable history for a popup that opens and disappears
+and independent review. The complete seven-case native suite then passed on the
+dedicated local iOS 26.5 simulator with diagnostic output enabled. Reliable
+history for a popup that opens and disappears
 within one frame requires the documented `LiquidGlassNavigatorObserver`.
 
 The first diagnostic matrix at `eaf718d` did not execute any tests: Xcode 26.6

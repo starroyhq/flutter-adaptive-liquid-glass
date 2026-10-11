@@ -98,6 +98,18 @@ It does not add gestures, open the picker, retry taps, or change production
 controls. No retry or relaxed value/count assertion has been introduced. The
 package remains unpublished pending an uninstrumented release-gate run.
 
+On `bab4ca0`, the push run
+[38112312471](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38112312471)
+passed all four native cases; the PR run
+[38112315968](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38112315968)
+failed both physical palette openings. Both uninstrumented slider cases passed.
+The failed color traces kept the wells attached, visible, enabled and hit-testable
+at their centers, with no sustained presentation-state change. A 250 ms sample
+cannot rule out a short intermediate state or prove delivery of a completed tap.
+The next diagnostic compares a settled, single measured-center catalog tap with
+the original probe element tap and observes control touch/action events without
+replaying an action or weakening the palette/selection assertions.
+
 ## Limits
 
 Simulator accessibility trees and activation tests do not establish the complete

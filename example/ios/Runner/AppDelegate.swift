@@ -47,14 +47,16 @@ import UIKit
 }
 
 #if DEBUG
-/// Opt-in example diagnostics. Only reads public UIKit state; it neither
-/// observes gestures nor changes the color well's presentation or actions.
+/// Opt-in example diagnostics. Reads public UIKit state and passively records
+/// control events, without recognizing gestures or invoking control actions.
 private final class ColorWellDiagnostics {
   private let file: FileHandle
   private let startedAt = ProcessInfo.processInfo.systemUptime
   private var timer: Timer?
   private var identities: [ObjectIdentifier: Int] = [:]
   private var nextIdentity = 1
+  private var eventTargets: [ObjectIdentifier: ColorWellEventTarget] = [:]
+  private var nextControlIdentity = 1
   private var previousSnapshot: String?
   private var lines = 0
   private var bytes = 0
@@ -83,7 +85,7 @@ private final class ColorWellDiagnostics {
   }
 
   private func start() {
-    record("version=1 interval=0.25 maxSeconds=180 maxLines=512 maxBytes=262144")
+    record("version=2 interval=0.25 maxSeconds=180 maxLines=512 maxBytes=262144 passiveControlEvents=true")
     sample()
     guard !stopped else { return }
     let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
@@ -112,6 +114,7 @@ private final class ColorWellDiagnostics {
       for child in view.subviews { collect(child) }
     }
     for window in windows { collect(window) }
+    var currentControls: Set<ObjectIdentifier> = []
     let summaries: [(Int, String)] = wells.map { well in
       let identity = ObjectIdentifier(well)
       let number: Int
@@ -122,7 +125,15 @@ private final class ColorWellDiagnostics {
         nextIdentity += 1
         identities[identity] = number
       }
+      observeControls(in: well, wellNumber: number, currentControls: &currentControls)
       return (number, describe(well, number: number))
+    }
+    eventTargets = eventTargets.filter { identity, target in
+      guard currentControls.contains(identity) else {
+        target.detach()
+        return false
+      }
+      return true
     }
     let currentIdentities = Set(wells.map { ObjectIdentifier($0) })
     identities = identities.filter { currentIdentities.contains($0.key) }
@@ -132,6 +143,44 @@ private final class ColorWellDiagnostics {
     guard snapshot != previousSnapshot else { return }
     previousSnapshot = snapshot
     record(snapshot)
+  }
+
+  private func observeControls(
+    in well: UIColorWell,
+    wellNumber: Int,
+    currentControls: inout Set<ObjectIdentifier>
+  ) {
+    var remainingViews = 256
+    func visit(_ view: UIView) {
+      guard !stopped, remainingViews > 0 else { return }
+      remainingViews -= 1
+      // Any nested well is discovered separately by the window scan.
+      if view !== well, view is UIColorWell { return }
+      if let control = view as? UIControl {
+        let identity = ObjectIdentifier(control)
+        currentControls.insert(identity)
+        if let existing = eventTargets[identity], existing.control === control,
+           existing.wellNumber == wellNumber {
+          // Keep a single passive target per mounted control.
+        } else {
+          eventTargets.removeValue(forKey: identity)?.detach()
+          let number = nextControlIdentity
+          nextControlIdentity += 1
+          let source = control === well ? "well" : "descendant"
+          let target = ColorWellEventTarget(control: control, wellNumber: wellNumber) {
+            [weak self] event, sender in
+            self?.record("event=\(event) well=\(wellNumber) control=\(number) source=\(source) "
+              + "enabled=\(sender.isEnabled) attached=\(sender.window != nil) "
+              + "highlighted=\(sender.isHighlighted) tracking=\(sender.isTracking) "
+              + "touchInside=\(sender.isTouchInside)")
+          }
+          eventTargets[identity] = target
+          record("observe well=\(wellNumber) control=\(number) source=\(source)")
+        }
+      }
+      for child in view.subviews { visit(child) }
+    }
+    visit(well)
   }
 
   private func describe(_ well: UIColorWell, number: Int) -> String {
@@ -221,12 +270,51 @@ private final class ColorWellDiagnostics {
     stopped = true
     timer?.invalidate()
     timer = nil
+    for target in eventTargets.values { target.detach() }
+    eventTargets.removeAll()
     try? file.close()
   }
 
   deinit {
     timer?.invalidate()
+    for target in eventTargets.values { target.detach() }
     try? file.close()
   }
+}
+
+/// UIControl does not retain its targets. The diagnostic owns these adapters;
+/// each adapter only weakly references the observed control and diagnostic.
+private final class ColorWellEventTarget: NSObject {
+  weak var control: UIControl?
+  let wellNumber: Int
+  private let record: (String, UIControl) -> Void
+
+  init(control: UIControl, wellNumber: Int, record: @escaping (String, UIControl) -> Void) {
+    self.control = control
+    self.wellNumber = wellNumber
+    self.record = record
+    super.init()
+    control.addTarget(self, action: #selector(touchDown(_:)), for: .touchDown)
+    control.addTarget(self, action: #selector(touchUpInside(_:)), for: .touchUpInside)
+    control.addTarget(self, action: #selector(touchUpOutside(_:)), for: .touchUpOutside)
+    control.addTarget(self, action: #selector(touchCancel(_:)), for: .touchCancel)
+    control.addTarget(self, action: #selector(primaryAction(_:)), for: .primaryActionTriggered)
+    control.addTarget(self, action: #selector(menuAction(_:)), for: .menuActionTriggered)
+  }
+
+  func detach() {
+    // Remove only this adapter's passive targets, leaving system actions alone.
+    control?.removeTarget(self, action: nil, for: .allEvents)
+    control = nil
+  }
+
+  @objc private func touchDown(_ sender: UIControl) { record("touchDown", sender) }
+  @objc private func touchUpInside(_ sender: UIControl) { record("touchUpInside", sender) }
+  @objc private func touchUpOutside(_ sender: UIControl) { record("touchUpOutside", sender) }
+  @objc private func touchCancel(_ sender: UIControl) { record("touchCancel", sender) }
+  @objc private func primaryAction(_ sender: UIControl) { record("primaryActionTriggered", sender) }
+  @objc private func menuAction(_ sender: UIControl) { record("menuActionTriggered", sender) }
+
+  deinit { detach() }
 }
 #endif

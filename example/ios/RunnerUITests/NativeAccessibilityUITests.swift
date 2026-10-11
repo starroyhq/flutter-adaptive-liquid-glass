@@ -29,6 +29,9 @@ final class NativeAccessibilityUITests: XCTestCase {
     let attachment = XCTAttachment(string: trace.isEmpty
       ? "Native color diagnostics unavailable: the app did not write the opt-in simulator trace."
       : trace)
+    // Synthetic, bounded state only. Keep it available in the job log as well
+    // as the result bundle, without downloading the whole bundle to inspect it.
+    print("COLOR_WELL_TRACE_BEGIN\n\(trace)COLOR_WELL_TRACE_END")
     attachment.name = "Native color well state trace"
     attachment.lifetime = .keepAlways
     add(attachment)
@@ -132,7 +135,29 @@ final class NativeAccessibilityUITests: XCTestCase {
                withVelocity: .slow, thenHoldForDuration: 0.2)
     }
     XCTAssertTrue(well.exists && well.isHittable)
-    well.tap()
+    // Flutter's scroll/layout tickers do not participate in XCTest idleness.
+    // Resolve one measured-center system tap after three stable AX frames.
+    // The probe deliberately retains element.tap() as an independent control.
+    var previousFrame = CGRect.null
+    var stableSamples = 0
+    var samples: [String] = []
+    let settled = NSPredicate { _, _ in
+      let frame = well.frame
+      samples.append("t=\(ProcessInfo.processInfo.systemUptime) frame=\(frame)")
+      let valid = !frame.isNull && !frame.isInfinite && !frame.isEmpty
+      stableSamples = valid && frame == previousFrame ? stableSamples + 1 : 0
+      previousFrame = frame
+      return stableSamples >= 2
+    }
+    let result = XCTWaiter.wait(
+      for: [XCTNSPredicateExpectation(predicate: settled, object: nil)], timeout: 45)
+    let frames = XCTAttachment(string: samples.joined(separator: "\n"))
+    frames.name = "Catalog color well frame samples"
+    frames.lifetime = .keepAlways
+    add(frames)
+    XCTAssertEqual(result, .completed)
+    XCTAssertTrue(well.isEnabled && well.isHittable)
+    well.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     _ = waitForPalette(title: "Preview color")
   }
 

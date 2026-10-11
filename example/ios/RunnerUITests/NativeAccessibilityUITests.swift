@@ -5,7 +5,7 @@ final class NativeAccessibilityUITests: XCTestCase {
 
   override func setUpWithError() throws {
     continueAfterFailure = false
-    app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+    app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-glass-color-diagnostics"]
     app.launch()
     let probe = app.buttons["Open accessibility probe"]
     XCTAssertTrue(probe.waitForExistence(timeout: 30))

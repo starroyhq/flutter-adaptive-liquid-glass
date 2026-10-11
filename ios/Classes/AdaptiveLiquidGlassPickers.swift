@@ -1,6 +1,11 @@
 import Flutter
 import UIKit
 
+private func traceColorPresentation(_ event: @autoclosure () -> String) {
+  guard ProcessInfo.processInfo.arguments.contains("-glass-color-diagnostics") else { return }
+  NSLog("[GlassColorPresentation] %@", event())
+}
+
 enum AdaptiveLiquidGlassPickerKind { case date, color }
 
 /// The picker keeps its presentation session alive even if its originating
@@ -11,15 +16,17 @@ private final class AdaptiveManagedColorPicker: UIColorPickerViewController {
 
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
+    traceColorPresentation("picker didAppear")
     presentationSession?.presentationCompleted()
   }
 
   override func viewDidDisappear(_ animated: Bool) {
     super.viewDidDisappear(animated)
+    traceColorPresentation("picker didDisappear dismissed=\(isBeingDismissed)")
     presentationSession?.disappearanceCompleted()
   }
 
-  deinit { presentationSession?.pickerDeinitialized() }
+  deinit { traceColorPresentation("picker deinit"); presentationSession?.pickerDeinitialized() }
 }
 
 /// Keep the delegate separate from UIColorWell: UIKit uses the same delegate
@@ -42,17 +49,19 @@ private final class AdaptiveColorPickerPresentation: NSObject,
     picker.presentationController?.delegate = self
     inactiveObserver = NotificationCenter.default.addObserver(
       forName: UIApplication.willResignActiveNotification, object: nil, queue: .main
-    ) { [weak self] _ in self?.cancel() }
+    ) { [weak self] _ in traceColorPresentation("willResignActive"); self?.cancel() }
   }
 
   func present(from presenter: UIViewController) {
     guard let picker else { finish(); return }
+    traceColorPresentation("present invoked")
     presenter.present(picker, animated: true) { [self] in presentationCompleted() }
     // UIKit may forward presentation through an internal host. A synchronous
     // presentedViewController identity check cannot determine whether it worked.
   }
 
   func presentationCompleted() {
+    traceColorPresentation("presentationCompleted phase=\(phase) cancelled=\(cancelled)")
     guard phase != .finished else { return }
     if phase == .presenting { phase = .presented }
     if owner?.canPresentPicker != true { cancelled = true }
@@ -60,6 +69,7 @@ private final class AdaptiveColorPickerPresentation: NSObject,
   }
 
   func cancel() {
+    traceColorPresentation("cancel phase=\(phase)")
     guard phase != .finished else { return }
     cancelled = true
     // During initial presentation, presentingViewController can still be nil.
@@ -68,6 +78,7 @@ private final class AdaptiveColorPickerPresentation: NSObject,
   }
 
   private func dismiss() {
+    traceColorPresentation("dismiss phase=\(phase)")
     guard let picker else { finish(); return }
     phase = .dismissing
     // Dismiss only this instance, including when UIKit forwarded its presenter.
@@ -97,6 +108,7 @@ private final class AdaptiveColorPickerPresentation: NSObject,
   }
 
   private func observeDismissal() {
+    traceColorPresentation("observeDismissal phase=\(phase)")
     phase = .dismissing
     picker?.transitionCoordinator?.animate(alongsideTransition: nil) { [self] context in
       guard phase != .finished else { return }
@@ -127,6 +139,7 @@ private final class AdaptiveColorPickerPresentation: NSObject,
   }
 
   private func finish(detachPicker: Bool = true) {
+    traceColorPresentation("finish phase=\(phase) detach=\(detachPicker)")
     guard phase != .finished else { return }
     phase = .finished
     if let inactiveObserver { NotificationCenter.default.removeObserver(inactiveObserver) }
@@ -207,6 +220,7 @@ private final class AdaptiveAccessibleColorWell: UIColorWell {
 
   @discardableResult
   func presentColorPicker() -> Bool {
+    traceColorPresentation("activate existing=\(colorPresentation != nil)")
     guard canPresentPicker, colorPresentation == nil else { return false }
     var responder: UIResponder? = next
     while responder != nil && !(responder is UIViewController) {
@@ -215,7 +229,7 @@ private final class AdaptiveAccessibleColorWell: UIColorWell {
     guard let presenter = responder as? UIViewController,
           presenter.viewIfLoaded?.window != nil,
           !presenter.isBeingDismissed,
-          presenter.presentedViewController == nil else { return false }
+          presenter.presentedViewController == nil else { traceColorPresentation("presenter guard rejected"); return false }
 
     let picker = AdaptiveManagedColorPicker()
     picker.modalPresentationStyle = traitCollection.userInterfaceIdiom == .pad
@@ -234,16 +248,24 @@ private final class AdaptiveAccessibleColorWell: UIColorWell {
   var canPresentPicker: Bool {
     guard usesCustomActivation, isEnabled, window != nil,
           !isHidden, !accessibilityElementsHidden,
-          UIApplication.shared.applicationState == .active else { return false }
+          UIApplication.shared.applicationState == .active else {
+      traceColorPresentation("self rejected custom=\(usesCustomActivation) enabled=\(isEnabled) attached=\(window != nil) hidden=\(isHidden) axHidden=\(accessibilityElementsHidden) app=\(UIApplication.shared.applicationState.rawValue)")
+      return false
+    }
     // The well itself is deliberately render-only. Its ancestors must still
     // accept input; route suppression, detach and background remain barriers.
     var opacity = alpha
-    guard opacity > 0.01 else { return false }
+    guard opacity > 0.01 else { traceColorPresentation("self opacity rejected"); return false }
     var ancestor = superview
+    var depth = 0
     while let view = ancestor {
       opacity *= view.alpha
       guard !view.isHidden, view.isUserInteractionEnabled,
-            !view.accessibilityElementsHidden, opacity > 0.01 else { return false }
+            !view.accessibilityElementsHidden, opacity > 0.01 else {
+        traceColorPresentation("ancestor rejected depth=\(depth) hidden=\(view.isHidden) interactive=\(view.isUserInteractionEnabled) axHidden=\(view.accessibilityElementsHidden) opacity=\(opacity)")
+        return false
+      }
+      depth += 1
       ancestor = view.superview
     }
     return true
@@ -267,7 +289,7 @@ private final class AdaptiveAccessibleColorWell: UIColorWell {
 
   override func didMoveToWindow() {
     super.didMoveToWindow()
-    if window == nil { cancelAccessibilityPresentation() }
+    if window == nil { traceColorPresentation("well detached"); cancelAccessibilityPresentation() }
   }
 
   func colorPickerDidSelect(_ presentation: AdaptiveColorPickerPresentation, color: UIColor) {
@@ -475,6 +497,7 @@ private final class AdaptiveLiquidGlassPicker: NSObject, FlutterPlatformView {
   }
 
   @objc private func activateColorPicker(_ recognizer: UITapGestureRecognizer) {
+    traceColorPresentation("tap state=\(recognizer.state.rawValue) configuring=\(configuring)")
     guard recognizer.state == .ended, !configuring else { return }
     (control as? AdaptiveAccessibleColorWell)?.presentColorPicker()
   }
@@ -492,6 +515,7 @@ private final class AdaptiveLiquidGlassPicker: NSObject, FlutterPlatformView {
 
   private func updateVisibility() {
     let hidden = routeSuppressed || (suppression.active && !popupOwner)
+    if kind == .color { traceColorPresentation("visibility route=\(routeSuppressed) suppression=\(suppression.active) owner=\(popupOwner) hidden=\(hidden)") }
     container.isHidden = hidden
     container.accessibilityElementsHidden = hidden
     (control as? AdaptiveAccessibleColorWell)?.synchronizeAccessibilityPicker()

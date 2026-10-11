@@ -46,7 +46,7 @@ final class NativeAccessibilityUITests: XCTestCase {
     XCTAssertFalse(app.buttons["Accent color"].isEnabled)
     app.buttons["Activate color accessibility"].tap()
     expectText("Accessibility activation: false")
-    XCTAssertFalse(app.navigationBars["Sample palette"].exists)
+    XCTAssertFalse(app.otherElements["UIColorPicker"].exists)
     expectText("Color calls: 0")
     app.buttons["Enable color"].tap()
     XCTAssertTrue(app.buttons["Accent color"].isEnabled)
@@ -58,8 +58,7 @@ final class NativeAccessibilityUITests: XCTestCase {
     XCTAssertTrue(well.waitForExistence(timeout: 10))
     well.tap()
     // The system palette must appear after a real touch, not a direct callback.
-    let palette = app.navigationBars["Sample palette"]
-    XCTAssertTrue(palette.waitForExistence(timeout: 15))
+    let palette = waitForPalette(title: "Sample palette")
     attachHierarchy("Native color palette after physical touch")
     // System service labels follow the device language, independently of the
     // app's launch locale. Target the grid's accessible black swatch.
@@ -72,7 +71,7 @@ final class NativeAccessibilityUITests: XCTestCase {
     expectText("Color calls: 1")
     expectText("Color value: ff000000")
     app.buttons["Activate color accessibility"].tap()
-    XCTAssertTrue(palette.waitForExistence(timeout: 15), "The native AX activation must open the system palette")
+    _ = waitForPalette(title: "Sample palette")
     attachHierarchy("Native color palette after accessibility activation")
     let whiteSwatch = app.otherElements.matching(
       NSPredicate(format: "label MATCHES[c] %@", "(white|白色) 100")
@@ -84,7 +83,7 @@ final class NativeAccessibilityUITests: XCTestCase {
     expectText("Color calls: 2")
     expectText("Color value: ffffffff")
     app.buttons["Activate color accessibility"].tap()
-    XCTAssertTrue(palette.waitForExistence(timeout: 15))
+    _ = waitForPalette(title: "Sample palette")
     closePalette(palette)
     expectText("Color calls: 2")
   }
@@ -95,11 +94,11 @@ final class NativeAccessibilityUITests: XCTestCase {
     XCTAssertTrue(pickersTab.waitForExistence(timeout: 10))
     pickersTab.tap()
     openCatalogColorPicker()
-    closePalette(app.navigationBars["Preview color"])
+    closePalette(app.otherElements["UIColorPicker"])
     app.buttons["Controls"].tap()
     pickersTab.tap()
     openCatalogColorPicker()
-    closePalette(app.navigationBars["Preview color"])
+    closePalette(app.otherElements["UIColorPicker"])
   }
 
   private func openCatalogColorPicker() {
@@ -113,12 +112,21 @@ final class NativeAccessibilityUITests: XCTestCase {
     }
     XCTAssertTrue(well.exists && well.isHittable)
     well.tap()
-    XCTAssertTrue(app.navigationBars["Preview color"].waitForExistence(timeout: 15))
+    _ = waitForPalette(title: "Preview color")
+  }
+
+  private func waitForPalette(title: String, file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
+    // iOS 26 exposes a plain title in its floating palette; iOS 27 wraps that
+    // title in a navigation bar. Both expose this named system container.
+    let palette = app.otherElements["UIColorPicker"]
+    XCTAssertTrue(palette.waitForExistence(timeout: 15), "The system palette must appear", file: file, line: line)
+    XCTAssertTrue(palette.staticTexts[title].waitForExistence(timeout: 10), "The caller's palette title must be present", file: file, line: line)
+    return palette
   }
 
   private func closePalette(_ palette: XCUIElement) {
     let close = palette.buttons.matching(
-      NSPredicate(format: "label IN %@", ["Close", "Done", "关闭", "關閉"])
+      NSPredicate(format: "label IN %@", ["close", "Close", "Done", "关闭", "關閉"])
     ).firstMatch
     XCTAssertTrue(close.waitForExistence(timeout: 10))
     close.tap()

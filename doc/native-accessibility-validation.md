@@ -67,6 +67,25 @@ reported by the separate `native-interaction` CI check; a simulator build alone
 does not establish interaction success. The tab recreation test does not claim
 to cover every preceding date-picker editing sequence in a consuming app.
 
+## iOS 26 release-gate follow-up
+
+Candidate `259404b` did not pass the iOS 26 gate in runs
+[38109128019](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38109128019)
+and [38109132088](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38109132088).
+The palette assertion incorrectly required a navigation bar: the iOS 26 system
+palette instead exposes `UIColorPicker` with a plain title and a lowercase
+`close` action. The revised check requires that named system container and the
+exact supplied title on both versions, preserving selection and callback checks.
+All three revised accessibility tests passed locally on iOS 27.
+
+One catalog attempt did not open the palette, while the other did. The slider
+also reported the wrong final detent despite matching gesture counts and stable
+input coordinates. These are unresolved release gates, not successful checks.
+The strict slider test now enables opt-in DEBUG event diagnostics and attaches
+the native touch, binding and editing sequence to its XCTest result. The local
+iOS 27 slider test passed and produced a nonempty trace. No retry or relaxed
+value/count assertion was introduced.
+
 ## Limits
 
 Simulator accessibility trees and activation tests do not establish the complete

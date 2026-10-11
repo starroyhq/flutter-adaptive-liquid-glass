@@ -527,6 +527,53 @@ case, the previous nine cases, and unchanged slider values/callback assertions.
 Debug and non-Debug Swift typechecking also pass. These local results do not
 replace the final candidate's independent cloud first-use and full CI gates.
 
+### Ordinary-controller cloud results
+
+At `29c442d`, [PR run 38152324233](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38152324233)
+passes quality, both platform builds and all ten native cases. The same source
+tree's [push run 38152321138](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38152321138)
+passes quality and both builds, but passes only eight native cases. One case
+fails first palette appearance before exercising full-screen coverage or
+backgrounding. Another fails entry into the probe before any color interaction.
+The unchanged slider case passes in both runs.
+
+The independent [first-use run 38152321092](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38152321092)
+fails first palette appearance in the catalog, matched probe and ordinary UIKit
+control. The last result means that subclassing, a lifecycle child and explicit
+root-view access are not necessary conditions for this cloud failure. Previous
+ordinary-controller successes do not establish a cause. These results do not
+invalidate the local lifecycle regressions, but the first-use release gate
+remains unresolved.
+
+The ordinary UIKit artifact `11708000051` passes its API SHA-256 check
+(`0c9c5735ac2a91e97f2e5ceebd46c46b47a2b6b614e5794cfbb4b7b343b6e122`)
+and ZIP integrity check. Its final screenshot and accessibility tree show only
+the host, with one presentation attempt and no selection callback. The physical
+button action reaches `present`, but its completion never runs. UIKit already
+reports `isViewLoaded=true` on return from initialization; no explicit view
+access does not imply an unloaded system controller. The system color service
+connects and reports activation success/readiness within the assertion window,
+then SpringBoard reports an empty hosting PID set and missing hosting scene.
+Those messages identify the observed failure sequence, not its cause or the
+presence of a macOS Simulator window.
+
+The successful and failing jobs share the runner image, Xcode 26.6, SDK 26.5,
+iOS 26.5 runtime build 23F77 and iPhone 17 Pro device type. All report completed
+simulator boot before testing. Their logs do not establish the actual Simulator
+GUI attachment or host resource state, so neither missing GUI presentation nor
+slow startup is a confirmed cause. Further diagnosis keeps the application and
+test inputs unchanged; no palette warmup, repeated click or relaxed assertion
+counts as a fix.
+
+The manual `simulator-gui-comparison` diagnostic uses two fresh hosts and the
+same plain UIKit app and XCTest: the existing simctl-only setup, and explicit
+startup of the selected Xcode's Simulator app for the job's device. Both record
+the same read-only process/window samples, session metadata and framebuffer
+policy. No palette is launched before XCTest. Missing device-window evidence,
+another booted device, or automatic GUI startup in the simctl-only arm makes the
+environment comparison invalid; the original XCTest result is retained
+separately. A single passing arm is not a repair or release result.
+
 ## Limits
 
 Simulator accessibility trees and activation tests do not establish the complete

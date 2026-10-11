@@ -6,6 +6,13 @@ on:
       - codex/native-accessibility
   workflow_dispatch:
     inputs:
+      experiment:
+        description: First-palette checks or a two-host Simulator GUI comparison
+        type: choice
+        options:
+          - first-palette
+          - simulator-gui-comparison
+        default: first-palette
       include_subclass_controls:
         description: Include the additional UIKit subclass root-cause controls
         type: boolean
@@ -32,7 +39,9 @@ jobs:
       matrix:
         include: >-
           ${{ fromJSON(
-            github.event_name == 'workflow_dispatch' && inputs.include_subclass_controls
+            github.event_name == 'workflow_dispatch' && inputs.experiment == 'simulator-gui-comparison'
+            && '[{"arm":"uikit-plain-simctl-only","hosting_mode":"simctl-only","test":"RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack"},{"arm":"uikit-plain-gui","hosting_mode":"gui","test":"RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack"}]'
+            || github.event_name == 'workflow_dispatch' && inputs.include_subclass_controls
             && '[{"arm":"original-catalog","test":"RunnerUITests/NativeAccessibilityUITests/testCatalogColorPickerReopensAfterNativeTabRecreation"},{"arm":"matched-probe","test":"RunnerUITests/NativeFirstPaletteUITests/testFirstMatchedProbePaletteSelectsBlackOnce"},{"arm":"uikit-plain","test":"RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack"},{"arm":"uikit-baseline","test":"RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack"},{"arm":"uikit-bare-subclass","test":"RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack"}]'
             || '[{"arm":"original-catalog","test":"RunnerUITests/NativeAccessibilityUITests/testCatalogColorPickerReopensAfterNativeTabRecreation"},{"arm":"matched-probe","test":"RunnerUITests/NativeFirstPaletteUITests/testFirstMatchedProbePaletteSelectsBlackOnce"},{"arm":"uikit-plain","test":"RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack"}]'
           ) }}
@@ -64,10 +73,10 @@ jobs:
       - run: pod install --deployment
         working-directory: example/ios
       - name: Build standalone UIKit control app
-        if: matrix.arm == 'uikit-baseline' || matrix.arm == 'uikit-plain' || matrix.arm == 'uikit-bare-subclass'
+        if: matrix.arm == 'uikit-baseline' || startsWith(matrix.arm, 'uikit-plain') || matrix.arm == 'uikit-bare-subclass'
         run: bash example/ios/ColorPickerBaseline/build.sh
       - name: Select the unmodified UIKit controller for the plain arm
-        if: matrix.arm == 'uikit-plain'
+        if: startsWith(matrix.arm, 'uikit-plain')
         run: |
           baseline_app=example/build/color-picker-baseline/ColorPickerBaseline.app
           /usr/libexec/PlistBuddy -c 'Add :GlassUsePlainColorPicker bool true' "$baseline_app/Info.plist"
@@ -127,13 +136,14 @@ jobs:
               summary.write(f"First palette ({os.environ['GLASS_DIAGNOSTIC_ARM']}): {destination}.\n")
           PY
       - name: Install the UIKit control app without launching it
-        if: matrix.arm == 'uikit-baseline' || matrix.arm == 'uikit-plain' || matrix.arm == 'uikit-bare-subclass'
+        if: matrix.arm == 'uikit-baseline' || startsWith(matrix.arm, 'uikit-plain') || matrix.arm == 'uikit-bare-subclass'
         env:
           GLASS_SIMULATOR_ID: ${{ steps.simulator.outputs.device_id }}
         run: >-
           xcrun simctl install "$GLASS_SIMULATOR_ID"
           example/build/color-picker-baseline/ColorPickerBaseline.app
       - name: Run only the first-palette scenario
+        if: ${{ !matrix.hosting_mode }}
         # Do not warm up the palette, retry failures, or run another test first.
         # Preserve XCTest's own recordings and verbose failure diagnostics in
         # xcresult; no additional screen-recording process changes the workload.
@@ -151,6 +161,39 @@ jobs:
           GLASS_SIMULATOR_ID: ${{ steps.simulator.outputs.device_id }}
           GLASS_ONLY_TEST: ${{ matrix.test }}
         working-directory: example/ios
+      - name: Compare Simulator hosting without changing the UIKit test
+        if: matrix.hosting_mode
+        # Fresh hosts, identical app/test inputs and one test attempt per arm.
+        # The wrapper only verifies hosting and records process/window metadata;
+        # it never launches the test app, opens a palette or changes its timeout.
+        run: >-
+          python3 ColorPickerBaseline/ci_hosting_probe.py
+          --mode "$GLASS_HOSTING_MODE" --device "$GLASS_SIMULATOR_ID"
+          --output ../build/native-color-hosting --
+          xcodebuild -workspace Runner.xcworkspace -scheme NativeSliderAcceptance
+          -configuration Debug -sdk iphonesimulator
+          -destination "platform=iOS Simulator,id=$GLASS_SIMULATOR_ID"
+          -derivedDataPath ../build/ios-native-color-diagnostics
+          -resultBundlePath ../build/native-color-diagnostics.xcresult
+          -only-testing:"$GLASS_ONLY_TEST"
+          -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1
+          -collect-test-diagnostics on-failure
+          ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO test
+        env:
+          GLASS_SIMULATOR_ID: ${{ steps.simulator.outputs.device_id }}
+          GLASS_ONLY_TEST: ${{ matrix.test }}
+          GLASS_HOSTING_MODE: ${{ matrix.hosting_mode }}
+        working-directory: example/ios
+      - name: Preserve hosting evidence only
+        if: ${{ always() && matrix.hosting_mode }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-color-${{ matrix.arm }}-hosting
+          path: |
+            example/build/native-color-hosting/*.json
+            example/build/native-color-hosting/*.jsonl
+          if-no-files-found: warn
+          retention-days: 14
       - name: Preserve complete diagnostic test results
         if: always()
         uses: actions/upload-artifact@v4

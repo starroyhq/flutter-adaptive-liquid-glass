@@ -84,7 +84,12 @@ private final class BaselineViewController: UIViewController,
   private let valueLabel = UILabel()
   private let presentationsLabel = UILabel()
   private let lifecycleLabel = UILabel()
-  private var picker: BaselineColorPicker?
+  private var picker: UIColorPickerViewController?
+  // The independent plain-UIKit CI arm changes only this fixture flag in its
+  // built app. The original arm keeps its instrumented controller subclass.
+  private var usesPlainPicker: Bool {
+    Bundle.main.object(forInfoDictionaryKey: "GlassUsePlainColorPicker") as? Bool ?? false
+  }
   private var closing = false
   private var colorCalls = 0
   private var lastContinuously: Bool?
@@ -141,16 +146,24 @@ private final class BaselineViewController: UIViewController,
       return
     }
     record("picker init begin")
-    let controller = BaselineColorPicker()
+    let controller: UIColorPickerViewController
+    if usesPlainPicker {
+      record("controller class plain UIColorPickerViewController")
+      controller = UIColorPickerViewController()
+    } else {
+      controller = BaselineColorPicker()
+    }
     record("picker init end isViewLoaded=\(controller.isViewLoaded)")
     picker = controller
     closing = false
     openButton.isEnabled = false
-    controller.onLifecycle = { [weak self] event in self?.record(event) }
-    controller.onDisappeared = { [weak self] controller in
-      guard let self, self.closing || controller.isBeingDismissed
-        || controller.presentingViewController == nil else { return }
-      self.releasePicker(controller)
+    if let instrumented = controller as? BaselineColorPicker {
+      instrumented.onLifecycle = { [weak self] event in self?.record(event) }
+      instrumented.onDisappeared = { [weak self] controller in
+        guard let self, self.closing || controller.isBeingDismissed
+          || controller.presentingViewController == nil else { return }
+        self.releasePicker(controller)
+      }
     }
     controller.delegate = self
     controller.modalPresentationStyle = .pageSheet
@@ -190,6 +203,14 @@ private final class BaselineViewController: UIViewController,
     guard viewController === picker else { return }
     closing = true
     record("delegate didFinish")
+    if usesPlainPicker {
+      // This arm has no viewDidDisappear override. Release the same owned
+      // controller after dismissal rather than retaining it past the close.
+      viewController.dismiss(animated: true) { [weak self, weak viewController] in
+        guard let viewController else { return }
+        self?.releasePicker(viewController)
+      }
+    }
   }
 
   func presentationControllerWillDismiss(_ presentationController: UIPresentationController) {
@@ -199,12 +220,12 @@ private final class BaselineViewController: UIViewController,
   }
 
   func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
-    guard let controller = presentationController.presentedViewController as? BaselineColorPicker else { return }
+    guard let controller = presentationController.presentedViewController as? UIColorPickerViewController else { return }
     record("presentation didDismiss")
     releasePicker(controller)
   }
 
-  private func releasePicker(_ controller: BaselineColorPicker) {
+  private func releasePicker(_ controller: UIColorPickerViewController) {
     guard picker === controller else { return }
     picker = nil
     closing = false

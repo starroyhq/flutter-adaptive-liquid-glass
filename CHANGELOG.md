@@ -1,4 +1,4 @@
-## Unreleased
+## 0.2.1
 
 - Give native navigation actions their explicit business labels instead of SF
   Symbol descriptions. Keep UIKit navigation and native button rendering.
@@ -6,6 +6,8 @@
   value, while retaining the native color picker and controlled callback contract.
 - Add native accessibility example and XCTest regressions for labels, theme
   updates, actual palette selection and accessibility activation.
+- Make the fallback color sample accessible through its semantic tap action,
+  rejecting callbacks after route coverage, backgrounding or disposal.
 
 ## 0.2.0
 

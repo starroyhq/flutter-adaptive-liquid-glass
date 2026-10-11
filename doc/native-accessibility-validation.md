@@ -1,7 +1,8 @@
 # Native accessibility patch validation
 
-This is an unreleased patch against 0.2.0. The package version remains 0.2.0;
-these changes do not alter the already published archive.
+This records the 0.2.1 accessibility patch against 0.2.0. The previous package
+archive remains unchanged; registry publication and commit-specific CI results
+are tracked separately from these local execution records.
 
 ## Scope
 
@@ -70,5 +71,5 @@ to cover every preceding date-picker editing sequence in a consuming app.
 
 Simulator accessibility trees and activation tests do not establish the complete
 VoiceOver experience on hardware. Real-device focus order, announcements,
-gestures, haptics and rendering remain separate acceptance work. No consuming
-application or package registry is changed by this patch.
+gestures, haptics and rendering remain separate acceptance work. These local
+validation runs do not modify consuming applications or publish packages.

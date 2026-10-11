@@ -16,6 +16,11 @@ See the [release notes](doc/release-0.2.0.md) and
 [release validation record](doc/release-validation.md) separates native system-input
 checks, platform coverage and remaining physical-device acceptance.
 
+The **0.2.1** patch fixes native navigation action labels, color-well accessibility
+activation and fallback semantic activation. See its
+[release notes](doc/release-0.2.1.md) and
+[native accessibility validation](doc/native-accessibility-validation.md).
+
 ## Installation
 
 ```sh
@@ -26,7 +31,7 @@ Or add the version to your app's `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_adaptive_liquid_glass: ^0.2.0
+  flutter_adaptive_liquid_glass: ^0.2.1
 ```
 
 Requires Flutter 3.41.2 or later and Dart 3.11 or later. Supported platforms are

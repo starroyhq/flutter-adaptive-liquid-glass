@@ -5,6 +5,11 @@ on:
     branches:
       - codex/native-accessibility
   workflow_dispatch:
+    inputs:
+      include_subclass_controls:
+        description: Include the additional UIKit subclass root-cause controls
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -22,18 +27,15 @@ jobs:
       fail-fast: false
       # Separate jobs provide fresh hosts and simulators. Running these tests
       # sequentially on one simulator would confound first-use service state.
+      # Subclass arms are optional root-cause controls, not product gates.
+      # Enable them explicitly for diagnosis; their failures remain failures.
       matrix:
-        include:
-          - arm: original-catalog
-            test: RunnerUITests/NativeAccessibilityUITests/testCatalogColorPickerReopensAfterNativeTabRecreation
-          - arm: matched-probe
-            test: RunnerUITests/NativeFirstPaletteUITests/testFirstMatchedProbePaletteSelectsBlackOnce
-          - arm: uikit-baseline
-            test: RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack
-          - arm: uikit-plain
-            test: RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack
-          - arm: uikit-bare-subclass
-            test: RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack
+        include: >-
+          ${{ fromJSON(
+            github.event_name == 'workflow_dispatch' && inputs.include_subclass_controls
+            && '[{"arm":"original-catalog","test":"RunnerUITests/NativeAccessibilityUITests/testCatalogColorPickerReopensAfterNativeTabRecreation"},{"arm":"matched-probe","test":"RunnerUITests/NativeFirstPaletteUITests/testFirstMatchedProbePaletteSelectsBlackOnce"},{"arm":"uikit-plain","test":"RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack"},{"arm":"uikit-baseline","test":"RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack"},{"arm":"uikit-bare-subclass","test":"RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack"}]'
+            || '[{"arm":"original-catalog","test":"RunnerUITests/NativeAccessibilityUITests/testCatalogColorPickerReopensAfterNativeTabRecreation"},{"arm":"matched-probe","test":"RunnerUITests/NativeFirstPaletteUITests/testFirstMatchedProbePaletteSelectsBlackOnce"},{"arm":"uikit-plain","test":"RunnerUITests/NativeColorBaselineUITests/testFirstUIKitColorPaletteSelectsBlack"}]'
+          ) }}
     steps:
       - uses: actions/checkout@v4
       - name: Verify runner and record toolchain

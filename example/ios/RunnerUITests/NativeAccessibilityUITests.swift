@@ -263,6 +263,49 @@ final class NativeAccessibilityUITests: XCTestCase {
     expectText("Color value: ff000000")
   }
 
+  func testExternalDismissalReleasesPaletteWhileFullScreenChildIsPresented() throws {
+    let enable = app.buttons["Enable native lifecycle controls"]
+    for _ in 0..<4 {
+      if enable.exists && enable.isHittable { break }
+      app.swipeUp()
+    }
+    XCTAssertTrue(enable.exists && enable.isHittable)
+    enable.tap()
+    expectText("Native lifecycle controls ready")
+    let well = app.buttons["Sample color"]
+    for _ in 0..<4 {
+      if well.exists && well.isHittable { break }
+      app.swipeDown()
+    }
+    XCTAssertTrue(well.exists && well.isHittable)
+    well.tap()
+    let palette = waitForPalette(title: "Sample palette")
+    app.buttons["Cover palette"].tap()
+    expectText("Nested native cover")
+    expectText("Native palette covered")
+
+    // This fixture calls the original palette's verified presenter directly.
+    // The source stays mounted and active; there is no package cancellation.
+    app.buttons["Dismiss covered stack"].tap()
+    expectText("Covered native stack externally dismissed")
+    XCTAssertTrue(app.staticTexts["Nested native cover"].waitForNonExistence(timeout: 10))
+    XCTAssertTrue(palette.waitForNonExistence(timeout: 10))
+    expectText("Color calls: 0")
+    XCTAssertTrue(well.exists && well.isHittable)
+
+    well.tap()
+    _ = waitForPalette(title: "Sample palette")
+    XCTAssertEqual(app.otherElements.matching(identifier: "UIColorPicker").count, 1)
+    let blackSwatch = app.otherElements.matching(
+      NSPredicate(format: "label MATCHES[c] %@", "(black|黑色) 0")
+    ).firstMatch
+    XCTAssertTrue(blackSwatch.waitForExistence(timeout: 10))
+    blackSwatch.tap()
+    closePalette(palette)
+    expectText("Color calls: 1")
+    expectText("Color value: ff000000")
+  }
+
   private func openCatalogColorPicker() {
     let well = app.buttons["Preview color"]
     for _ in 0..<4 {

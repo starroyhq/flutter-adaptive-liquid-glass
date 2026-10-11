@@ -475,6 +475,58 @@ overrides; it does not by itself establish an Apple defect. The subsequent matri
 therefore also includes an empty subclass, with no overridden methods, using the
 same physical single-tap XCTest as the other standalone UIKit arms.
 
+### Plain-controller composition follow-up
+
+At `2c6436a`, the five-arm first-use matrix
+([run 38150067123](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38150067123))
+again passes the plain UIKit controller's complete first-open, black-selection
+and close test (22.495 seconds). Both the empty Swift subclass and the subclass
+with lifecycle overrides fail the first-palette-existence assertion, in 41.503
+and 27.808 seconds respectively. The original catalog and matched probe also
+reach their first physical color-well tap, then fail the palette-existence
+assertion. Unlike the earlier `79c9ee1` matched run, this matched run successfully
+enters the probe before failing; the earlier run failed before any color tap.
+
+The catalog's diagnostic artifact `11705773033` was verified against its API
+SHA-256 (`bad3470532991edb9c0f61354060d205b871d4feabe01fa144980d6fde147927`)
+and ZIP integrity. Its final video frame shows the unchanged catalog, with no
+palette or modal backdrop. Its accessibility hierarchy likewise contains only
+the catalog and color well. This failure is not just a missing accessibility
+identifier or a visible blank panel.
+
+An empty subclass reproducing the failure rules out lifecycle overrides and
+their tracing as necessary conditions. Offline SDK 27 header/SIL inspection
+finds no wrong initializer: both subclasses forward to the public system `init`,
+and neither chooses the unavailable nib initializer. This evidence does not
+establish that Apple prohibits subclasses or identify an Apple known defect.
+
+The follow-up implementation presents an ordinary `UIColorPickerViewController`.
+A zero-size, noninteractive child observes public appearance callbacks; the
+existing delegate and independently owned presentation session continue handling
+selection and cancellation. Strong controller ownership lasts only until UIKit
+adopts it, so external dismissal of an already-covered palette can also release
+the activation gate through observer deinitialization. No controller swizzling,
+private API, delayed retry or synthetic business callback is introduced.
+
+A tenth native case covers external dismissal while the palette's full-screen
+child is still presented. It requires both views to leave, unchanged selection
+count, and a new physical opening and black selection with exactly one callback.
+The previous nine cases retain their inputs and assertions. The new candidate's
+local and cloud results are recorded separately from the failing `2c6436a` run.
+
+The routine first-use matrix now checks the catalog, matched probe and ordinary
+UIKit controller. The two subclass root-cause controls remain available through
+the explicit `include_subclass_controls` workflow-dispatch input. Their tests,
+build flags and failure behavior remain unchanged; they are not production
+controls, and are not converted into passing tests by ignoring failures.
+
+The plain-controller candidate passes all ten native tests locally, with no
+diagnostic hooks, on dedicated iOS 26.5 and iOS 27 simulators (311.953 and
+321.703 seconds respectively). Both runs include the new external-dismissal
+case, the previous nine cases, and unchanged slider values/callback assertions.
+Debug and non-Debug Swift typechecking also pass. These local results do not
+replace the final candidate's independent cloud first-use and full CI gates.
+
 ## Limits
 
 Simulator accessibility trees and activation tests do not establish the complete

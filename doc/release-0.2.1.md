@@ -35,6 +35,9 @@ fallback appearance, dependencies and minimum platform versions are unchanged.
   Cancellation keeps the activation gate closed until the old controller exits
   or is released; a late presentation also closes after its source is removed.
   Temporary production diagnostic hooks and their test launch flags are removed.
+- System palettes remain ordinary `UIColorPickerViewController` instances.
+  A noninteractive child observes lifecycle without subclassing the system
+  controller; temporary strong ownership ends after UIKit takes ownership.
 - Native picker callbacks reject queued edits after color activation-mode
   changes, backgrounding and covered-route transitions. Ordinary labels, themes
   and accepted controlled-value echoes preserve valid edits.
@@ -45,7 +48,8 @@ fallback appearance, dependencies and minimum platform versions are unchanged.
   A full-screen controller temporarily covering the palette preserves the
   existing session and controlled selection. Cancellation dismisses the verified
   owner's complete palette stack, including a still-presented child, before
-  allowing activation again.
+  allowing activation again. External dismissal of a covered palette also
+  releases its activation gate, without adding a selection callback.
 - Fallback color wells expose a semantic tap action and reject stale activation
   after route coverage, backgrounding or disposal.
 
@@ -53,19 +57,20 @@ fallback appearance, dependencies and minimum platform versions are unchanged.
 
 Local format/static analysis, all 245 package tests and all 7 example tests
 pass. The Android Debug APK and arm64 iOS simulator app build. The complete
-nine-case native suite passes without diagnostic hooks on dedicated iOS 26.5
+ten-case native suite passes without diagnostic hooks on dedicated iOS 26.5
 and iOS 27 simulators. The associated release CI identifies the final tagged commit and
 its build and interaction results.
 
-The native suite now contains eight color/accessibility cases and one unchanged
+The native suite now contains nine color/accessibility cases and one unchanged
 slider case. It covers labels/theme updates, physical and accessibility selection
 with exact callback counts, tab recreation, duplicate activation/background
 cancellation, clearing a label during presentation, and source removal followed
 by restoration. It also covers programmatic dismissal and temporary full-screen
-coverage, including background cancellation while the full-screen child is still
-presented. The slider case checks four drags and two stationary presses.
+coverage, including background cancellation and external dismissal while the
+full-screen child is still presented. The slider case checks four drags and two
+stationary presses.
 
-All nine cases are required by the dedicated iOS 26 CI gate, alongside quality
+All ten cases are required by the dedicated iOS 26 CI gate, alongside quality
 and Android/iOS build jobs. Use the release's associated CI run for the final
 tag's results; local or historical runs do not replace that gate. Full commands
 and boundaries are recorded in

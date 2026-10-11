@@ -15,6 +15,9 @@
 - Retain the owned palette across asynchronous presentation and keep its
   activation gate closed until cancellation or dismissal actually completes.
   A removed source cannot leave a late palette active or emit stale selections.
+- Present an ordinary system color-picker controller, observing lifecycle through
+  a noninteractive child instead of subclassing the system controller. Release
+  temporary strong ownership once UIKit adopts the presentation.
 - Release a palette after programmatic dismissal while preserving its session
   when a nested full-screen controller temporarily covers it.
 - Reject queued native picker and value-control edits after backgrounding,

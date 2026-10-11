@@ -3,12 +3,40 @@ import UIKit
 
 enum AdaptiveLiquidGlassPickerKind { case date, color }
 
-/// Cancellation outlives the originating platform view. UIKit can finish an
-/// asynchronous presentation after that view and its session have been removed.
-private final class AdaptiveManagedColorPicker: UIColorPickerViewController {
+/// Observe a plain system controller through public containment. First-use CI
+/// reproduced missing presentation for subclasses, including an empty subclass;
+/// keep the system controller's identity unchanged.
+/// The picker owns this noninteractive child, so a cancelled late presentation
+/// remains observable after the originating Flutter view has gone away.
+private final class AdaptiveColorPickerLifecycle: UIViewController {
   weak var presentationSession: AdaptiveColorPickerPresentation?
+  private weak var picker: UIColorPickerViewController?
   private var presentationCancelled = false
   private var cancellationDismissalInFlight = false
+
+  init(picker: UIColorPickerViewController) {
+    self.picker = picker
+    super.init(nibName: nil, bundle: nil)
+  }
+
+  required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
+
+  override func loadView() {
+    let observationView = UIView(frame: .zero)
+    observationView.backgroundColor = .clear
+    observationView.isUserInteractionEnabled = false
+    observationView.isAccessibilityElement = false
+    observationView.accessibilityElementsHidden = true
+    view = observationView
+  }
+
+  func attach() {
+    guard let picker else { return }
+    picker.addChild(self)
+    // No visible surface or hit target is added to the system palette.
+    picker.view.addSubview(view)
+    didMove(toParent: picker)
+  }
 
   func cancelPresentation() {
     presentationCancelled = true
@@ -24,19 +52,20 @@ private final class AdaptiveManagedColorPicker: UIColorPickerViewController {
   }
 
   private func dismissCancelledPresentation() {
-    guard presentationCancelled, !cancellationDismissalInFlight, !isBeingDismissed,
-          let presenter = presentingViewController,
-          presenter.presentedViewController === self else { return }
+    guard presentationCancelled, !cancellationDismissalInFlight,
+          let picker, !picker.isBeingDismissed,
+          let presenter = picker.presentingViewController,
+          presenter.presentedViewController === picker else { return }
     // Dismissing the picker itself would only close its presented child when a
     // nested controller covers it. Only its verified presenter owns this stack;
     // never dismiss an unrelated controller that has since replaced the picker.
     cancellationDismissalInFlight = true
-    presenter.dismiss(animated: false) { [weak self] in
+    presenter.dismiss(animated: false) { [weak self, weak picker] in
       guard let self else { return }
       self.cancellationDismissalInFlight = false
       // A child dismissal is not evidence that the palette has departed.
-      guard self.presentingViewController == nil,
-            self.viewIfLoaded?.window == nil else { return }
+      guard picker?.presentingViewController == nil,
+            picker?.viewIfLoaded?.window == nil else { return }
       self.presentationSession?.disappearanceCompleted()
     }
   }
@@ -51,7 +80,7 @@ private final class AdaptiveManagedColorPicker: UIColorPickerViewController {
     // Programmatic dismissal does not invoke the adaptive-presentation delegate.
     // Observe an actual dismissal here, without treating a nested full-screen
     // controller that merely covers the palette as the end of its session.
-    var controller: UIViewController? = self
+    var controller: UIViewController? = picker
     var visited = Set<ObjectIdentifier>()
     while let current = controller, visited.insert(ObjectIdentifier(current)).inserted {
       if current.isBeingDismissed {
@@ -80,18 +109,22 @@ private final class AdaptiveColorPickerPresentation: NSObject,
   private weak var owner: AdaptiveAccessibleColorWell?
   // The platform view owns this session; the picker and well point back weakly.
   // Retain the controller throughout UIKit's asynchronous presentation handoff.
-  private(set) weak var picker: AdaptiveManagedColorPicker?
-  private var retainedPicker: AdaptiveManagedColorPicker?
+  private(set) weak var picker: UIColorPickerViewController?
+  private var retainedPicker: UIColorPickerViewController?
+  private weak var lifecycle: AdaptiveColorPickerLifecycle?
   private var phase = Phase.presenting
   private(set) var cancelled = false
   private var inactiveObserver: NSObjectProtocol?
 
-  init(owner: AdaptiveAccessibleColorWell, picker: AdaptiveManagedColorPicker) {
+  init(owner: AdaptiveAccessibleColorWell, picker: UIColorPickerViewController) {
     self.owner = owner
     self.picker = picker
     retainedPicker = picker
     super.init()
-    picker.presentationSession = self
+    let lifecycle = AdaptiveColorPickerLifecycle(picker: picker)
+    self.lifecycle = lifecycle
+    lifecycle.presentationSession = self
+    lifecycle.attach()
     picker.delegate = self
     picker.presentationController?.delegate = self
     inactiveObserver = NotificationCenter.default.addObserver(
@@ -101,8 +134,8 @@ private final class AdaptiveColorPickerPresentation: NSObject,
 
   func present(from presenter: UIViewController) {
     guard phase == .presenting, !cancelled, let picker else { return }
-    presenter.present(picker, animated: true) { [weak picker] in
-      picker?.presentationCompleted()
+    presenter.present(picker, animated: true) { [weak lifecycle] in
+      lifecycle?.presentationCompleted()
     }
     // UIKit may forward presentation through an internal host. A synchronous
     // presentedViewController identity check cannot determine whether it worked.
@@ -111,16 +144,22 @@ private final class AdaptiveColorPickerPresentation: NSObject,
   func presentationCompleted() {
     guard phase != .finished else { return }
     if phase == .presenting { phase = .presented }
+    // UIKit retains a presented controller. Our strong reference is needed only
+    // for the asynchronous handoff, not after adoption. Releasing it also lets
+    // an externally dismissed, already-covered picker finish through deinit.
+    if let picker, picker.presentingViewController?.presentedViewController === picker {
+      retainedPicker = nil
+    }
     if cancelled || owner?.canPresentPicker != true { cancel() }
   }
 
   func cancel() {
     guard phase != .finished else { return }
     cancelled = true
-    guard let picker else { finish(); return }
+    guard picker != nil, let lifecycle else { finish(); return }
     let wasPresenting = phase == .presenting
     phase = .dismissing
-    picker.cancelPresentation()
+    lifecycle.cancelPresentation()
     if wasPresenting {
       // Release our strong ownership without reopening the well. If UIKit never
       // took ownership, deinit completes cancellation; otherwise the weak picker
@@ -195,12 +234,13 @@ private final class AdaptiveColorPickerPresentation: NSObject,
     if detachPicker {
       picker?.delegate = nil
       picker?.presentationController?.delegate = nil
-      picker?.presentationSession = nil
+      lifecycle?.presentationSession = nil
     }
     owner?.colorPickerDidDismiss(self)
     owner = nil
     picker = nil
     retainedPicker = nil
+    lifecycle = nil
   }
 
   deinit {
@@ -281,7 +321,7 @@ private final class AdaptiveAccessibleColorWell: UIColorWell {
           !presenter.isBeingDismissed,
           presenter.presentedViewController == nil else { return false }
 
-    let picker = AdaptiveManagedColorPicker()
+    let picker = UIColorPickerViewController()
     picker.modalPresentationStyle = traitCollection.userInterfaceIdiom == .pad
       ? .popover : .pageSheet
     if let popover = picker.popoverPresentationController {

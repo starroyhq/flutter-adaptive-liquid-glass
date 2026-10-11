@@ -83,6 +83,7 @@ private final class ExampleColorLifecycleDriver: UIViewController {
   private weak var coveredPicker: UIColorPickerViewController?
   private var cover: UIViewController?
   private var closingControls = false
+  private var dismissingCoveredStack = false
   private let status = UILabel()
   private let onClose: () -> Void
 
@@ -182,9 +183,16 @@ private final class ExampleColorLifecycleDriver: UIViewController {
     label.textColor = .white
     label.translatesAutoresizingMaskIntoConstraints = false
     controller.view.addSubview(label)
+    let dismissStack = button("Dismiss covered stack", action: #selector(dismissCoveredStack))
+    dismissStack.setTitleColor(.white, for: .normal)
+    dismissStack.translatesAutoresizingMaskIntoConstraints = false
+    controller.view.addSubview(dismissStack)
     NSLayoutConstraint.activate([
       label.centerXAnchor.constraint(equalTo: controller.view.centerXAnchor),
       label.centerYAnchor.constraint(equalTo: controller.view.centerYAnchor),
+      dismissStack.centerXAnchor.constraint(equalTo: controller.view.centerXAnchor),
+      dismissStack.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 24),
+      dismissStack.heightAnchor.constraint(equalToConstant: 44),
     ])
     coveredPicker = picker
     cover = controller
@@ -211,6 +219,34 @@ private final class ExampleColorLifecycleDriver: UIViewController {
     }
     picker.dismiss(animated: true) { [weak self] in
       self?.status.text = "Native palette programmatically dismissed"
+    }
+  }
+
+  @objc private func dismissCoveredStack() {
+    guard !dismissingCoveredStack, let cover, let picker = coveredPicker,
+          picker === activePicker(), picker.presentedViewController === cover,
+          let presenter = picker.presentingViewController,
+          presenter.presentedViewController === picker else {
+      status.text = "Covered stack dismissal failed: ownership changed"
+      return
+    }
+    dismissingCoveredStack = true
+    // Exercise an external UIKit caller. No package session or lifecycle API
+    // participates, and the completion must not keep the palette alive itself.
+    presenter.dismiss(animated: true) { [weak self, weak picker, weak cover] in
+      guard let self else { return }
+      self.dismissingCoveredStack = false
+      let paletteDeparted = picker == nil ||
+        (picker?.presentingViewController == nil && picker?.viewIfLoaded?.window == nil)
+      let coverDeparted = cover == nil ||
+        (cover?.presentingViewController == nil && cover?.viewIfLoaded?.window == nil)
+      guard paletteDeparted && coverDeparted else {
+        self.status.text = "Covered stack dismissal failed: controller remains"
+        return
+      }
+      self.cover = nil
+      self.coveredPicker = nil
+      self.status.text = "Covered native stack externally dismissed"
     }
   }
 }

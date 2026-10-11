@@ -2,15 +2,36 @@ import XCTest
 
 final class NativeAccessibilityUITests: XCTestCase {
   private let app = XCUIApplication()
+  private var traceURL: URL?
 
   override func setUpWithError() throws {
     continueAfterFailure = false
-    app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+    let trace = FileManager.default.temporaryDirectory
+      .appendingPathComponent("native-color-well-\(UUID().uuidString).log")
+    XCTAssertTrue(FileManager.default.createFile(atPath: trace.path, contents: nil))
+    traceURL = trace
+    app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+                           "--glass-color-well-trace", trace.path]
     app.launch()
     let probe = app.buttons["Open accessibility probe"]
     XCTAssertTrue(probe.waitForExistence(timeout: 30))
     probe.tap()
     XCTAssertTrue(app.staticTexts["Accessibility renderer: native"].waitForExistence(timeout: 20))
+  }
+
+  override func tearDownWithError() throws {
+    defer {
+      if let traceURL { try? FileManager.default.removeItem(at: traceURL) }
+      traceURL = nil
+    }
+    guard let traceURL else { return }
+    let trace = (try? String(contentsOf: traceURL, encoding: .utf8)) ?? ""
+    let attachment = XCTAttachment(string: trace.isEmpty
+      ? "Native color diagnostics unavailable: the app did not write the opt-in simulator trace."
+      : trace)
+    attachment.name = "Native color well state trace"
+    attachment.lifetime = .keepAlways
+    add(attachment)
   }
 
   func testNativeLabelsUpdateWithoutExtraCallbacks() throws {

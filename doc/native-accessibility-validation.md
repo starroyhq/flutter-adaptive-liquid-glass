@@ -81,10 +81,22 @@ All three revised accessibility tests passed locally on iOS 27.
 One catalog attempt did not open the palette, while the other did. The slider
 also reported the wrong final detent despite matching gesture counts and stable
 input coordinates. These are unresolved release gates, not successful checks.
-The strict slider test now enables opt-in DEBUG event diagnostics and attaches
-the native touch, binding and editing sequence to its XCTest result. The local
-iOS 27 slider test passed and produced a nonempty trace. No retry or relaxed
-value/count assertion was introduced.
+Candidate `e63d025` corrected the palette locator. Run
+[38110718367](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38110718367)
+passed every job; run
+[38110714485](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38110714485)
+passed the probe, label and slider tests but still failed the catalog's first
+palette opening. Both runs' slider diagnostics contained valid start/change/end
+sequences, including late UIKit editing notifications correctly ignored by the
+existing state machine. This does not establish the cause of the earlier slider
+failure, and its temporary tracing has now been removed for an unchanged strict
+regression run.
+
+The next diagnostic run samples public color-well visibility, hit testing and
+presentation state in the example only, under an explicit DEBUG launch option.
+It does not add gestures, open the picker, retry taps, or change production
+controls. No retry or relaxed value/count assertion has been introduced. The
+package remains unpublished pending an uninstrumented release-gate run.
 
 ## Limits
 

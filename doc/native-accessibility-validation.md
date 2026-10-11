@@ -56,9 +56,10 @@ with strict value and callback-count assertions. The CI native-interaction job
 requires an actual iOS 26 runtime and creates its own simulator; it does not
 substitute iOS 27.
 
-Local checks on Flutter 3.41.9 / Dart 3.11.5, Xcode 27.0. Package/example checks
-were rerun after the ownership follow-up without temporary diagnostics. Final
-native reruns are listed separately from earlier candidates' results.
+Local checks for ownership candidate `e142e8c` on Flutter 3.41.9 / Dart 3.11.5,
+Xcode 27.0. Package/example checks were rerun after the ownership follow-up
+without temporary diagnostics. These pinned results do not validate later
+diagnostic or queued-event changes.
 
 | Check | Result |
 | --- | --- |
@@ -66,8 +67,8 @@ native reruns are listed separately from earlier candidates' results.
 | `flutter test --no-pub` | 224 package tests passed. |
 | Same test command from `example` | 7 example tests passed. |
 | `flutter build apk --debug --no-pub` from `example` | Debug APK built during patch validation. |
-| Final uninstrumented arm64 iOS build and XCTest on dedicated iOS 26.5 | All 7 tests passed: 6 color/accessibility cases and 1 slider case. |
-| Final uninstrumented arm64 iOS build and XCTest on dedicated iOS 27.0 | All 7 tests passed: 6 color/accessibility cases and 1 slider case. |
+| `e142e8c` uninstrumented arm64 iOS build and XCTest on dedicated iOS 26.5 | All 7 tests passed: 6 color/accessibility cases and 1 slider case. |
+| `e142e8c` uninstrumented arm64 iOS build and XCTest on dedicated iOS 27.0 | All 7 tests passed: 6 color/accessibility cases and 1 slider case. |
 | `git diff --check` and local public-source scan | Passed. |
 
 The iOS command, from `example/ios`, is:
@@ -252,6 +253,39 @@ view within initialization even without an explicit view access; the three-arm
 comparison cannot isolate view preloading as a cause. The corrected raw-count
 fixture passed on the already-used local baseline device; that rerun validates
 the fixture assertions, not another cold-start attempt.
+
+## Queued-event review follow-up
+
+Independent review found that an already-sent picker event could outlive a
+custom-label activation mode or an active application lifecycle. The Dart bridge
+now advances its revision when a color label switches between null and non-null,
+and immediately when leaving the resumed state, even before another frame.
+Ordinary non-null renaming, theme changes and accepted controlled-value echoes
+retain valid edits. Incoming messages also check current route coverage,
+including an overlay's exit animation, and application activity.
+
+Eight new regressions cover color activation-mode changes, both date and color
+background/resume and reverse-transition coverage, valid renaming/theme updates,
+and same-frame consecutive native edits. Against the old implementation, the
+focused regression run produced five incorrect-callback failures. With the fix,
+all 31 picker tests and all 232 package tests passed. The instrumented seven-case
+native suite also passed on the dedicated local iOS 26.5 simulator. These runs
+precede the additional same-frame coverage review below and do not claim to
+resolve the first-palette cloud failure.
+
+Follow-up review found that coverage retained and released before another frame
+could also leave an old revision valid. The bridge now listens to coverage
+changes and invalidates on entry synchronously, using routes cached during
+dependency updates. Two additional date/color regressions reproduce that case
+without an intervening frame: both failed before the fix and passed afterward.
+All 33 picker tests and all 234 package tests passed, with clean static analysis
+and independent review. Reliable history for a popup that opens and disappears
+within one frame requires the documented `LiquidGlassNavigatorObserver`.
+
+The first diagnostic matrix at `eaf718d` did not execute any tests: Xcode 26.6
+rejected `-test-iterations 1`, which only accepts values greater than one. The
+workflow removes that argument and uses the default single attempt. This setup
+failure is not evidence for any of the three presentation hypotheses.
 
 ## Limits
 

@@ -6,6 +6,7 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_adaptive_liquid_glass/src/native_picker.dart';
+import 'package:flutter_adaptive_liquid_glass/src/native_visibility.dart';
 import 'package:flutter_adaptive_liquid_glass/src/fallback_date_wheels.dart';
 import 'package:flutter_adaptive_liquid_glass/src/fallback_value_controls.dart';
 import 'package:flutter_adaptive_liquid_glass/src/pickers.dart';
@@ -793,6 +794,228 @@ void main() {
 
   for (final kind in ['date', 'color']) {
     testWidgets(
+      'native $kind keeps pending changes through label rename and theme updates',
+      (tester) async {
+        final bridge = _PickerBridgeHarness(tester, kind);
+        final changes = <Object?>[];
+        var label = 'Original label';
+        var dark = false;
+        late StateSetter update;
+        await tester.pumpWidget(
+          _app(
+            StatefulBuilder(
+              builder: (context, setState) {
+                update = setState;
+                return Theme(
+                  data: dark ? ThemeData.dark() : ThemeData.light(),
+                  child: NativePicker(
+                    kind: kind,
+                    height: 48,
+                    configuration: {
+                      'value': 1,
+                      'enabled': true,
+                      'semanticLabel': label,
+                    },
+                    onChanged: changes.add,
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final revision = bridge.config['revision'];
+        update(() {
+          label = 'Renamed label';
+          dark = true;
+        });
+        await tester.pumpAndSettle();
+        expect(bridge.config['revision'], revision);
+        await bridge.event(revision, 2);
+        // No frame between these events: neither may reset the other's proposal.
+        await bridge.event(revision, 3);
+        expect(changes, [2, 3]);
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+    );
+
+    testWidgets(
+      'native $kind rejects queued changes immediately on background and after resume',
+      (tester) async {
+        final bridge = _PickerBridgeHarness(tester, kind);
+        final changes = <Object?>[];
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        addTearDown(() {
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          );
+        });
+        await tester.pumpWidget(
+          _app(
+            NativePicker(
+              kind: kind,
+              height: 48,
+              configuration: const {'value': 1, 'enabled': true},
+              onChanged: changes.add,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final revision = bridge.config['revision'];
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        await bridge.event(revision, 2);
+        expect(changes, isEmpty);
+        // Resume before a frame so invalidation cannot rely on a rebuild.
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await bridge.event(revision, 3);
+        expect(changes, isEmpty);
+        await tester.pumpAndSettle();
+        expect(bridge.config['revision'], isNot(revision));
+        await bridge.event(bridge.config['revision'], 4);
+        expect(changes, [4]);
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpAndSettle();
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        expect(tester.takeException(), isNull);
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+    );
+
+    testWidgets(
+      'native $kind rejects changes while the current route has retained exit coverage',
+      (tester) async {
+        final bridge = _PickerBridgeHarness(tester, kind);
+        final changes = <Object?>[];
+        await tester.pumpWidget(
+          _app(
+            NativePicker(
+              kind: kind,
+              height: 48,
+              configuration: const {'value': 1, 'enabled': true},
+              onChanged: changes.add,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final revision = bridge.config['revision'];
+        final route = ModalRoute.of(tester.element(find.byType(NativePicker)))!;
+        final coverage = Object();
+        addTearDown(() => nativeRouteCoverage.release(coverage));
+        // This is the state after pop but before an overlay's reverse animation
+        // finishes: route.isCurrent alone does not make the picker interactive.
+        expect(route.isCurrent, isTrue);
+        nativeRouteCoverage.retain(coverage, [route]);
+        await bridge.event(revision, 2);
+        expect(changes, isEmpty);
+        await tester.pumpAndSettle();
+        expect(bridge.config['suppressed'], isTrue);
+        await bridge.event(bridge.config['revision'], 3);
+        expect(changes, isEmpty);
+        nativeRouteCoverage.release(coverage);
+        await tester.pumpAndSettle();
+        expect(bridge.config['suppressed'], isFalse);
+        await bridge.event(revision, 4);
+        expect(changes, isEmpty);
+        await bridge.event(bridge.config['revision'], 5);
+        expect(changes, [5]);
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+    );
+
+    testWidgets(
+      'native $kind invalidates coverage that starts and ends before a frame',
+      (tester) async {
+        final bridge = _PickerBridgeHarness(tester, kind);
+        final changes = <Object?>[];
+        await tester.pumpWidget(
+          _app(
+            NativePicker(
+              kind: kind,
+              height: 48,
+              configuration: const {'value': 1, 'enabled': true},
+              onChanged: changes.add,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final revision = bridge.config['revision'];
+        final route = ModalRoute.of(tester.element(find.byType(NativePicker)))!;
+        final coverage = Object();
+        addTearDown(() => nativeRouteCoverage.release(coverage));
+        nativeRouteCoverage.retain(coverage, [route]);
+        nativeRouteCoverage.release(coverage);
+        // Delivery occurs only after coverage has ended, without a build ever
+        // observing it. The original interaction must still remain invalid.
+        await bridge.event(revision, 2);
+        expect(changes, isEmpty);
+        await tester.pumpAndSettle();
+        expect(bridge.config['suppressed'], isFalse);
+        expect(bridge.config['revision'], isNot(revision));
+        await bridge.event(revision, 3);
+        expect(changes, isEmpty);
+        await bridge.event(bridge.config['revision'], 4);
+        expect(changes, [4]);
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+    );
+
+    testWidgets(
+      'native $kind invalidates only color activation mode changes',
+      (tester) async {
+        final bridge = _PickerBridgeHarness(tester, kind);
+        final changes = <Object?>[];
+        String? label = 'Labeled';
+        late StateSetter update;
+        await tester.pumpWidget(
+          _app(
+            StatefulBuilder(
+              builder: (context, setState) {
+                update = setState;
+                return NativePicker(
+                  kind: kind,
+                  height: 48,
+                  configuration: {
+                    'value': 1,
+                    'enabled': true,
+                    'semanticLabel': label,
+                  },
+                  onChanged: changes.add,
+                );
+              },
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final labeledRevision = bridge.config['revision'];
+        update(() => label = null);
+        await tester.pumpAndSettle();
+        await bridge.event(labeledRevision, 2);
+        expect(changes, kind == 'color' ? isEmpty : [2]);
+        // Do not flush a rejected controlled edit from the date case into the
+        // second mode-change assertion.
+        await tester.pumpAndSettle();
+        changes.clear();
+        final unlabeledRevision = bridge.config['revision'];
+        update(() => label = 'Labeled again');
+        await tester.pumpAndSettle();
+        await bridge.event(unlabeledRevision, 3);
+        expect(changes, kind == 'color' ? isEmpty : [3]);
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+    );
+
+    testWidgets(
       'native $kind continuous changes survive echoes and reject old resets',
       (tester) async {
         final bridge = _PickerBridgeHarness(tester, kind);
@@ -828,13 +1051,19 @@ void main() {
         await tester.pumpAndSettle();
         expect(value, 3);
         expect(bridge.config['valueIsEcho'], isTrue);
+        await bridge.event(revision, 4);
+        await bridge.event(revision, 5);
+        await tester.pumpAndSettle();
+        expect(value, 5);
+        expect(bridge.config['revision'], revision);
+        expect(bridge.config['valueIsEcho'], isTrue);
         update(() => value = 10);
         await tester.pumpAndSettle();
         expect(bridge.config['revision'], isNot(revision));
         expect(bridge.config['valueIsEcho'], isFalse);
-        await bridge.event(revision, 4);
+        await bridge.event(revision, 6);
         expect(value, 10);
-        expect(changes, [2, 3]);
+        expect(changes, [2, 3, 4, 5]);
       },
       variant: TargetPlatformVariant.only(TargetPlatform.iOS),
     );

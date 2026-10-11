@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'feedback.dart';
 import 'native_visibility.dart';
 
 /// Private bridge: one UIKit control and one ordered, atomic configuration
@@ -27,7 +28,8 @@ class NativePicker extends StatefulWidget {
   State<NativePicker> createState() => _NativePickerState();
 }
 
-class _NativePickerState extends State<NativePicker> {
+class _NativePickerState extends State<NativePicker>
+    with WidgetsBindingObserver {
   MethodChannel? _channel;
   Map<String, Object?>? _desired;
   Map<String, Object?>? _sent;
@@ -37,6 +39,55 @@ class _NativePickerState extends State<NativePicker> {
   Map<String, Object?> _configuration = {};
   Object? _lastProposedValue;
   bool _proposalPending = false;
+  bool _applicationActive = true;
+  List<Route<dynamic>> _coverageRoutes = const [];
+  bool _routeCovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _applicationActive =
+        lifecycle == null || lifecycle == AppLifecycleState.resumed;
+    WidgetsBinding.instance.addObserver(this);
+    nativeRouteCoverage.addListener(_coverageChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _coverageRoutes = _ancestorRoutes();
+    _coverageChanged();
+  }
+
+  void _invalidateInteraction() {
+    ++_revision;
+    _lastProposedValue = null;
+    _proposalPending = false;
+  }
+
+  void _coverageChanged() {
+    final covered = _coverageRoutes.any(nativeRouteCoverage.covers);
+    if (_routeCovered == covered) return;
+    _routeCovered = covered;
+    // An overlay can be added and removed without Flutter rendering a frame.
+    // Observe its start directly so restoring visibility cannot revive an edit.
+    if (covered) _invalidateInteraction();
+    _scheduleFlush();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final active = state == AppLifecycleState.resumed;
+    if (_applicationActive == active) return;
+    _applicationActive = active;
+    if (!active) {
+      // Invalidate queued native edits immediately, even when pause and resume
+      // both happen before Flutter can produce another frame.
+      _invalidateInteraction();
+    }
+    _scheduleFlush();
+  }
 
   List<Route<dynamic>> _ancestorRoutes() {
     Route<dynamic>? route = ModalRoute.of(context);
@@ -60,7 +111,8 @@ class _NativePickerState extends State<NativePicker> {
       if (mounted &&
           _channel == channel &&
           call.method == 'changed' &&
-          widget.configuration['enabled'] == true) {
+          widget.configuration['enabled'] == true &&
+          LiquidGlassFeedback.canInteract(context)) {
         final payload = call.arguments;
         if (payload is Map && payload['revision'] == _revision) {
           _lastProposedValue = payload['value'];
@@ -120,7 +172,9 @@ class _NativePickerState extends State<NativePicker> {
     var suppressed = false;
     var popupOwner = false;
     for (final ancestor in _ancestorRoutes()) {
-      suppressed |= ancestor.isActive && !ancestor.isCurrent;
+      suppressed |=
+          (ancestor.isActive && !ancestor.isCurrent) ||
+          nativeRouteCoverage.covers(ancestor);
       popupOwner |= ancestor is PopupRoute;
     }
     final configuration = <String, Object?>{
@@ -145,9 +199,14 @@ class _NativePickerState extends State<NativePicker> {
       'suppressed',
       'supportsAlpha',
     ].any((key) => configuration[key] != _configuration[key]);
+    final activationModeChanged =
+        widget.kind == 'color' &&
+        (configuration['semanticLabel'] == null) !=
+            (_configuration['semanticLabel'] == null);
     final reset =
         _configuration.isEmpty ||
         interactionChanged ||
+        activationModeChanged ||
         (configuration['value'] != _configuration['value'] && !echo) ||
         (_proposalPending && !echo);
     if (reset) {
@@ -197,6 +256,8 @@ class _NativePickerState extends State<NativePicker> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    nativeRouteCoverage.removeListener(_coverageChanged);
     final channel = _channel;
     _channel = null;
     channel?.setMethodCallHandler(null);

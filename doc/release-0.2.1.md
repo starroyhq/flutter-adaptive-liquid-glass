@@ -31,13 +31,19 @@ fallback appearance, dependencies and minimum platform versions are unchanged.
   or is released; a late presentation also closes after its source is removed.
   Temporary diagnostic hooks must be removed after the ongoing cloud first-use
   investigation and before the final release gate.
+- Native picker callbacks reject queued edits after color activation-mode
+  changes, backgrounding and covered-route transitions. Ordinary labels, themes
+  and accepted controlled-value echoes preserve valid edits.
 - Fallback color wells expose a semantic tap action and reject stale activation
   after route coverage, backgrounding or disposal.
 
 ## Validation
 
-The final implementation passed local format/static analysis, 224 package
-tests and 7 example tests. The Android Debug APK and arm64 iOS simulator app
+Ownership candidate `e142e8c` passed local format/static analysis, 224 package
+tests and 7 example tests. The subsequent queued-event and transient-coverage
+fixes passed all 234 package tests and static analysis; they still require the
+final clean native gate.
+The Android Debug APK and arm64 iOS simulator app
 built during patch validation. The complete seven-case native suite passed
 without diagnostics on dedicated iOS 26.5 and iOS 27 simulators after the
 ownership follow-up.

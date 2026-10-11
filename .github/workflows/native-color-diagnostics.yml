@@ -126,7 +126,6 @@ jobs:
           -derivedDataPath ../build/ios-native-color-diagnostics
           -resultBundlePath ../build/native-color-diagnostics.xcresult
           -only-testing:"$GLASS_ONLY_TEST"
-          -test-iterations 1
           -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1
           -collect-test-diagnostics on-failure
           ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO test

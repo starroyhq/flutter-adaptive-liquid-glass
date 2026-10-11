@@ -22,6 +22,12 @@ Fallback color wells also expose semantic activation. See its
 [release notes](doc/release-0.2.1.md) and
 [native accessibility validation](doc/native-accessibility-validation.md).
 
+**Known validation limit:** some hosted iOS 26.5 runs fail to display the system
+color palette after its first real tap. A standalone UIKit app reproduces the
+failure both with and without a Simulator window. The cause is unresolved;
+0.2.1 does not claim to fix that first-use failure or prove hardware is unaffected.
+See [validation limits](doc/release-0.2.1.md#known-limitation).
+
 ## Installation
 
 ```sh

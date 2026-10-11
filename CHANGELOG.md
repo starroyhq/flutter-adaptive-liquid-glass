@@ -27,6 +27,9 @@
   updates, actual palette selection and accessibility activation.
 - Make the fallback color sample accessible through its semantic tap action,
   rejecting callbacks after route coverage, backgrounding or disposal.
+- Document an unresolved first-use system palette failure in some hosted iOS
+  26.5 runs, also reproduced by a standalone UIKit control. Passing lifecycle
+  regressions do not establish that this separate first-use failure is fixed.
 
 ## 0.2.0
 

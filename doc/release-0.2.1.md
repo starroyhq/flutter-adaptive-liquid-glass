@@ -13,6 +13,21 @@ dependencies:
 Run `flutter pub get` and rebuild the native app. Public Dart APIs, existing
 fallback appearance, dependencies and minimum platform versions are unchanged.
 
+## Known limitation
+
+Some hosted iOS 26.5 runs do not display the system color palette after the first
+real tap. This affects both the component's tests and a standalone UIKit app;
+the latter also fails with a verified Simulator window. The presentation is
+requested, but does not complete. The cause remains unresolved. These results
+do not prove that hardware or every consuming app is unaffected, and this patch
+does not claim to repair that first-use failure.
+
+Successful local and cloud lifecycle regressions remain useful evidence for the
+fixes below, but do not erase those failures. The [validation record](native-accessibility-validation.md#release-decision-and-remaining-boundary)
+keeps the failures and the separate diagnostic workflow. Publication requires
+one preselected final-commit `Component checks` run to pass quality, both builds
+and all ten unchanged native acceptance cases; a failed gate leaves a candidate.
+
 ## Fixes
 
 - Native sliders use `UISlider` values and tracking, preserving final detents

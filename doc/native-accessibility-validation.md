@@ -525,7 +525,8 @@ diagnostic hooks, on dedicated iOS 26.5 and iOS 27 simulators (311.953 and
 321.703 seconds respectively). Both runs include the new external-dismissal
 case, the previous nine cases, and unchanged slider values/callback assertions.
 Debug and non-Debug Swift typechecking also pass. These local results do not
-replace the final candidate's independent cloud first-use and full CI gates.
+replace the independent cloud results recorded below or establish that the
+first-use failure is fixed.
 
 ### Ordinary-controller cloud results
 
@@ -542,8 +543,9 @@ fails first palette appearance in the catalog, matched probe and ordinary UIKit
 control. The last result means that subclassing, a lifecycle child and explicit
 root-view access are not necessary conditions for this cloud failure. Previous
 ordinary-controller successes do not establish a cause. These results do not
-invalidate the local lifecycle regressions, but the first-use release gate
-remains unresolved.
+invalidate the local lifecycle regressions. At that point the first-use result
+remained an unresolved release concern; the subsequent bounded diagnosis and
+final release decision are described below.
 
 The ordinary UIKit artifact `11708000051` passes its API SHA-256 check
 (`0c9c5735ac2a91e97f2e5ceebd46c46b47a2b6b614e5794cfbb4b7b343b6e122`)
@@ -573,6 +575,33 @@ policy. No palette is launched before XCTest. Missing device-window evidence,
 another booted device, or automatic GUI startup in the simctl-only arm makes the
 environment comparison invalid; the original XCTest result is retained
 separately. A single passing arm is not a repair or release result.
+
+### Release decision and remaining boundary
+
+The explicit GUI comparison at `5c26355`
+([run 38155229993](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38155229993))
+fails the same first-palette-existence assertion in both arms. Both comparisons
+are valid: the GUI arm records its exact device window in all 24 test-time
+samples, while the simctl-only arm records no GUI in all 27 samples. Both reach
+XCTest, run identical source hashes and test arguments apart from device UUID,
+and use iOS 26.5 (23F77). Their small hosting artifacts pass API SHA-256 and ZIP
+integrity checks. Opening a Simulator window is therefore not a sufficient fix;
+the experiment does not identify a platform root cause.
+
+Further speculative production changes and open-ended diagnostic reruns stop
+here. The first-use workflow remains manually available with its original
+inputs, assertions and failure behavior. The unresolved visible failure is
+disclosed in the README, changelog and patch release notes. A standalone UIKit
+reproduction is evidence that the component-specific bridge is not necessary
+for the failure, not evidence that all applications or hardware are unaffected.
+
+The final publication gate is one preselected `Component checks` run for the
+final source commit: quality, Android, iOS build and all ten native cases must
+pass. Its inputs, assertions and runtime selection remain unchanged. A failed
+gate leaves the patch as a candidate; it must not be rerun or replaced by an
+empty source change to seek a green result. Historical failures remain separate
+from the passing local regressions and any successful final gate. Publication
+does not claim the first-use limitation is repaired.
 
 ## Limits
 

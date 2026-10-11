@@ -1,9 +1,8 @@
 name: Native color first-use diagnostics
 
 on:
-  push:
-    branches:
-      - codex/native-accessibility
+  # Root-cause experiments remain reproducible, but are separate from the
+  # unchanged ten-case native suite in Component checks.
   workflow_dispatch:
     inputs:
       experiment:

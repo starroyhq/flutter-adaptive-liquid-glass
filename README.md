@@ -537,9 +537,11 @@ Custom `OverlayEntry` presentations are not Navigator routes: stop painting the
 underlying native controls while such an overlay is active. Changing themes does
 not remove the native tab platform view. Verify system materials on iOS hardware.
 
-`NavigationBar` falls back when an action is disabled or its IconData lacks an
-SF Symbol, preserving enabled state and icons that the native navigation-bar
-provider cannot express. Basic icon-only navigation should supply both.
+`NavigationBar` retains its existing Flutter layout conditions when an action
+is disabled or its IconData lacks an SF Symbol. Basic icon-only navigation should
+supply both. The supported native layout uses a package-owned `UINavigationBar`
+bridge and announces each action's business label. UIKit retains the system
+material and bar-button rendering.
 
 ## Validation
 

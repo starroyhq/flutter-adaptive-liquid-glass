@@ -1,0 +1,74 @@
+# Native accessibility patch validation
+
+This is an unreleased patch against 0.2.0. The package version remains 0.2.0;
+these changes do not alter the already published archive.
+
+## Scope
+
+- Native navigation buttons announce the supplied action label instead of an SF
+  Symbol description. UIKit still owns the navigation bar and its button material.
+  Visual configuration updates retain valid pending clicks; action replacement,
+  disabling, route coverage and lifecycle changes invalidate stale interactions.
+- A labeled native color well exposes its label and the system's localized color
+  description. Its accessibility action presents a public UIKit color picker
+  with an independent delegate; the physical color-well interaction continues
+  to use UIKit's own delegate. Native palette selection remains controlled by
+  the caller. Disabled, covered, detached and inactive wells reject activation.
+- The fallback color sample exposes an actionable semantics node, in addition
+  to its existing physical touch and keyboard input.
+
+## Reproduction and automated evidence
+
+The example's **Open accessibility probe** entry provides a synthetic surface
+with business labels, theme changes, programmatic color resets, disabled state
+and callback counters. Its example-only platform channel calls the public
+`accessibilityActivate()` entry point; it does not synthesize a color change.
+
+`NativeAccessibilityUITests` checks real system touches separately from that
+accessibility action. It opens the system palette, selects one native black
+swatch, and asserts one callback with opaque black. It then selects white through
+the accessibility-opened system palette and checks exactly one additional
+callback. Reopening and canceling must not add callbacks. A separate scenario reopens the catalog palette after native
+tab recreation. System palette labels may use the device language rather than
+the application's locale, so tests identify the supplied palette title and use
+localized system action labels.
+
+The existing `NativeSliderAcceptance` scheme includes both the slider and
+accessibility XCTest classes. The CI native-interaction job requires an actual
+iOS 26 runtime and creates its own simulator; it does not substitute iOS 27.
+
+Local checks on Flutter 3.41.9 / Dart 3.11.5, Xcode 27.0:
+
+| Check | Result |
+| --- | --- |
+| Root and example format / static analysis | Passed, no issues. |
+| `flutter test --no-pub --reporter expanded` | 224 package tests passed. |
+| Same test command from `example` | 7 example tests passed. |
+| `flutter build apk --debug --no-pub` from `example` | Debug APK built. |
+| Arm64 iOS simulator build and `NativeSliderAcceptance` XCTest on dedicated iOS 27.0 | All 4 tests passed: 3 accessibility/color scenarios and the existing 6-operation slider scenario. |
+| `git diff --check` and local public-source scan | Passed. |
+
+The iOS command, from `example/ios`, is:
+
+```sh
+xcodebuild -workspace Runner.xcworkspace -scheme NativeSliderAcceptance \
+  -configuration Debug -sdk iphonesimulator \
+  -destination 'platform=iOS Simulator,id=<dedicated-device-id>' \
+  -derivedDataPath ../build/ios-ax \
+  -resultBundlePath ../build/native-accessibility.xcresult \
+  -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
+  -collect-test-diagnostics never \
+  ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO test
+```
+
+The local runtime is iOS 27, not iOS 26. Commit-specific iOS 26 results are
+reported by the separate `native-interaction` CI check; a simulator build alone
+does not establish interaction success. The tab recreation test does not claim
+to cover every preceding date-picker editing sequence in a consuming app.
+
+## Limits
+
+Simulator accessibility trees and activation tests do not establish the complete
+VoiceOver experience on hardware. Real-device focus order, announcements,
+gestures, haptics and rendering remain separate acceptance work. No consuming
+application or package registry is changed by this patch.

@@ -1,0 +1,142 @@
+import XCTest
+
+final class NativeAccessibilityUITests: XCTestCase {
+  private let app = XCUIApplication()
+
+  override func setUpWithError() throws {
+    continueAfterFailure = false
+    app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+    app.launch()
+    let probe = app.buttons["Open accessibility probe"]
+    XCTAssertTrue(probe.waitForExistence(timeout: 30))
+    probe.tap()
+    XCTAssertTrue(app.staticTexts["Accessibility renderer: native"].waitForExistence(timeout: 20))
+  }
+
+  func testNativeLabelsUpdateWithoutExtraCallbacks() throws {
+    let theme = app.buttons["theme"]
+    XCTAssertTrue(theme.waitForExistence(timeout: 10))
+    XCTAssertEqual(theme.label, "Toggle theme")
+    XCTAssertEqual(app.buttons["back"].label, "Back to catalog")
+    XCTAssertTrue(app.buttons["Sample color"].exists)
+    let initialColorName = app.buttons["Sample color"].value as? String ?? ""
+    XCTAssertFalse(initialColorName.isEmpty)
+
+    theme.tap()
+    expectText("Navigation calls: 1")
+    expectText("Appearance: dark")
+    XCTAssertEqual(theme.label, "Toggle theme")
+    XCTAssertTrue(app.buttons["Sample color"].exists)
+
+    app.buttons["Rename controls"].tap()
+    XCTAssertEqual(theme.label, "Switch appearance")
+    XCTAssertFalse(app.buttons["Sample color"].exists)
+    XCTAssertTrue(app.buttons["Accent color"].exists)
+    theme.tap()
+    expectText("Navigation calls: 2")
+    expectText("Appearance: light")
+
+    app.buttons["Set red programmatically"].tap()
+    expectText("Color calls: 0")
+    expectText("Color value: ffff0000")
+    let redColorName = app.buttons["Accent color"].value as? String ?? ""
+    XCTAssertFalse(redColorName.isEmpty)
+    XCTAssertNotEqual(redColorName, initialColorName)
+    app.buttons["Disable color"].tap()
+    XCTAssertFalse(app.buttons["Accent color"].isEnabled)
+    app.buttons["Activate color accessibility"].tap()
+    expectText("Accessibility activation: false")
+    XCTAssertFalse(app.navigationBars["Sample palette"].exists)
+    expectText("Color calls: 0")
+    app.buttons["Enable color"].tap()
+    XCTAssertTrue(app.buttons["Accent color"].isEnabled)
+    attachHierarchy("Labels after native configuration updates")
+  }
+
+  func testColorWellKeepsSystemPickerAndAccessibilityActivation() throws {
+    let well = app.buttons["Sample color"]
+    XCTAssertTrue(well.waitForExistence(timeout: 10))
+    well.tap()
+    // The system palette must appear after a real touch, not a direct callback.
+    let palette = app.navigationBars["Sample palette"]
+    XCTAssertTrue(palette.waitForExistence(timeout: 15))
+    attachHierarchy("Native color palette after physical touch")
+    // System service labels follow the device language, independently of the
+    // app's launch locale. Target the grid's accessible black swatch.
+    let blackSwatch = app.otherElements.matching(
+      NSPredicate(format: "label MATCHES[c] %@", "(black|黑色) 0")
+    ).firstMatch
+    XCTAssertTrue(blackSwatch.waitForExistence(timeout: 10))
+    blackSwatch.tap()
+    closePalette(palette)
+    expectText("Color calls: 1")
+    expectText("Color value: ff000000")
+    app.buttons["Activate color accessibility"].tap()
+    XCTAssertTrue(palette.waitForExistence(timeout: 15), "The native AX activation must open the system palette")
+    attachHierarchy("Native color palette after accessibility activation")
+    let whiteSwatch = app.otherElements.matching(
+      NSPredicate(format: "label MATCHES[c] %@", "(white|白色) 100")
+    ).firstMatch
+    XCTAssertTrue(whiteSwatch.waitForExistence(timeout: 10))
+    whiteSwatch.tap()
+    closePalette(palette)
+    expectText("Accessibility activation: true")
+    expectText("Color calls: 2")
+    expectText("Color value: ffffffff")
+    app.buttons["Activate color accessibility"].tap()
+    XCTAssertTrue(palette.waitForExistence(timeout: 15))
+    closePalette(palette)
+    expectText("Color calls: 2")
+  }
+
+  func testCatalogColorPickerReopensAfterNativeTabRecreation() throws {
+    app.buttons["back"].tap()
+    let pickersTab = app.buttons["Pickers"]
+    XCTAssertTrue(pickersTab.waitForExistence(timeout: 10))
+    pickersTab.tap()
+    openCatalogColorPicker()
+    closePalette(app.navigationBars["Preview color"])
+    app.buttons["Controls"].tap()
+    pickersTab.tap()
+    openCatalogColorPicker()
+    closePalette(app.navigationBars["Preview color"])
+  }
+
+  private func openCatalogColorPicker() {
+    let well = app.buttons["Preview color"]
+    for _ in 0..<4 {
+      if well.exists && well.isHittable { break }
+      app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.76))
+        .press(forDuration: 0.05,
+               thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.46)),
+               withVelocity: .slow, thenHoldForDuration: 0.2)
+    }
+    XCTAssertTrue(well.exists && well.isHittable)
+    well.tap()
+    XCTAssertTrue(app.navigationBars["Preview color"].waitForExistence(timeout: 15))
+  }
+
+  private func closePalette(_ palette: XCUIElement) {
+    let close = palette.buttons.matching(
+      NSPredicate(format: "label IN %@", ["Close", "Done", "关闭", "關閉"])
+    ).firstMatch
+    XCTAssertTrue(close.waitForExistence(timeout: 10))
+    close.tap()
+    XCTAssertTrue(palette.waitForNonExistence(timeout: 10))
+  }
+
+  private func expectText(_ text: String, file: StaticString = #filePath, line: UInt = #line) {
+    XCTAssertTrue(app.staticTexts[text].waitForExistence(timeout: 15), text, file: file, line: line)
+  }
+
+  private func attachHierarchy(_ name: String) {
+    let tree = XCTAttachment(string: app.debugDescription)
+    tree.name = name
+    tree.lifetime = .keepAlways
+    add(tree)
+    let screenshot = XCTAttachment(screenshot: app.screenshot())
+    screenshot.name = name
+    screenshot.lifetime = .keepAlways
+    add(screenshot)
+  }
+}

@@ -167,7 +167,7 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write(f'Native interaction: dedicated iPhone 17 Pro simulator, iOS {version}, arm64.\n')
           PY
-      - name: Test native slider interaction
+      - name: Test native slider and accessibility interaction
         run: >-
           xcodebuild -workspace Runner.xcworkspace -scheme NativeSliderAcceptance
           -configuration Debug -sdk iphonesimulator

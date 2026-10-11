@@ -1,3 +1,12 @@
+## Unreleased
+
+- Give native navigation actions their explicit business labels instead of SF
+  Symbol descriptions. Keep UIKit navigation and native button rendering.
+- Expose a caller-supplied color-well label together with UIKit's localized color
+  value, while retaining the native color picker and controlled callback contract.
+- Add native accessibility example and XCTest regressions for labels, theme
+  updates, actual palette selection and accessibility activation.
+
 ## 0.2.0
 
 - Bind native slider editing callbacks to the actual touch sequence, preventing

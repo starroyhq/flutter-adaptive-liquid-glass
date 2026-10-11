@@ -7,7 +7,7 @@ import 'button_group.dart';
 import 'fallback_pressable.dart';
 import 'fallback_selection_track.dart';
 import 'feedback.dart';
-import 'native_capsule.dart';
+import 'native_navigation_bar.dart';
 import 'native_tab_item.dart';
 import 'surface.dart';
 import 'theme.dart';
@@ -201,8 +201,8 @@ class LiquidGlassNavigationBar extends StatelessWidget
   Widget build(BuildContext context) {
     final glassColors = LiquidGlassTheme.of(context).colors;
     final all = [...leading, ...actions];
-    // The provider's UINavigationBar only serializes SF Symbols, and has no
-    // disabled-action property. Fall back instead of silently losing either.
+    // Keep the existing native layout limits; grouped/long-press actions use
+    // the Flutter title layout with our native capsule buttons below.
     final nativeActions = all.every(
       (action) =>
           action.onPressed != null &&
@@ -214,37 +214,17 @@ class LiquidGlassNavigationBar extends StatelessWidget
         leading.length <= 1 &&
         actions.length <= 1 &&
         MediaQuery.textScalerOf(context).scale(17) <= 24) {
-      native.LiquidGlassNavBarItem item(LiquidGlassAction action) =>
-          native.LiquidGlassNavBarItem(
-            id: action.id,
-            label: action.label,
-            icon: action.sfSymbol == null
-                ? null
-                : native.NativeLiquidGlassIcon.sfSymbol(action.sfSymbol!),
-          );
       return SafeArea(
         bottom: false,
         child: NativeVisibility(
-          child: native.LiquidGlassNavigationBar(
+          child: NativeNavigationBar(
             title: title,
-            height: 64,
-            brightness: Theme.of(context).brightness,
             tintColor:
                 glassColors.foreground ??
                 glassColors.accent ??
                 Theme.of(context).colorScheme.primary,
-            leadingItems: leading.map(item).toList(),
-            trailingItems: actions.map(item).toList(),
-            onItemTapped: (id) {
-              for (final action in all) {
-                if (action.id == id) {
-                  if (!nativeCapsuleActionAllowed(context)) return;
-                  LiquidGlassFeedback.tap(context);
-                  action.onPressed?.call();
-                  return;
-                }
-              }
-            },
+            leading: leading,
+            actions: actions,
           ),
         ),
       );

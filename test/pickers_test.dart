@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_adaptive_liquid_glass/src/native_picker.dart';
@@ -459,6 +461,227 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('color well label, title and current value remain independent', (
+    tester,
+  ) async {
+    final changes = <Color>[];
+    Future<void> show({
+      String? label,
+      String? title = 'Palette heading',
+      Color color = const Color(0xff808080),
+      bool enabled = true,
+    }) async {
+      await tester.pumpWidget(
+        _app(
+          LiquidGlassColorPicker(
+            selectedColor: color,
+            title: title,
+            semanticLabel: label,
+            onChanged: enabled ? changes.add : null,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Semantics semantics() => tester.widget<Semantics>(
+      find
+          .descendant(
+            of: find.byType(LiquidGlassColorPicker),
+            matching: find.byType(Semantics),
+          )
+          .first,
+    );
+    await show(label: 'Sample color');
+    expect(semantics().properties.label, 'Sample color');
+    expect(semantics().properties.value, '#808080FF');
+    expect(find.text('Palette heading'), findsOneWidget);
+    await show(
+      label: 'Updated color',
+      color: const Color(0xff0000ff),
+      enabled: false,
+    );
+    expect(semantics().properties.label, 'Updated color');
+    expect(semantics().properties.value, '#0000FFFF');
+    expect(semantics().properties.enabled, isFalse);
+    await show();
+    expect(semantics().properties.label, 'Palette heading');
+    await show(title: null);
+    expect(semantics().properties.label, 'Color');
+    expect(changes, isEmpty);
+  });
+
+  testWidgets(
+    'color well semantics opens and dismisses without changing color',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      final changes = <Color>[];
+      await tester.pumpWidget(
+        _app(
+          LiquidGlassColorPicker(
+            selectedColor: const Color(0xff808080),
+            semanticLabel: 'Sample color',
+            title: 'Palette heading',
+            onChanged: changes.add,
+          ),
+        ),
+      );
+      final node = tester.getSemantics(find.bySemanticsLabel('Sample color'));
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      tester.binding.performSemanticsAction(
+        ui.SemanticsActionEvent(
+          type: SemanticsAction.tap,
+          viewId: tester.view.viewId,
+          nodeId: node.id,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(FallbackGlassSlider), findsNWidgets(4));
+      expect(changes, isEmpty);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(FallbackGlassSlider), findsNothing);
+      expect(changes, isEmpty);
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+    },
+  );
+
+  testWidgets(
+    'stale color semantics cannot open while covered, backgrounded or disposed',
+    (tester) async {
+      final navigator = GlobalKey<NavigatorState>();
+      final changes = <Color>[];
+      await tester.pumpWidget(
+        LiquidGlassTheme(
+          data: const LiquidGlassThemeData(mode: LiquidGlassMode.fallback),
+          child: MaterialApp(
+            navigatorKey: navigator,
+            home: Scaffold(
+              body: LiquidGlassColorPicker(
+                selectedColor: const Color(0xff808080),
+                semanticLabel: 'Sample color',
+                onChanged: changes.add,
+              ),
+            ),
+          ),
+        ),
+      );
+      final activate = tester
+          .widget<Semantics>(
+            find
+                .descendant(
+                  of: find.byType(LiquidGlassColorPicker),
+                  matching: find.byType(Semantics),
+                )
+                .first,
+          )
+          .properties
+          .onTap!;
+      unawaited(
+        navigator.currentState!.push(
+          MaterialPageRoute<void>(
+            builder: (context) => const Scaffold(body: Text('Covered')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      activate();
+      await tester.pumpAndSettle();
+      expect(find.byType(FallbackGlassSlider), findsNothing);
+      expect(find.text('Covered'), findsOneWidget);
+      navigator.currentState!.pop();
+      await tester.pumpAndSettle();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      activate();
+      await tester.pumpAndSettle();
+      expect(find.byType(FallbackGlassSlider), findsNothing);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpWidget(const SizedBox.shrink());
+      activate();
+      await tester.pumpAndSettle();
+      expect(find.byType(FallbackGlassSlider), findsNothing);
+      expect(changes, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'native color label updates keep title, value and callback contracts',
+    (tester) async {
+      final bridge = _PickerBridgeHarness(tester, 'color');
+      var color = const Color(0xff808080).toARGB32();
+      var label = 'Sample color';
+      var dark = false;
+      var enabled = true;
+      String? semanticLabel = label;
+      late StateSetter update;
+      final changes = <Object?>[];
+      await tester.pumpWidget(
+        _app(
+          StatefulBuilder(
+            builder: (context, setState) {
+              update = setState;
+              return Theme(
+                data: dark ? ThemeData.dark() : ThemeData.light(),
+                child: LiquidGlassTheme(
+                  data: const _NativePickerTestTheme(),
+                  child: LiquidGlassColorPicker(
+                    selectedColor: Color(color),
+                    semanticLabel: semanticLabel,
+                    title: 'Palette heading',
+                    onChanged: enabled
+                        ? (value) {
+                            changes.add(value.toARGB32());
+                            setState(() => color = value.toARGB32());
+                          }
+                        : null,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final channel = bridge.channel;
+      expect(bridge.config['semanticLabel'], label);
+      expect(bridge.config['title'], 'Palette heading');
+      update(() {
+        label = 'Updated color';
+        semanticLabel = label;
+        dark = true;
+        color = const Color(0xff0000ff).toARGB32();
+      });
+      await tester.pumpAndSettle();
+      expect(bridge.channel, same(channel));
+      expect(bridge.config['semanticLabel'], label);
+      expect(bridge.config['title'], 'Palette heading');
+      expect(bridge.config['dark'], isTrue);
+      expect(bridge.config['value'], color);
+      expect(changes, isEmpty);
+      final revision = bridge.config['revision'];
+      final green = const Color(0xff00ff00).toARGB32();
+      await bridge.event(revision, green);
+      await tester.pumpAndSettle();
+      await bridge.event(revision, green);
+      expect(changes, [green]);
+      update(() {
+        semanticLabel = null;
+        enabled = false;
+      });
+      await tester.pumpAndSettle();
+      expect(bridge.config.containsKey('semanticLabel'), isTrue);
+      expect(bridge.config['semanticLabel'], isNull);
+      expect(bridge.config['title'], 'Palette heading');
+      expect(bridge.config['value'], green);
+      await bridge.event(bridge.config['revision'], color + 1);
+      expect(changes, [green]);
+      expect(bridge.channel, same(channel));
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
   testWidgets('color palette forwards custom colors and controlled updates', (
     tester,
   ) async {
@@ -767,6 +990,19 @@ void main() {
 }
 
 void _ignorePickerValue(Object? _) {}
+
+// Exercise public widget configuration on a Dart host without pretending that
+// its real operating system has native Liquid Glass support.
+class _NativePickerTestTheme extends LiquidGlassThemeData {
+  const _NativePickerTestTheme();
+
+  @override
+  LiquidGlassMode resolve({
+    required bool nativeAvailable,
+    bool highContrast = false,
+    bool disableAnimations = false,
+  }) => LiquidGlassMode.native;
+}
 
 class _PickerTestPopup extends PopupRoute<void> {
   _PickerTestPopup(this.child);

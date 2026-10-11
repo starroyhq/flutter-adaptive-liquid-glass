@@ -6,6 +6,7 @@ import 'controls.dart';
 import 'fallback_date_wheels.dart';
 import 'fallback_pressable.dart';
 import 'fallback_value_controls.dart';
+import 'feedback.dart';
 import 'native_picker.dart';
 import 'presentation.dart';
 import 'surface.dart';
@@ -477,8 +478,14 @@ class LiquidGlassColorPicker extends StatefulWidget {
 
   final Color selectedColor;
   final ValueChanged<Color>? onChanged;
+
+  /// Heading for the presented color picker. The Flutter fallback also uses
+  /// this as its well label when [semanticLabel] is absent.
   final String? title;
   final bool supportsAlpha;
+
+  /// Accessibility label for the color well, independent of the picker title.
+  /// Omitting it retains the native system label on the native path.
   final String? semanticLabel;
 
   @override
@@ -508,7 +515,12 @@ class _LiquidGlassColorPickerState extends State<LiquidGlassColorPicker> {
   }
 
   Future<void> _open() async {
-    if (_presented || widget.onChanged == null) return;
+    if (!mounted ||
+        _presented ||
+        widget.onChanged == null ||
+        !LiquidGlassFeedback.canInteract(context)) {
+      return;
+    }
     _presented = true;
     try {
       await showLiquidGlassSheet<void>(
@@ -560,6 +572,7 @@ class _LiquidGlassColorPickerState extends State<LiquidGlassColorPicker> {
       enabled: widget.onChanged != null,
       label: widget.semanticLabel ?? widget.title ?? 'Color',
       value: hex,
+      onTap: widget.onChanged == null ? null : _open,
       child: ExcludeSemantics(
         child: LiquidGlassSurface(
           style: LiquidGlassSurfaceStyle.control,

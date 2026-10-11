@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'catalog_popups.dart';
+import 'native_accessibility_example.dart';
 
 /// Independent synthetic data only. No account, network or application services.
 class ComponentCatalogApp extends StatefulWidget {
@@ -106,6 +107,14 @@ class _ComponentCatalogAppState extends State<ComponentCatalogApp> {
             'iOS 26+ tabs stay native. Search and custom popups keep Flutter content.',
           ),
           const SizedBox(height: 16),
+          TextButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const NativeAccessibilityExample(),
+              ),
+            ),
+            child: const Text('Open accessibility probe'),
+          ),
           if (_page == 0) ..._controls(context),
           if (_page == 1) ..._pickers(context),
           if (_page == 2) const CatalogPopups(),

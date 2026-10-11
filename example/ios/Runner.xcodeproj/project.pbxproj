@@ -14,6 +14,7 @@
 		4F6F56C7F8FEFFF83EE62964 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F77FEB2AAECA99CF91506152 /* Foundation.framework */; };
 		5D1C84B5C65374D3F405FEAF /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B2373FF26BF2DA2173B5108A /* Pods_RunnerTests.framework */; };
 		64DA5641E16DFBFCB7C55C66 /* NativeSliderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E010EB7B2BF9094622FE880A /* NativeSliderUITests.swift */; };
+		CC2C69AD55B045D68E832BA9 /* NativeAccessibilityUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1810A9BCC484C98998E2831 /* NativeAccessibilityUITests.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
@@ -78,6 +79,7 @@
 		B2373FF26BF2DA2173B5108A /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		D8EA8645F4C8186C4D4ACA60 /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		E010EB7B2BF9094622FE880A /* NativeSliderUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeSliderUITests.swift; sourceTree = "<group>"; };
+		D1810A9BCC484C98998E2831 /* NativeAccessibilityUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeAccessibilityUITests.swift; sourceTree = "<group>"; };
 		F77FEB2AAECA99CF91506152 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -127,6 +129,7 @@
 			isa = PBXGroup;
 			children = (
 				E010EB7B2BF9094622FE880A /* NativeSliderUITests.swift */,
+				D1810A9BCC484C98998E2831 /* NativeAccessibilityUITests.swift */,
 			);
 			name = RunnerUITests;
 			path = RunnerUITests;
@@ -451,6 +454,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				64DA5641E16DFBFCB7C55C66 /* NativeSliderUITests.swift in Sources */,
+				CC2C69AD55B045D68E832BA9 /* NativeAccessibilityUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

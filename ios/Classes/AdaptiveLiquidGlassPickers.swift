@@ -3,6 +3,191 @@ import UIKit
 
 enum AdaptiveLiquidGlassPickerKind { case date, color }
 
+/// Keep our controller's delegate separate from UIColorWell. The system well
+/// uses these same selectors for the picker opened by its physical interaction.
+private final class AdaptiveAccessibilityColorPickerDelegate: NSObject,
+  UIColorPickerViewControllerDelegate, UIAdaptivePresentationControllerDelegate {
+  private weak var owner: AdaptiveAccessibleColorWell?
+
+  init(owner: AdaptiveAccessibleColorWell) { self.owner = owner }
+
+  func colorPickerViewController(_ viewController: UIColorPickerViewController,
+                                 didSelect color: UIColor, continuously: Bool) {
+    owner?.accessibilityPickerDidSelect(viewController, color: color)
+  }
+
+  func colorPickerViewControllerDidFinish(_ viewController: UIColorPickerViewController) {
+    owner?.accessibilityPickerDidFinish(viewController)
+  }
+
+  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+    owner?.accessibilityPickerDidDismiss(presentationController)
+  }
+}
+
+/// UIColorWell can expose an internal element whose default "Color" label does
+/// not consult the well's label. When the caller supplies a label, expose the
+/// public control itself, retaining UIKit's activation and localized color name.
+private final class AdaptiveAccessibleColorWell: UIColorWell {
+  private var semanticLabel: String?
+  private weak var accessibilityPicker: UIColorPickerViewController?
+  private var accessibilityDelegate: AdaptiveAccessibilityColorPickerDelegate?
+  private var inactiveObserver: NSObjectProtocol?
+  var onAccessibilityColorChange: (() -> Void)?
+
+  override var isAccessibilityElement: Bool {
+    get { semanticLabel != nil || super.isAccessibilityElement }
+    set { super.isAccessibilityElement = newValue }
+  }
+
+  override var accessibilityLabel: String? {
+    get { semanticLabel ?? super.accessibilityLabel }
+    set {
+      semanticLabel = newValue
+      super.accessibilityLabel = newValue
+    }
+  }
+
+  override var accessibilityValue: String? {
+    get {
+      guard semanticLabel != nil else { return super.accessibilityValue }
+      return selectedColor?.accessibilityName ?? super.accessibilityValue
+    }
+    set { super.accessibilityValue = newValue }
+  }
+
+  override var accessibilityTraits: UIAccessibilityTraits {
+    get {
+      guard semanticLabel != nil else { return super.accessibilityTraits }
+      var traits = super.accessibilityTraits.union(.button)
+      if !isEnabled { traits.insert(.notEnabled) }
+      return traits
+    }
+    set { super.accessibilityTraits = newValue }
+  }
+
+  override func accessibilityActivate() -> Bool {
+    guard semanticLabel != nil else { return super.accessibilityActivate() }
+    guard canPresentPicker, accessibilityPicker == nil else { return false }
+    var responder: UIResponder? = next
+    while responder != nil && !(responder is UIViewController) {
+      responder = responder?.next
+    }
+    guard let presenter = responder as? UIViewController,
+          presenter.viewIfLoaded?.window != nil,
+          !presenter.isBeingDismissed,
+          presenter.presentedViewController == nil else { return false }
+
+    // UIColorWell's internal accessible element presents its picker, but the
+    // public well's accessibilityActivate/performPrimaryAction do not. Present
+    // UIKit's public controller for this custom accessible element instead.
+    let picker = UIColorPickerViewController()
+    let delegate = AdaptiveAccessibilityColorPickerDelegate(owner: self)
+    accessibilityPicker = picker
+    accessibilityDelegate = delegate
+    synchronizeAccessibilityPicker()
+    picker.delegate = delegate
+    picker.modalPresentationStyle = traitCollection.userInterfaceIdiom == .pad
+      ? .popover : .pageSheet
+    if let popover = picker.popoverPresentationController {
+      popover.sourceView = self
+      popover.sourceRect = bounds
+    }
+    picker.presentationController?.delegate = delegate
+    inactiveObserver = NotificationCenter.default.addObserver(
+      forName: UIApplication.willResignActiveNotification, object: nil, queue: .main
+    ) { [weak self] _ in self?.cancelAccessibilityPresentation() }
+    presenter.present(picker, animated: true)
+    // UIKit may forward color-picker presentation through an internal host, so
+    // its public presenter's synchronous presentedViewController is not proof
+    // of success or failure. The action has been accepted; keep its delegate
+    // alive through the actual presentation and dismissal callbacks.
+    return true
+  }
+
+  private var canPresentPicker: Bool {
+    guard isEnabled, window != nil,
+          UIApplication.shared.applicationState == .active else { return false }
+    var ancestor: UIView? = self
+    while let view = ancestor {
+      guard !view.isHidden, view.isUserInteractionEnabled,
+            !view.accessibilityElementsHidden else { return false }
+      ancestor = view.superview
+    }
+    return true
+  }
+
+  func synchronizeAccessibilityPicker() {
+    guard let picker = accessibilityPicker else { return }
+    guard canPresentPicker, semanticLabel != nil else {
+      cancelAccessibilityPresentation()
+      return
+    }
+    picker.supportsAlpha = supportsAlpha
+    picker.title = title
+    let color = selectedColor ?? .clear
+    let value = supportsAlpha ? color : color.withAlphaComponent(1)
+    if picker.selectedColor != value { picker.selectedColor = value }
+    picker.overrideUserInterfaceStyle = traitCollection.userInterfaceStyle
+    picker.view.tintColor = tintColor
+    picker.view.semanticContentAttribute = semanticContentAttribute
+  }
+
+  func cancelAccessibilityPresentation() {
+    stopObservingApplication()
+    accessibilityDelegate = nil
+    guard let picker = accessibilityPicker else { return }
+    accessibilityPicker = nil
+    picker.delegate = nil
+    picker.presentationController?.delegate = nil
+    // Dismiss this instance only; never dismiss the presenter's unrelated UI.
+    if picker.presentingViewController != nil { picker.dismiss(animated: false) }
+  }
+
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    if window == nil { cancelAccessibilityPresentation() }
+  }
+
+  func accessibilityPickerDidSelect(_ viewController: UIColorPickerViewController,
+                                    color: UIColor) {
+    guard viewController === accessibilityPicker, canPresentPicker,
+          !viewController.isBeingDismissed else { return }
+    let value = supportsAlpha ? color : color.withAlphaComponent(1)
+    guard selectedColor != value else { return }
+    selectedColor = value
+    // Only a real UIKit selection enters the existing controlled-value bridge.
+    // Programmatic synchronization and dismissal never manufacture a change.
+    onAccessibilityColorChange?()
+  }
+
+  func accessibilityPickerDidFinish(_ viewController: UIColorPickerViewController) {
+    guard viewController === accessibilityPicker else { return }
+    stopObservingApplication()
+    accessibilityPicker = nil
+    viewController.delegate = nil
+    viewController.presentationController?.delegate = nil
+    accessibilityDelegate = nil
+  }
+
+  func accessibilityPickerDidDismiss(_ presentationController: UIPresentationController) {
+    guard presentationController.presentedViewController === accessibilityPicker else { return }
+    stopObservingApplication()
+    accessibilityPicker?.delegate = nil
+    accessibilityPicker = nil
+    accessibilityDelegate = nil
+  }
+
+  private func stopObservingApplication() {
+    if let inactiveObserver { NotificationCenter.default.removeObserver(inactiveObserver) }
+    inactiveObserver = nil
+  }
+
+  deinit {
+    if let inactiveObserver { NotificationCenter.default.removeObserver(inactiveObserver) }
+  }
+}
+
 final class AdaptiveLiquidGlassPickerFactory: NSObject, FlutterPlatformViewFactory {
   private let messenger: FlutterBinaryMessenger
   private let kind: AdaptiveLiquidGlassPickerKind
@@ -45,7 +230,7 @@ private final class AdaptiveLiquidGlassPicker: NSObject, FlutterPlatformView {
        suppression: AdaptiveLiquidGlassSuppression) {
     self.kind = kind
     self.suppression = suppression
-    control = kind == .date ? UIDatePicker() : UIColorWell()
+    control = kind == .date ? UIDatePicker() : AdaptiveAccessibleColorWell()
     let name = kind == .date ? "date" : "color"
     channel = FlutterMethodChannel(
       name: "flutter_adaptive_liquid_glass/\(name)_picker/\(identifier)",
@@ -62,6 +247,9 @@ private final class AdaptiveLiquidGlassPicker: NSObject, FlutterPlatformView {
       control.bottomAnchor.constraint(equalTo: container.bottomAnchor),
     ])
     control.addTarget(self, action: #selector(changed), for: .valueChanged)
+    (control as? AdaptiveAccessibleColorWell)?.onAccessibilityColorChange = { [weak self] in
+      self?.changed()
+    }
     observer = suppression.observe { [weak self] in self?.updateVisibility() }
     if let error = configure(arguments) {
       // Invalid initial parameters cannot accidentally expose an enabled picker
@@ -190,6 +378,7 @@ private final class AdaptiveLiquidGlassPicker: NSObject, FlutterPlatformView {
     let hidden = routeSuppressed || (suppression.active && !popupOwner)
     container.isHidden = hidden
     container.accessibilityElementsHidden = hidden
+    (control as? AdaptiveAccessibleColorWell)?.synchronizeAccessibilityPicker()
   }
 
   private func invalid(_ message: String) -> FlutterError {
@@ -223,6 +412,7 @@ private final class AdaptiveLiquidGlassPicker: NSObject, FlutterPlatformView {
   }
 
   deinit {
+    (control as? AdaptiveAccessibleColorWell)?.cancelAccessibilityPresentation()
     channel.setMethodCallHandler(nil)
     control.removeTarget(self, action: #selector(changed), for: .valueChanged)
     if let observer { suppression.remove(observer) }

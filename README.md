@@ -9,6 +9,12 @@ imports use `flutter_adaptive_liquid_glass`, following Dart's
 [package naming rules](https://dart.dev/tools/pub/pubspec#name); hyphens are not
 valid in a pubspec package name.
 
+Version **0.3.0** refines alert/action-sheet layouts, native content clipping,
+fallback calendar and slider behavior, and out-of-range handling. Menus and
+popovers gain opt-in `fitContent` sizing. Native action sheets no longer slide
+through the bottom safe area, keeping the cancel group's glass full height.
+See the [0.3.0 release notes](doc/release-0.3.0.md) for changes and validation scope.
+
 Version **0.2.0** expands the package to 21 UI capabilities, with package-owned
 frosted fallbacks, optional long-press actions and configurable interaction feedback.
 See the [release notes](doc/release-0.2.0.md) and
@@ -25,7 +31,7 @@ Fallback color wells also expose semantic activation. See its
 **Known validation limit:** some hosted iOS 26.5 runs fail to display the system
 color palette after its first real tap. A standalone UIKit app reproduces the
 failure both with and without a Simulator window. The cause is unresolved;
-0.2.1 does not claim to fix that first-use failure or prove hardware is unaffected.
+0.3.0 does not claim to fix that first-use failure or prove hardware is unaffected.
 See [validation limits](doc/release-0.2.1.md#known-limitation).
 
 ## Installation
@@ -38,7 +44,7 @@ Or add the version to your app's `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_adaptive_liquid_glass: ^0.2.1
+  flutter_adaptive_liquid_glass: ^0.3.0
 ```
 
 Requires Flutter 3.41.2 or later and Dart 3.11 or later. Supported platforms are
@@ -48,10 +54,18 @@ Development and CI retain Flutter **3.41.9** / Dart **3.11.5**. The production
 dependency `native_liquid_glass` remains pinned to **0.3.1**; this release adds no
 production dependency and does not require a global toolchain upgrade.
 
+### Upgrading from 0.2.x
+
+Change the constraint to `^0.3.0`, run `flutter pub get`, and rebuild the native
+app. The existing APIs and defaults remain available; `fitContent` is opt-in.
+Two-action alerts now use a horizontal row when text size permits, and action
+sheets keep cancel actions in a separate group. Native action sheets retain
+fading and subtle scaling without sliding; Flutter fallbacks continue to slide.
+
 ### Upgrading from 0.1.1
 
-Change `^0.1.1` to `^0.2.0`, run `flutter pub get`, then perform a full native
-rebuild. Dart's `^0.1.1` constraint does not select the 0.2 series automatically.
+Change `^0.1.1` to `^0.3.0`, run `flutter pub get`, then perform a full native
+rebuild. Dart's `^0.1.1` constraint does not select later minor versions automatically.
 Keep the existing `LiquidGlassAppearance` and `LiquidGlassNavigatorObserver`
 installation. Existing surfaces, buttons, shared capsules, tabs, segments,
 appearance settings and color-token APIs remain available; their controlled

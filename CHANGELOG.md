@@ -1,4 +1,4 @@
-## Unreleased
+## 0.3.0
 
 - Clip native-mode glass content to its rounded shape, so alert, menu and sheet
   rows no longer paint rectangular highlights outside the corners.
@@ -10,8 +10,8 @@
   `showLiquidGlassPopover` and `LiquidGlassMenuButton`.
 - Release builds no longer paint selection, slider or progress values outside
   their track when an out-of-range value bypasses the debug assertions.
-- Native action sheets fade in instead of sliding. The slide put the cancel
-  group's glass over the bottom safe-area inset on first layout, and
+- Native action sheets retain fading and subtle scaling instead of sliding.
+  The slide put the cancel group's glass over the bottom safe-area inset on first layout, and
   `native_liquid_glass` does not refresh that inset, leaving a thin strip.
 - Use one disabled opacity (0.48) for group actions and menu rows.
 

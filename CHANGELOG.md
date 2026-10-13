@@ -14,6 +14,10 @@
   The slide put the cancel group's glass over the bottom safe-area inset on first layout, and
   `native_liquid_glass` does not refresh that inset, leaving a thin strip.
 - Use one disabled opacity (0.48) for group actions and menu rows.
+- Publish with an explicitly accepted known limitation: the selected hosted
+  iOS 26.5 run passed 9/10 native cases, failing first system-palette appearance.
+  Analysis, unit tests and both platform builds passed. The failed run is retained;
+  this release does not fix or hide that first-use issue. See the 0.3.0 release notes.
 
 ## 0.2.1
 

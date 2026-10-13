@@ -32,7 +32,9 @@ Fallback color wells also expose semantic activation. See its
 color palette after its first real tap. A standalone UIKit app reproduces the
 failure both with and without a Simulator window. The cause is unresolved;
 0.3.0 does not claim to fix that first-use failure or prove hardware is unaffected.
-See [validation limits](doc/release-0.2.1.md#known-limitation).
+The 0.3.0 selected native run passed 9/10 cases and reproduced this failure;
+publication explicitly accepts that known limitation. See the
+[0.3.0 release decision](doc/release-0.3.0.md#validation-and-accepted-release-limitation).
 
 ## Installation
 
@@ -647,3 +649,9 @@ Artifact transfer happens entirely on a GitHub runner; no local download or rebu
 is needed. The regular CI remains read-only. Only the manually dispatched publish
 job has release write access. Existing release assets are not overwritten; if a
 partial upload needs recovery, inspect the draft before retrying.
+
+For 0.3.0 only, the maintainer accepted the recorded native first-use failure.
+Its example artifacts are transferred manually from the successful build jobs
+with the same identity and digest checks, plus published provenance. The normal
+workflow and test assertions are unchanged. See the
+[explicit release decision](doc/release-0.3.0.md#validation-and-accepted-release-limitation).

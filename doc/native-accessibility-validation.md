@@ -603,6 +603,24 @@ empty source change to seek a green result. Historical failures remain separate
 from the passing local regressions and any successful final gate. Publication
 does not claim the first-use limitation is repaired.
 
+### 0.3.0 maintainer-approved exception
+
+The subsequent 0.3.0 selected run
+[38367232872](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38367232872)
+at `9f3176842925c09978ba14300b7dd7e929a062da` passed quality and both builds but
+passed only nine of the ten native cases. The suite's first case failed its
+first palette-existence assertion before exercising background cancellation.
+Its failure recording and AX show only the host, with zero color callbacks;
+the other eight accessibility cases and the slider passed. This matches the
+earlier visible failure signature, without establishing a platform root cause.
+
+On 2026-10-13 the maintainer explicitly accepted that limitation and authorized
+0.3.0 publication and App adoption. This overrides the preceding gate decision
+for this release only. The failed run and original assertions remain unchanged;
+it is not rerun or presented as green. The tag adds only release documentation,
+and the successful build-job artifacts retain their tested source identity.
+See the [0.3.0 release notes](release-0.3.0.md) for the exception and artifact checks.
+
 ## Limits
 
 Simulator accessibility trees and activation tests do not establish the complete

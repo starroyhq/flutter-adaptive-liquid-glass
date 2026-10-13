@@ -32,7 +32,7 @@ iOS 16+ and Android remain supported; native glass requires iOS 26+.
 - Clamp selection, slider and progress rendering for out-of-range values in
   release builds and use disabled opacity 0.48 for group actions and menu rows.
 
-## Validation and release gate
+## Validation and accepted release limitation
 
 Before the version bump, the exact production source at `35d3d95` passed static
 analysis, all 255 package tests and all 299 consuming App tests. An iOS 26.5
@@ -43,12 +43,29 @@ First-open native-composited screenshots in both appearances show a full cancel
 surface at its unchanged 52pt frame; the previous thin strip no longer appears.
 These local checks used synthetic data and are not physical-device acceptance.
 
-The final release commit must pass one selected `Component checks` CI run:
-package/example quality, Android example build, iOS simulator example build and
-all ten unchanged iOS 26 native slider/accessibility cases. That same successful
-run supplies the version tag's GitHub Release assets through `Publish release
-assets`; local or historical builds do not replace this gate. Pub.dev publication
-also requires a successful `flutter pub publish --dry-run` with reviewed files.
+The preselected [Component checks run 38367232872](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38367232872)
+at `9f3176842925c09978ba14300b7dd7e929a062da` passed package/example analysis,
+255 package tests, 7 example tests, and both platform builds. Native iOS 26.5
+interaction passed 9 of 10 cases, with no skips. The first case,
+`testBackgroundCancelsPaletteWhileItsFullScreenChildIsPresented`, failed at the
+first palette-existence assertion, before covering the palette or backgrounding.
+Its recording and accessibility tree show the host with no palette and zero
+color callbacks. The other eight accessibility cases and the slider case passed.
+
+On 2026-10-13 the maintainer explicitly accepted this known limitation and
+authorized 0.3.0 publication and consuming-App adoption. This is a release-specific
+exception to the previous 10/10 gate, not a passing gate or a repair. The failed
+run is retained and has not been rerun to obtain a green result. The release tag
+adds only this documentation to the tested commit; package code, native code,
+example code, tests, dependencies and build metadata remain identical.
+
+The example downloads come from the successful Android and iOS build jobs of
+that same run. They are transferred manually with workflow/job identity, artifact
+SHA-256 and ZIP integrity checks; the normal green-run-only release workflow is
+unchanged. `SHA256SUMS` covers the downloads and `provenance.json` records their
+source commit, selected run and the accepted failure. No historical or rebuilt
+example replaces these artifacts. Pub.dev publication still requires a successful
+dry run with reviewed package contents.
 
 ## Known validation limits
 

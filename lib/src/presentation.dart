@@ -65,7 +65,13 @@ Future<T?> showLiquidGlassAlert<T>({
     useRootNavigator: useRootNavigator,
     barrierDismissible: barrierDismissible,
     settings: routeSettings,
-    slide: style == LiquidGlassAlertStyle.actionSheet,
+    // A native glass view reads the bottom safe-area inset once, from where it
+    // first lays out. Sliding up from below would place the cancel group over
+    // the home-indicator inset and leave its glass short for the whole
+    // presentation, so native action sheets only fade.
+    slide:
+        style == LiquidGlassAlertStyle.actionSheet &&
+        LiquidGlassTheme.modeOf(context) != LiquidGlassMode.native,
     builder: (context) => _Alert<T>(
       title: title,
       content: content,

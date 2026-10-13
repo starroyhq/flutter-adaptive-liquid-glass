@@ -10,6 +10,9 @@
   `showLiquidGlassPopover` and `LiquidGlassMenuButton`.
 - Release builds no longer paint selection, slider or progress values outside
   their track when an out-of-range value bypasses the debug assertions.
+- Native action sheets fade in instead of sliding. The slide put the cancel
+  group's glass over the bottom safe-area inset on first layout, and
+  `native_liquid_glass` does not refresh that inset, leaving a thin strip.
 - Use one disabled opacity (0.48) for group actions and menu rows.
 
 ## 0.2.1

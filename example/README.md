@@ -2,10 +2,10 @@
 
 Standalone iOS/Android showcase for `flutter_adaptive_liquid_glass`. Its dependency
 uses `path: ../`, resolving to the surrounding package checkout. This example
-demonstrates the **0.2.0** component catalog. Applications can use the hosted
-`flutter_adaptive_liquid_glass: ^0.2.0` dependency; the example deliberately keeps
+demonstrates the **0.3.0** component catalog. Applications can use the hosted
+`flutter_adaptive_liquid_glass: ^0.3.0` dependency; the example deliberately keeps
 its local path so it tests the same source checkout. See the
-[upgrade notes](../README.md#upgrading-from-011) when moving from 0.1.1.
+[upgrade notes](../README.md#upgrading-from-02x) when moving from 0.2.x.
 
 Development and CI use Flutter 3.41.9 / Dart 3.11.5 with
 `native_liquid_glass` pinned to 0.3.1. Use the committed lockfiles; no production

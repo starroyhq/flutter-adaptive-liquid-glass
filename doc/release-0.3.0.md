@@ -22,8 +22,9 @@ iOS 16+ and Android remain supported; native glass requires iOS 26+.
 - Stop native action sheets sliding through the bottom safe area on entry.
   Fading and the existing subtle scale remain; the separate cancel surface now
   retains its full glass height. Fallback action sheets still slide.
-- Preserve fallback calendar focus and displayed month after valid date edits;
-  only remount when a changed bound clamps the selected day.
+- Preserve fallback calendar focus and displayed month after accepted calendar
+  taps unless normalization changes the selected day. Authoritative picker
+  updates still reconcile normally.
 - Preserve a slider thumb's grab offset when dragging from its edge.
 - Anchor popover scaling to its attachment edge. Add optional `fitContent` to
   `showLiquidGlassPopover` and `LiquidGlassMenuButton`, leaving fixed-width sizing

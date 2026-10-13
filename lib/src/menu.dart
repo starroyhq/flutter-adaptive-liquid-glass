@@ -53,6 +53,7 @@ class LiquidGlassMenuButton<T extends Object> extends StatefulWidget {
     this.longPressSemanticLabel,
     this.useRootNavigator = true,
     this.width = 300,
+    this.fitContent = false,
     this.builder,
   }) : assert(label != null || semanticLabel != null || builder != null),
        assert(width > 0 && width.isFinite);
@@ -69,6 +70,10 @@ class LiquidGlassMenuButton<T extends Object> extends StatefulWidget {
   final String? longPressSemanticLabel;
   final bool useRootNavigator;
   final double width;
+
+  /// Sizes the menu to its widest row, between 160 and [width], instead of
+  /// always using [width].
+  final bool fitContent;
 
   /// Builds a custom trigger. A null callback means the trigger is disabled.
   ///
@@ -124,8 +129,10 @@ class _LiquidGlassMenuButtonState<T extends Object>
         anchorContext: anchorContext,
         useRootNavigator: widget.useRootNavigator,
         width: widget.width,
+        fitContent: widget.fitContent,
         semanticLabel: widget.semanticLabel ?? widget.label,
-        builder: (context) => _Menu<T>(items: items),
+        builder: (context) =>
+            _Menu<T>(items: items, fitContent: widget.fitContent),
       );
       if (!mounted) return;
       if (result == null) {
@@ -172,8 +179,9 @@ class _LiquidGlassMenuButtonState<T extends Object>
 }
 
 class _Menu<T extends Object> extends StatefulWidget {
-  const _Menu({required this.items});
+  const _Menu({required this.items, required this.fitContent});
   final List<LiquidGlassMenuItem<T>> items;
+  final bool fitContent;
 
   @override
   State<_Menu<T>> createState() => _MenuState<T>();
@@ -223,43 +231,58 @@ class _MenuState<T extends Object> extends State<_Menu<T>> {
         theme.colorScheme.onSurface;
     final items = _path.isEmpty ? widget.items : _path.last.children;
     final page = _page;
+    final key = ValueKey(_path.isEmpty ? null : _path.last.value);
+    final rows = [
+      if (_path.isNotEmpty) ...[
+        _MenuRow(
+          label: MaterialLocalizations.of(context).backButtonTooltip,
+          leading: const BackButtonIcon(),
+          color: foreground,
+          onTap: () => _back(page),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: Text(_path.last.label, style: theme.textTheme.labelLarge),
+        ),
+        const Divider(height: 1),
+      ],
+      for (final item in items)
+        _MenuRow(
+          key: ValueKey(item.value),
+          label: item.label,
+          leading: item.icon == null ? null : Icon(item.icon, size: 22),
+          color: item.destructive ? theme.colorScheme.error : foreground,
+          selected: item.selected,
+          trailing: item.children.isNotEmpty
+              ? Icon(
+                  Directionality.of(context) == TextDirection.rtl
+                      ? Icons.chevron_left
+                      : Icons.chevron_right,
+                )
+              : item.selected
+              ? const Icon(Icons.check, size: 20)
+              : null,
+          onTap: item.enabled ? () => _select(item, page) : null,
+        ),
+    ];
+    // A lazy list has no intrinsic width, so sizing to content needs a column.
+    if (widget.fitContent) {
+      return SingleChildScrollView(
+        key: key,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: IntrinsicWidth(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: rows,
+          ),
+        ),
+      );
+    }
     return ListView(
-      key: ValueKey(_path.isEmpty ? null : _path.last.value),
+      key: key,
       shrinkWrap: true,
       padding: const EdgeInsets.symmetric(vertical: 8),
-      children: [
-        if (_path.isNotEmpty) ...[
-          _MenuRow(
-            label: MaterialLocalizations.of(context).backButtonTooltip,
-            leading: const BackButtonIcon(),
-            color: foreground,
-            onTap: () => _back(page),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Text(_path.last.label, style: theme.textTheme.labelLarge),
-          ),
-          const Divider(height: 1),
-        ],
-        for (final item in items)
-          _MenuRow(
-            key: ValueKey(item.value),
-            label: item.label,
-            leading: item.icon == null ? null : Icon(item.icon, size: 22),
-            color: item.destructive ? theme.colorScheme.error : foreground,
-            selected: item.selected,
-            trailing: item.children.isNotEmpty
-                ? Icon(
-                    Directionality.of(context) == TextDirection.rtl
-                        ? Icons.chevron_left
-                        : Icons.chevron_right,
-                  )
-                : item.selected
-                ? const Icon(Icons.check, size: 20)
-                : null,
-            onTap: item.enabled ? () => _select(item, page) : null,
-          ),
-      ],
+      children: rows,
     );
   }
 }
@@ -299,7 +322,7 @@ class _MenuRow extends StatelessWidget {
             child: DefaultTextStyle.merge(
               style: TextStyle(color: color),
               child: Opacity(
-                opacity: onTap == null ? .4 : 1,
+                opacity: onTap == null ? .48 : 1,
                 child: Row(
                   children: [
                     if (leading != null) ...[

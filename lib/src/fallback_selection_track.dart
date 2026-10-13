@@ -12,9 +12,10 @@ class FallbackSelectionTrack extends StatelessWidget {
     required this.selectedIndex,
     required this.children,
     this.radius = 26,
-  }) : assert(children.length > 0),
-       assert(selectedIndex >= 0 && selectedIndex < children.length);
+  }) : assert(children.length > 0);
 
+  /// Public widgets assert a valid index in debug builds. Release builds with
+  /// an out-of-range value show no thumb instead of painting outside the track.
   final int selectedIndex;
   final List<Widget> children;
   final double radius;
@@ -28,7 +29,8 @@ class FallbackSelectionTrack extends StatelessWidget {
     final reduced =
         LiquidGlassTheme.of(context).reduceMotion ||
         MediaQuery.disableAnimationsOf(context);
-    final position = children.length == 1
+    final hasSelection = selectedIndex >= 0 && selectedIndex < children.length;
+    final position = children.length == 1 || !hasSelection
         ? 0.0
         : 2 * selectedIndex / (children.length - 1) - 1;
 
@@ -37,35 +39,38 @@ class FallbackSelectionTrack extends StatelessWidget {
         Positioned.fill(
           child: IgnorePointer(
             child: ExcludeSemantics(
-              child: RepaintBoundary(
-                child: AnimatedAlign(
-                  // A zero duration alone does not stop an in-flight implicit
-                  // animation. Reset only the decorative thumb when this
-                  // preference changes; interactive children stay mounted.
-                  key: ValueKey(reduced),
-                  alignment: AlignmentDirectional(position, 0),
-                  duration: reduced
-                      ? Duration.zero
-                      : const Duration(milliseconds: 220),
-                  curve: const _SelectionSpring(),
-                  child: FractionallySizedBox(
-                    widthFactor: 1 / children.length,
-                    heightFactor: 1,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color:
-                            overrides.selection ??
-                            colors.onSurface.withValues(
-                              alpha: highContrast ? .22 : (dark ? .10 : .08),
-                            ),
-                        borderRadius: BorderRadius.circular(radius),
-                        border: Border.all(
-                          color: highContrast
-                              ? colors.onSurface
-                              : overrides.border ??
-                                    (dark ? Colors.white : colors.onSurface)
-                                        .withValues(alpha: dark ? .12 : .06),
-                          width: highContrast ? 1 : .6,
+              child: Offstage(
+                offstage: !hasSelection,
+                child: RepaintBoundary(
+                  child: AnimatedAlign(
+                    // A zero duration alone does not stop an in-flight implicit
+                    // animation. Reset only the decorative thumb when this
+                    // preference changes; interactive children stay mounted.
+                    key: ValueKey(reduced),
+                    alignment: AlignmentDirectional(position, 0),
+                    duration: reduced
+                        ? Duration.zero
+                        : const Duration(milliseconds: 220),
+                    curve: const _SelectionSpring(),
+                    child: FractionallySizedBox(
+                      widthFactor: 1 / children.length,
+                      heightFactor: 1,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color:
+                              overrides.selection ??
+                              colors.onSurface.withValues(
+                                alpha: highContrast ? .22 : (dark ? .10 : .08),
+                              ),
+                          borderRadius: BorderRadius.circular(radius),
+                          border: Border.all(
+                            color: highContrast
+                                ? colors.onSurface
+                                : overrides.border ??
+                                      (dark ? Colors.white : colors.onSurface)
+                                          .withValues(alpha: dark ? .12 : .06),
+                            width: highContrast ? 1 : .6,
+                          ),
                         ),
                       ),
                     ),

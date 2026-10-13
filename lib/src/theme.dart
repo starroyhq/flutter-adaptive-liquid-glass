@@ -73,6 +73,8 @@ class LiquidGlassThemeData {
 
   /// Transparency and contrast govern material; reduced motion is handled by
   /// animated controls without changing their material or native renderer.
+  /// [disableAnimations] is accepted for source compatibility and never
+  /// affects the result.
   LiquidGlassMode resolve({
     required bool nativeAvailable,
     bool highContrast = false,

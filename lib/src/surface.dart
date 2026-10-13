@@ -71,7 +71,9 @@ class LiquidGlassSurface extends StatelessWidget {
               ),
             ),
           ),
-          content,
+          // Ink, scroll viewports and row highlights are rectangular; clip them
+          // to the glass shape as the fallback paths do.
+          ClipRRect(borderRadius: borderRadius, child: content),
         ],
       );
     }

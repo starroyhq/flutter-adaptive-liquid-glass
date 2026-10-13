@@ -540,4 +540,40 @@ void main() {
     expect(value, before);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('slider keeps the grab offset on the thumb and jumps elsewhere', (
+    tester,
+  ) async {
+    var value = .5;
+    await tester.pumpWidget(
+      host(
+        StatefulBuilder(
+          builder: (context, setState) => SizedBox(
+            width: 300,
+            child: LiquidGlassSlider(
+              value: value,
+              onChanged: (next) => setState(() => value = next),
+            ),
+          ),
+        ),
+      ),
+    );
+    final box = tester.getRect(find.byType(FallbackGlassSlider));
+    // The thumb centre is at 18 + .5 * 264 = 150. Grab its edge, 20 to the right.
+    var gesture = await tester.startGesture(
+      box.centerLeft + const Offset(170, 0),
+    );
+    await gesture.moveBy(const Offset(40, 0));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(value, closeTo((190 - 18) / 264, .002));
+
+    // Far from the thumb the value follows the touch position.
+    final thumb = 18 + value * 264;
+    gesture = await tester.startGesture(box.centerLeft + Offset(thumb + 80, 0));
+    await gesture.moveBy(const Offset(10, 0));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(value, closeTo((thumb + 90 - 18) / 264, .002));
+  });
 }

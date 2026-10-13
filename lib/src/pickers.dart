@@ -434,7 +434,13 @@ class _DateEditorState extends State<_DateEditor> {
                       _display.minute,
                     ),
                   );
-                  setState(() => _revision++);
+                  // CalendarDatePicker never adopts a new initialDate, so
+                  // remount it only when the accepted day differs from the
+                  // tapped one (a bound clamped it). Remounting on every tap
+                  // would drop keyboard focus and the displayed month/year view.
+                  if (!DateUtils.isSameDay(_display, date)) {
+                    setState(() => _revision++);
+                  }
                 },
               ),
               if (picker.mode == LiquidGlassDatePickerMode.dateAndTime)

@@ -1216,6 +1216,42 @@ void main() {
     },
     variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
+
+  testWidgets('calendar taps keep their state unless a bound clamps the day', (
+    tester,
+  ) async {
+    for (final clamped in [false, true]) {
+      var value = DateTime(2026, 10, 10, 9);
+      await tester.pumpWidget(
+        _app(
+          StatefulBuilder(
+            builder: (context, setState) => LiquidGlassDatePicker(
+              value: value,
+              mode: LiquidGlassDatePickerMode.date,
+              style: LiquidGlassDatePickerStyle.inline,
+              maximumDate: clamped ? DateTime(2026, 10, 12) : null,
+              onChanged: (date) => setState(() => value = date),
+            ),
+          ),
+        ),
+      );
+      final before = tester.state(find.byType(CalendarDatePicker));
+      tester
+          .widget<CalendarDatePicker>(find.byType(CalendarDatePicker))
+          .onDateChanged(DateTime(2026, 10, clamped ? 15 : 11));
+      await tester.pumpAndSettle();
+      final after = tester.state(find.byType(CalendarDatePicker));
+      expect(value.day, clamped ? 12 : 11);
+      expect(
+        identical(before, after),
+        !clamped,
+        reason: clamped
+            ? 'A clamped day must remount so the calendar shows the result.'
+            : 'An accepted tap must not recreate the calendar.',
+      );
+      await tester.pumpWidget(const SizedBox());
+    }
+  });
 }
 
 void _ignorePickerValue(Object? _) {}

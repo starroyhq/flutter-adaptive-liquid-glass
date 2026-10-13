@@ -50,11 +50,15 @@ class _FallbackGlassSliderState extends State<FallbackGlassSlider>
   bool _active = false, _pressed = false, _focused = false;
   double? _lastProposed;
   double _width = 240;
+  // Distance between the touch and the thumb centre when the pointer landed on
+  // the thumb, so grabbing its edge does not make the value jump.
+  double _grabOffset = 0;
 
   bool get _enabled => widget.onChanged != null;
   bool get _interactive => _enabled && LiquidGlassFeedback.canInteract(context);
+  // Debug builds assert the range; release builds stay on the track.
   double get _fraction =>
-      (widget.value - widget.min) / (widget.max - widget.min);
+      ((widget.value - widget.min) / (widget.max - widget.min)).clamp(0.0, 1.0);
   double get _increment => (widget.max - widget.min) / (widget.divisions ?? 20);
   String _format(double value) =>
       widget.semanticFormatterCallback?.call(value) ??
@@ -120,9 +124,22 @@ class _FallbackGlassSliderState extends State<FallbackGlassSlider>
         .clamp(widget.min, widget.max);
   }
 
+  double get _thumbX {
+    final span = math.max(1.0, _width - 36);
+    final visual = Directionality.of(context) == TextDirection.rtl
+        ? 1 - _fraction
+        : _fraction;
+    return 18 + visual * span;
+  }
+
+  double _grabOffsetAt(double x) {
+    final delta = x - _thumbX;
+    return delta.abs() <= 24 ? delta : 0;
+  }
+
   double _at(double x) {
     final span = math.max(1.0, _width - 36);
-    var fraction = ((x - 18) / span).clamp(0.0, 1.0);
+    var fraction = ((x - 18 - _grabOffset) / span).clamp(0.0, 1.0);
     if (Directionality.of(context) == TextDirection.rtl) {
       fraction = 1 - fraction;
     }
@@ -238,6 +255,10 @@ class _FallbackGlassSliderState extends State<FallbackGlassSlider>
               _width = constraints.hasBoundedWidth ? constraints.maxWidth : 240;
               return GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                onHorizontalDragDown: _enabled
+                    ? (details) =>
+                          _grabOffset = _grabOffsetAt(details.localPosition.dx)
+                    : null,
                 onTapDown: _enabled
                     ? (_) => setState(() => _pressed = true)
                     : null,

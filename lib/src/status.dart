@@ -97,17 +97,19 @@ class LiquidGlassProgressView extends StatelessWidget {
     final active = color ?? glass.colors.accent ?? scheme.primary;
     final track =
         trackColor ?? glass.colors.selection ?? scheme.surfaceContainerHighest;
+    // Debug builds assert the range; release builds draw a valid fraction.
+    final shown = progress.isNaN ? 0.0 : progress.clamp(0.0, 1.0);
     final Widget indicator =
         LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native
         ? NativeStatus(
             kind: 'progress',
-            progress: progress,
+            progress: shown,
             height: height,
             color: active,
             trackColor: track,
           )
         : LinearProgressIndicator(
-            value: progress,
+            value: shown,
             minHeight: height,
             borderRadius: BorderRadius.circular(height / 2),
             color: active,

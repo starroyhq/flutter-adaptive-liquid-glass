@@ -219,6 +219,52 @@ void main() {
       semantics.dispose();
     }
   });
+
+  testWidgets('out-of-range selection hides the thumb without throwing', (
+    tester,
+  ) async {
+    for (final index in [-1, 3, 99]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: FallbackSelectionTrack(
+              selectedIndex: index,
+              children: [
+                for (var i = 0; i < 3; i++) const SizedBox(height: 48),
+              ],
+            ),
+          ),
+        ),
+      );
+      final hidden = find.descendant(
+        of: find.byType(FallbackSelectionTrack),
+        matching: find.byType(Offstage),
+      );
+      expect(tester.widget<Offstage>(hidden.first).offstage, isTrue);
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: FallbackSelectionTrack(
+            selectedIndex: 1,
+            children: [for (var i = 0; i < 3; i++) const SizedBox(height: 48)],
+          ),
+        ),
+      ),
+    );
+    expect(
+      tester
+          .widgetList<Offstage>(
+            find.descendant(
+              of: find.byType(FallbackSelectionTrack),
+              matching: find.byType(Offstage),
+            ),
+          )
+          .any((widget) => widget.offstage),
+      isFalse,
+    );
+  });
 }
 
 const _labels = ['Computers', 'Sessions', 'Account'];

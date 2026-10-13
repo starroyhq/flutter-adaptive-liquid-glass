@@ -383,6 +383,35 @@ void main() {
       await tester.pumpAndSettle();
     },
   );
+
+  testWidgets('menu fits its widest row only when requested', (tester) async {
+    for (final fit in [false, true]) {
+      await _host(
+        tester,
+        LiquidGlassMenuButton<int>(
+          label: 'Options',
+          fitContent: fit,
+          items: const [
+            LiquidGlassMenuItem(value: 1, label: 'Short'),
+            LiquidGlassMenuItem(value: 2, label: 'Longer row'),
+          ],
+        ),
+      );
+      await tester.tap(find.text('Options'));
+      await tester.pumpAndSettle();
+      final width = tester
+          .getSize(find.byKey(const ValueKey('liquid-glass-popover-surface')))
+          .width;
+      if (fit) {
+        expect(width, lessThan(300));
+        expect(width, greaterThanOrEqualTo(160));
+      } else {
+        expect(width, 300);
+      }
+      await tester.tap(find.text('Short'));
+      await tester.pumpAndSettle();
+    }
+  });
 }
 
 Future<void> _host(WidgetTester tester, Widget child) async {

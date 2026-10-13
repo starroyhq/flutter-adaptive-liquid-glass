@@ -1,3 +1,17 @@
+## Unreleased
+
+- Clip native-mode glass content to its rounded shape, so alert, menu and sheet
+  rows no longer paint rectangular highlights outside the corners.
+- Keep the fallback calendar mounted after an accepted date tap, preserving
+  keyboard focus and the displayed month; remount only when a bound clamps the day.
+- Fallback sliders keep the grab offset when the thumb is dragged from its edge.
+- Two-action alerts lay out side by side; action sheets separate cancel actions.
+- Popovers scale from their anchor edge. Add opt-in `fitContent` to
+  `showLiquidGlassPopover` and `LiquidGlassMenuButton`.
+- Release builds no longer paint selection, slider or progress values outside
+  their track when an out-of-range value bypasses the debug assertions.
+- Use one disabled opacity (0.48) for group actions and menu rows.
+
 ## 0.2.1
 
 - Use system `UISlider` values and tracking for native slider edits. Preserve

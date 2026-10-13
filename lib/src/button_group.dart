@@ -93,7 +93,7 @@ class LiquidGlassButtonGroup extends StatelessWidget {
                         opacity:
                             action.onPressed == null &&
                                 action.onLongPress == null
-                            ? .4
+                            ? .48
                             : 1,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(

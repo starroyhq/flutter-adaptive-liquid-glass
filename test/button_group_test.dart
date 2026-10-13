@@ -121,4 +121,42 @@ void main() {
     expect(find.byType(LiquidGlassSurface), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('disabled group actions use the shared disabled opacity', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: LiquidGlassButtonGroup(
+              actions: [
+                LiquidGlassAction(
+                  id: 'on',
+                  label: 'On',
+                  icon: Icons.add,
+                  onPressed: () {},
+                ),
+                const LiquidGlassAction(
+                  id: 'off',
+                  label: 'Off',
+                  icon: Icons.remove,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    double opacityOf(String id) => tester
+        .widget<Opacity>(
+          find.descendant(
+            of: find.byKey(ValueKey(id)),
+            matching: find.byType(Opacity),
+          ),
+        )
+        .opacity;
+    expect(opacityOf('on'), 1);
+    expect(opacityOf('off'), .48);
+  });
 }

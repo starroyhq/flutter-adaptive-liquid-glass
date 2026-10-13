@@ -59,7 +59,8 @@ class LiquidGlassTabBar extends StatelessWidget {
                 badge: item.badge,
               ),
           ],
-          currentIndex: selectedIndex,
+          // Debug builds assert the range; keep the native bar valid in release.
+          currentIndex: selectedIndex.clamp(0, items.length - 1),
           selectedItemColor:
               glassTheme.colors.selectedForeground ??
               glassTheme.colors.accent ??

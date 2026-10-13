@@ -333,7 +333,10 @@ coordinate sheet expansion. Non-scrolling content can still use the drag handle.
 The route applies keyboard and safe-area constraints.
 
 `showLiquidGlassPopover<T>` requires `anchorContext` and `builder`, and accepts
-`width`, `maxHeight` and `gap`. Keep the anchor mounted while presented. The
+`width`, `maxHeight`, `gap` and `fitContent`. Keep the anchor mounted while
+presented. The popover is exactly `width` wide unless `fitContent` is set; it then
+takes the content's intrinsic width between 160 and `width` (`LiquidGlassMenuButton`
+accepts the same flag). It scales from the anchor edge it is attached to. The
 popover follows layout changes, flips/clamps within available keyboard-safe
 space and dismisses when its anchor is removed. Nested presentation, replacement
 and removal keep underlying native views hidden until the outgoing route's
@@ -385,6 +388,8 @@ same gesture does not also click. Shared capsules keep independent action target
 Only the stepper repeats. Scroll takeover, leaving the target, route coverage,
 backgrounding and disposal cancel applicable pending gestures.
 
+Alerts with exactly two actions place them side by side (a cancel action first)
+unless text is large; action sheets show their cancel actions as a separate group.
 `LiquidGlassMenuButton.trigger` accepts `LiquidGlassMenuTrigger.tap`, `.longPress`
 or `.tapAndLongPress` (the default). A custom `builder` keeps the existing
 `(context, open)` signature and owns its gestures. Each default trigger supports

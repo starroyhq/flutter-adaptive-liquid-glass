@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_adaptive_liquid_glass/src/native_visibility.dart';
 import 'package:flutter_adaptive_liquid_glass/src/navigator_observer.dart';
 import 'package:flutter_adaptive_liquid_glass/src/presentation.dart';
+import 'package:flutter_adaptive_liquid_glass/src/surface.dart';
 import 'package:flutter_adaptive_liquid_glass/src/theme.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -497,6 +498,201 @@ void main() {
     await tester.pumpAndSettle();
     expect(await future, 1);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('two alert actions sit side by side, cancel first', (
+    tester,
+  ) async {
+    final fixture = await _host(tester);
+    final future = showLiquidGlassAlert<int>(
+      context: fixture.context,
+      title: const Text('Confirm'),
+      actions: const [
+        LiquidGlassAlertAction(label: 'Delete', value: 1, destructive: true),
+        LiquidGlassAlertAction(label: 'Keep', value: 0, cancel: true),
+      ],
+    );
+    await tester.pumpAndSettle();
+    final keep = tester.getRect(find.widgetWithText(TextButton, 'Keep'));
+    final delete = tester.getRect(find.widgetWithText(TextButton, 'Delete'));
+    expect(keep.top, delete.top);
+    expect(keep.right, lessThanOrEqualTo(delete.left));
+    expect(keep.width, closeTo(delete.width, .5));
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(await future, 1);
+  });
+
+  testWidgets('alert actions stack for large text and for three actions', (
+    tester,
+  ) async {
+    final media = ValueNotifier(
+      const MediaQueryData(
+        size: Size(800, 600),
+        textScaler: TextScaler.linear(2),
+      ),
+    );
+    addTearDown(media.dispose);
+    final fixture = await _host(tester, media: media);
+    var future = showLiquidGlassAlert<int>(
+      context: fixture.context,
+      actions: const [
+        LiquidGlassAlertAction(label: 'First', value: 1),
+        LiquidGlassAlertAction(label: 'Second', value: 2),
+      ],
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.widgetWithText(TextButton, 'Second')).dy,
+      greaterThan(
+        tester.getBottomLeft(find.widgetWithText(TextButton, 'First')).dy - 1,
+      ),
+    );
+    await tester.tap(find.text('First'));
+    await tester.pumpAndSettle();
+    expect(await future, 1);
+
+    media.value = const MediaQueryData(size: Size(800, 600));
+    await tester.pumpAndSettle();
+    future = showLiquidGlassAlert<int>(
+      context: fixture.context,
+      actions: const [
+        LiquidGlassAlertAction(label: 'One', value: 1),
+        LiquidGlassAlertAction(label: 'Two', value: 2),
+        LiquidGlassAlertAction(label: 'Three', value: 3),
+      ],
+    );
+    await tester.pumpAndSettle();
+    final one = tester.getRect(find.widgetWithText(TextButton, 'One'));
+    final two = tester.getRect(find.widgetWithText(TextButton, 'Two'));
+    expect(two.top, greaterThanOrEqualTo(one.bottom));
+    await tester.tap(find.text('Three'));
+    await tester.pumpAndSettle();
+    expect(await future, 3);
+  });
+
+  testWidgets('action sheet keeps cancel in its own group below the rest', (
+    tester,
+  ) async {
+    final fixture = await _host(tester);
+    final future = showLiquidGlassAlert<String>(
+      context: fixture.context,
+      style: LiquidGlassAlertStyle.actionSheet,
+      actions: const [
+        LiquidGlassAlertAction(label: 'Edit', value: 'edit'),
+        LiquidGlassAlertAction(label: 'Delete', value: 'delete'),
+        LiquidGlassAlertAction(label: 'Dismiss', value: 'x', cancel: true),
+      ],
+    );
+    await tester.pumpAndSettle();
+    final surfaces = find.byType(LiquidGlassSurface);
+    expect(surfaces, findsNWidgets(2));
+    expect(
+      find.descendant(of: surfaces.first, matching: find.text('Delete')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: surfaces.last, matching: find.text('Dismiss')),
+      findsOneWidget,
+    );
+    final gap =
+        tester.getTopLeft(surfaces.last).dy -
+        tester.getBottomLeft(surfaces.first).dy;
+    expect(gap, closeTo(8, .5));
+    await tester.tap(find.text('Dismiss'));
+    await tester.pumpAndSettle();
+    expect(await future, isNull);
+  });
+
+  testWidgets('popover scales from the edge facing its anchor', (tester) async {
+    final top = GlobalKey(), bottom = GlobalKey();
+    final fixture = await _host(
+      tester,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 100,
+            top: 40,
+            child: SizedBox(key: top, width: 48, height: 48),
+          ),
+          Positioned(
+            left: 100,
+            top: 520,
+            child: SizedBox(key: bottom, width: 48, height: 48),
+          ),
+        ],
+      ),
+    );
+    const panelKey = ValueKey('liquid-glass-popover-surface');
+    Alignment origin() {
+      final transforms = tester.widgetList<Transform>(
+        find.ancestor(
+          of: find.byKey(panelKey),
+          matching: find.byType(Transform),
+        ),
+      );
+      return transforms
+          .map((transform) => transform.alignment)
+          .whereType<Alignment>()
+          .single;
+    }
+
+    for (final (anchor, edge) in [(top, -1.0), (bottom, 1.0)]) {
+      final future = showLiquidGlassPopover<void>(
+        context: fixture.context,
+        anchorContext: anchor.currentContext!,
+        width: 240,
+        builder: (_) => const SizedBox(height: 100, child: Text('Panel')),
+      );
+      // The anchor is measured after the first frame, then the layout records
+      // the origin that the next animation frame reads.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(origin().y, edge);
+      // Anchor centre x is 124; the panel starts at x = 100 and is 240 wide.
+      expect(origin().x, closeTo(24 / 240 * 2 - 1, .001));
+      fixture.navigator.currentState!.pop();
+      await tester.pumpAndSettle();
+      await future;
+    }
+  });
+
+  testWidgets('popover width is fixed unless it fits its content', (
+    tester,
+  ) async {
+    final anchor = GlobalKey();
+    final fixture = await _host(
+      tester,
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(key: anchor, width: 48, height: 48),
+      ),
+    );
+    const panelKey = ValueKey('liquid-glass-popover-surface');
+    Future<double> widthOf({required bool fit, required double content}) async {
+      final future = showLiquidGlassPopover<void>(
+        context: fixture.context,
+        anchorContext: anchor.currentContext!,
+        width: 320,
+        fitContent: fit,
+        builder: (_) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [SizedBox(width: content, height: 40)],
+        ),
+      );
+      await tester.pumpAndSettle();
+      final width = tester.getSize(find.byKey(panelKey)).width;
+      fixture.navigator.currentState!.pop();
+      await tester.pumpAndSettle();
+      await future;
+      return width;
+    }
+
+    expect(await widthOf(fit: false, content: 200), 320);
+    expect(await widthOf(fit: true, content: 200), 200);
+    expect(await widthOf(fit: true, content: 50), 160);
+    expect(await widthOf(fit: true, content: 900), 320);
   });
 }
 

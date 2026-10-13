@@ -125,6 +125,11 @@ Future<T?> showLiquidGlassSheet<T>({
 /// The popover prefers the space below its anchor, flips above when necessary,
 /// and clamps within the keyboard and safe-area bounds. Removing the anchor
 /// dismisses only this route, including when another popup is above it.
+/// It scales from the anchor edge it is attached to.
+///
+/// By default the popover is exactly [width] wide. With [fitContent] it takes
+/// the content's intrinsic width, between 160 and [width]; the content must
+/// then support intrinsic sizing (no lazy lists or unbounded flex).
 Future<T?> showLiquidGlassPopover<T>({
   required BuildContext context,
   required BuildContext anchorContext,
@@ -134,6 +139,7 @@ Future<T?> showLiquidGlassPopover<T>({
   double width = 320,
   double maxHeight = 480,
   double gap = 8,
+  bool fitContent = false,
   RouteSettings? routeSettings,
   String? semanticLabel,
 }) {
@@ -152,12 +158,15 @@ Future<T?> showLiquidGlassPopover<T>({
     barrierDismissible: barrierDismissible,
     settings: routeSettings,
     barrierOpacity: .08,
+    // The popover scales itself from its anchor edge; the route only fades.
+    scale: false,
     builder: (context) => _Popover(
       anchorContext: anchorContext,
       builder: builder,
       width: width,
       maxHeight: maxHeight,
       gap: gap,
+      fitContent: fitContent,
       semanticLabel: semanticLabel,
     ),
   );
@@ -170,6 +179,7 @@ Future<T?> _showPopup<T>({
   required bool barrierDismissible,
   required RouteSettings? settings,
   bool slide = false,
+  bool scale = true,
   double barrierOpacity = .2,
 }) {
   final navigator = Navigator.of(context, rootNavigator: useRootNavigator);
@@ -188,6 +198,7 @@ Future<T?> _showPopup<T>({
       reduceMotion:
           localGlass.reduceMotion || MediaQuery.disableAnimationsOf(context),
       slide: slide,
+      scale: scale,
       barrierOpacity: barrierOpacity,
       settings: settings,
     ),
@@ -203,6 +214,7 @@ class _GlassPopupRoute<T> extends PopupRoute<T> {
     required this.localGlass,
     required this.reduceMotion,
     required this.slide,
+    required this.scale,
     required this.barrierOpacity,
     super.settings,
   }) : super(traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop);
@@ -214,6 +226,7 @@ class _GlassPopupRoute<T> extends PopupRoute<T> {
   final LiquidGlassThemeData? localGlass;
   final bool reduceMotion;
   final bool slide;
+  final bool scale;
   final double barrierOpacity;
 
   @override
@@ -265,10 +278,12 @@ class _GlassPopupRoute<T> extends PopupRoute<T> {
               ).animate(curve),
               child: child,
             )
-          : ScaleTransition(
+          : scale
+          ? ScaleTransition(
               scale: Tween(begin: .96, end: 1.0).animate(curve),
               child: child,
-            ),
+            )
+          : child,
     );
   }
 }
@@ -304,11 +319,78 @@ class _AlertState<T> extends State<_Alert<T>> {
     Navigator.of(context).pop<T>(action.cancel ? null : action.value);
   }
 
+  Widget _button(LiquidGlassAlertAction<T> action) {
+    final theme = Theme.of(context);
+    return TextButton(
+      onPressed: action.enabled ? () => _select(action) : null,
+      style: TextButton.styleFrom(
+        enableFeedback: false,
+        minimumSize: const Size(48, 52),
+        foregroundColor: action.destructive
+            ? theme.colorScheme.error
+            : LiquidGlassTheme.of(context).colors.accent ??
+                  theme.colorScheme.primary,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        shape: const RoundedRectangleBorder(),
+        textStyle: theme.textTheme.titleMedium?.copyWith(
+          fontWeight: action.cancel ? FontWeight.w600 : FontWeight.w400,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (action.icon != null) ...[
+            Icon(action.icon),
+            const SizedBox(width: 8),
+          ],
+          Flexible(child: Text(action.label, textAlign: TextAlign.center)),
+        ],
+      ),
+    );
+  }
+
+  /// Two alert actions sit side by side, with the cancel action first, as in
+  /// UIKit. Large text stacks them so labels keep a usable width.
+  Widget _pair(List<LiquidGlassAlertAction<T>> actions) {
+    final ordered = actions.first.cancel || !actions.last.cancel
+        ? actions
+        : actions.reversed.toList();
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: _button(ordered.first)),
+          const VerticalDivider(width: 1),
+          Expanded(child: _button(ordered.last)),
+        ],
+      ),
+    );
+  }
+
+  Widget _group(Widget child) => LiquidGlassSurface(
+    radius: 28,
+    child: Material(
+      color: Colors.transparent,
+      child: SingleChildScrollView(child: child),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final media = MediaQuery.of(context);
     final isSheet = widget.style == LiquidGlassAlertStyle.actionSheet;
+    // An action sheet keeps its cancel actions apart from the other actions.
+    final grouped = isSheet && widget.actions.any((action) => action.cancel);
+    final main = grouped
+        ? widget.actions.where((action) => !action.cancel).toList()
+        : widget.actions;
+    final cancel = grouped
+        ? widget.actions.where((action) => action.cancel).toList()
+        : <LiquidGlassAlertAction<T>>[];
+    final sideBySide =
+        !isSheet && main.length == 2 && media.textScaler.scale(17) <= 22;
+    final hasText = widget.title != null || widget.content != null;
     return Padding(
       padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
       child: SafeArea(
@@ -324,81 +406,66 @@ class _AlertState<T> extends State<_Alert<T>> {
                   widget.semanticLabel ??
                   MaterialLocalizations.of(context).alertDialogLabel,
               explicitChildNodes: true,
-              child: LiquidGlassSurface(
-                radius: 28,
-                child: Material(
-                  color: Colors.transparent,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (widget.title != null || widget.content != null)
-                          Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (widget.title != null)
-                                  DefaultTextStyle.merge(
-                                    style: theme.textTheme.titleLarge,
-                                    textAlign: TextAlign.center,
-                                    child: widget.title!,
-                                  ),
-                                if (widget.title != null &&
-                                    widget.content != null)
-                                  const SizedBox(height: 12),
-                                if (widget.content != null) widget.content!,
-                              ],
-                            ),
-                          ),
-                        for (final action in widget.actions) ...[
-                          const Divider(height: 1),
-                          TextButton(
-                            onPressed: action.enabled
-                                ? () => _select(action)
-                                : null,
-                            style: TextButton.styleFrom(
-                              enableFeedback: false,
-                              minimumSize: const Size(48, 52),
-                              foregroundColor: action.destructive
-                                  ? theme.colorScheme.error
-                                  : LiquidGlassTheme.of(
-                                          context,
-                                        ).colors.accent ??
-                                        theme.colorScheme.primary,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 14,
-                              ),
-                              shape: const RoundedRectangleBorder(),
-                              textStyle: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: action.cancel
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                if (action.icon != null) ...[
-                                  Icon(action.icon),
-                                  const SizedBox(width: 8),
-                                ],
-                                Flexible(
-                                  child: Text(
-                                    action.label,
-                                    textAlign: TextAlign.center,
-                                  ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (hasText || main.isNotEmpty)
+                    Flexible(
+                      child: _group(
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (hasText)
+                              Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (widget.title != null)
+                                      DefaultTextStyle.merge(
+                                        style: theme.textTheme.titleLarge,
+                                        textAlign: TextAlign.center,
+                                        child: widget.title!,
+                                      ),
+                                    if (widget.title != null &&
+                                        widget.content != null)
+                                      const SizedBox(height: 12),
+                                    if (widget.content != null) widget.content!,
+                                  ],
                                 ),
+                              ),
+                            if (sideBySide) ...[
+                              const Divider(height: 1),
+                              _pair(main),
+                            ] else
+                              for (final action in main) ...[
+                                if (hasText || action != main.first)
+                                  const Divider(height: 1),
+                                _button(action),
                               ],
-                            ),
-                          ),
-                        ],
-                      ],
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  if (cancel.isNotEmpty) ...[
+                    if (hasText || main.isNotEmpty) const SizedBox(height: 8),
+                    _group(
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final action in cancel) ...[
+                            if (action != cancel.first)
+                              const Divider(height: 1),
+                            _button(action),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
@@ -652,6 +719,7 @@ class _Popover extends StatefulWidget {
     required this.width,
     required this.maxHeight,
     required this.gap,
+    required this.fitContent,
     required this.semanticLabel,
   });
 
@@ -660,15 +728,24 @@ class _Popover extends StatefulWidget {
   final double width;
   final double maxHeight;
   final double gap;
+  final bool fitContent;
   final String? semanticLabel;
 
   @override
   State<_Popover> createState() => _PopoverState();
 }
 
+/// Where the popover attaches to its anchor, as an alignment inside the
+/// popover. The layout delegate writes it while positioning; the scale
+/// transition reads it on the next animation frame.
+class _PopoverOrigin {
+  Alignment alignment = Alignment.topCenter;
+}
+
 class _PopoverState extends State<_Popover> {
   Rect? _anchor;
   bool _closing = false;
+  final _origin = _PopoverOrigin();
 
   @override
   void initState() {
@@ -733,6 +810,12 @@ class _PopoverState extends State<_Popover> {
         );
         final anchor = _anchor;
         if (anchor == null) return const SizedBox.expand();
+        final glass = LiquidGlassTheme.of(context);
+        final animation = ModalRoute.of(context)?.animation;
+        final animate =
+            animation != null &&
+            !glass.reduceMotion &&
+            !MediaQuery.disableAnimationsOf(context);
         return CustomSingleChildLayout(
           delegate: _PopoverLayout(
             anchor: anchor,
@@ -740,26 +823,61 @@ class _PopoverState extends State<_Popover> {
             width: widget.width,
             maxHeight: widget.maxHeight,
             gap: widget.gap,
+            fitContent: widget.fitContent,
             direction: Directionality.of(context),
+            origin: _origin,
           ),
-          child: Semantics(
-            scopesRoute: true,
-            namesRoute: true,
-            label:
-                widget.semanticLabel ??
-                MaterialLocalizations.of(context).popupMenuLabel,
-            explicitChildNodes: true,
-            child: LiquidGlassSurface(
-              key: const ValueKey('liquid-glass-popover-surface'),
-              radius: 24,
-              child: Material(
-                color: Colors.transparent,
-                child: Builder(builder: widget.builder),
+          child: _AnchorScale(
+            animation: animate ? animation : null,
+            origin: _origin,
+            child: Semantics(
+              scopesRoute: true,
+              namesRoute: true,
+              label:
+                  widget.semanticLabel ??
+                  MaterialLocalizations.of(context).popupMenuLabel,
+              explicitChildNodes: true,
+              child: LiquidGlassSurface(
+                key: const ValueKey('liquid-glass-popover-surface'),
+                radius: 24,
+                child: Material(
+                  color: Colors.transparent,
+                  child: Builder(builder: widget.builder),
+                ),
               ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// Scales its child about the anchor attachment point recorded by the layout.
+class _AnchorScale extends StatelessWidget {
+  const _AnchorScale({
+    required this.animation,
+    required this.origin,
+    required this.child,
+  });
+
+  final Animation<double>? animation;
+  final _PopoverOrigin origin;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final animation = this.animation;
+    if (animation == null) return child;
+    final curve = animation.drive(CurveTween(curve: Curves.easeOutCubic));
+    return AnimatedBuilder(
+      animation: curve,
+      child: child,
+      builder: (context, child) => Transform.scale(
+        scale: .92 + .08 * curve.value,
+        alignment: origin.alignment,
+        child: child,
+      ),
     );
   }
 }
@@ -771,7 +889,9 @@ class _PopoverLayout extends SingleChildLayoutDelegate {
     required this.width,
     required this.maxHeight,
     required this.gap,
+    required this.fitContent,
     required this.direction,
+    required this.origin,
   });
 
   final Rect anchor;
@@ -779,15 +899,19 @@ class _PopoverLayout extends SingleChildLayoutDelegate {
   final double width;
   final double maxHeight;
   final double gap;
+  final bool fitContent;
   final TextDirection direction;
+  final _PopoverOrigin origin;
 
   @override
-  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
-      BoxConstraints(
-        minWidth: math.min(width, bounds.width),
-        maxWidth: math.min(width, bounds.width),
-        maxHeight: math.min(maxHeight, bounds.height),
-      );
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    final maxWidth = math.min(width, bounds.width);
+    return BoxConstraints(
+      minWidth: fitContent ? math.min(160, maxWidth) : maxWidth,
+      maxWidth: maxWidth,
+      maxHeight: math.min(maxHeight, bounds.height),
+    );
+  }
 
   @override
   Offset getPositionForChild(Size size, Size childSize) {
@@ -800,7 +924,7 @@ class _PopoverLayout extends SingleChildLayoutDelegate {
     final y = useBelow
         ? anchor.bottom + gap
         : anchor.top - gap - childSize.height;
-    return Offset(
+    final position = Offset(
       x.clamp(
         bounds.left,
         math.max(bounds.left, bounds.right - childSize.width),
@@ -810,6 +934,16 @@ class _PopoverLayout extends SingleChildLayoutDelegate {
         math.max(bounds.top, bounds.bottom - childSize.height),
       ),
     );
+    // Attach at the anchor's centre, kept inside the popover's own edges.
+    final attachX = (anchor.center.dx - position.dx).clamp(
+      0.0,
+      childSize.width,
+    );
+    origin.alignment = Alignment(
+      childSize.width == 0 ? 0 : attachX / childSize.width * 2 - 1,
+      useBelow ? -1 : 1,
+    );
+    return position;
   }
 
   @override
@@ -819,5 +953,6 @@ class _PopoverLayout extends SingleChildLayoutDelegate {
       width != oldDelegate.width ||
       maxHeight != oldDelegate.maxHeight ||
       gap != oldDelegate.gap ||
+      fitContent != oldDelegate.fitContent ||
       direction != oldDelegate.direction;
 }

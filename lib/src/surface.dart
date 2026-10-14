@@ -1,9 +1,9 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:native_liquid_glass/native_liquid_glass.dart' as native;
 
 import 'theme.dart';
+import 'native_surface.dart';
 import 'native_visibility.dart';
 
 /// Fallback materials differ by placement; native system material is unchanged.
@@ -58,15 +58,13 @@ class LiquidGlassSurface extends StatelessWidget {
           Positioned.fill(
             child: IgnorePointer(
               child: NativeVisibility(
-                child: native.LiquidGlassContainer(
-                  config: native.LiquidGlassConfig(
-                    cornerRadius: radius,
-                    tint: resolvedTint,
-                    backgroundColor:
-                        (overrides.surfaceTint ?? theme.colorScheme.surface)
-                            .withValues(alpha: .35),
-                  ),
-                  child: const SizedBox.expand(),
+                child: NativeSurface(
+                  radius: radius,
+                  dark: dark,
+                  tint: resolvedTint,
+                  backgroundColor:
+                      (overrides.surfaceTint ?? theme.colorScheme.surface)
+                          .withValues(alpha: .35),
                 ),
               ),
             ),

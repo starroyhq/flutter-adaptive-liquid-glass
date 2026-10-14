@@ -1,3 +1,17 @@
+## Unreleased
+
+- Draw the native `LiquidGlassSurface` material with a package-owned UIKit view
+  (`UIVisualEffectView` with `UIGlassEffect`) instead of the provider's SwiftUI
+  `LiquidGlassContainer`. The provider's container lays its shape out inside the
+  window's safe area and does not refresh the insets it read at first layout, so
+  a surface that is created below the screen and slid into place, as every sheet
+  is, could end up shorter than its content, or stay missing until something
+  resized it. On iOS 26.5 simulators the provider's panel ended 6-34 pt above its
+  frame, or was absent from the first frames, depending on timing; the
+  package-owned view ended at the expected edge in every measured run. Radius,
+  tint, the fill behind the glass, route coverage and popup suppression are
+  unchanged. See the [validation record](doc/native-surface-validation.md).
+
 ## 0.3.0
 
 - Clip native-mode glass content to its rounded shape, so alert, menu and sheet

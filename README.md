@@ -554,7 +554,10 @@ messages and forms. Text fields remain Flutter widgets inside a surface.
 ## Native dependency and overlays
 
 `native_liquid_glass` is pinned to **0.3.1** (Flutter >=3.41.2, Dart >=3.11).
-Its types do not appear in this package's public API.
+Its types do not appear in this package's public API. It supplies the system tab bar,
+segmented control, icon buttons and platform detection; the native material behind
+`LiquidGlassSurface` is a package-owned UIKit view, because the provider's SwiftUI
+container does not keep its shape in step with the safe area while a sheet slides in.
 Only ordinary tab destinations are exposed; the provider's
 detached action-tab path, including dynamic prominent-tab lookup, is not used.
 

@@ -30,6 +30,7 @@ public final class FlutterAdaptiveLiquidGlassPlugin: NSObject, FlutterPlugin {
     )
     registrar.addMethodCallDelegate(FlutterAdaptiveLiquidGlassPlugin(registrar: registrar), channel: channel)
     registrar.register(AdaptiveLiquidGlassCapsuleFactory(messenger: registrar.messenger()), withId: "flutter_adaptive_liquid_glass/capsule")
+    registrar.register(AdaptiveLiquidGlassSurfaceFactory(messenger: registrar.messenger()), withId: "flutter_adaptive_liquid_glass/surface")
     registrar.register(AdaptiveLiquidGlassNavigationBarFactory(messenger: registrar.messenger()), withId: "flutter_adaptive_liquid_glass/navigation-bar")
     registrar.register(AdaptiveLiquidGlassValueControlFactory(messenger: registrar.messenger()), withId: "flutter_adaptive_liquid_glass/value-control")
     registrar.register(AdaptiveLiquidGlassPickerFactory(messenger: registrar.messenger(), kind: .date), withId: "flutter_adaptive_liquid_glass/date_picker")

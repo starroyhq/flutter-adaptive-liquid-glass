@@ -46,6 +46,8 @@ on timing.
 | Provider container patched with `.ignoresSafeArea()` | loaded, 3 runs | 840 pt, all frames present |
 | Provider container patched with `hc.safeAreaRegions = []` | loaded, 3 runs | 840 pt, all frames present |
 | Package-owned UIKit view | loaded, 3 runs | 840 pt, all frames present |
+| Package-owned UIKit view, content-sized sheet (`fitContent: true`) | idle, 1 run | 839.7 pt |
+| Package-owned UIKit view, content-sized sheet (`fitContent: true`) | loaded, 3 runs | 839.7 pt, all frames present |
 
 The package-owned view also rendered correctly in dark appearance on iOS 26.5
 and in light appearance on iOS 27.0. Its material, radius, tint and fill match
@@ -64,9 +66,28 @@ material is sized from the view's own bounds. Route coverage still hides it from
 Dart (`NativeVisibility`), and it follows the provider's global popup suppression
 unless it lives inside the popup.
 
+## Consumer acceptance harness
+
+The change swaps the material under every `LiquidGlassSurface`: alerts, action
+sheets, menus, popovers and sheets. The acceptance host of the AgentKib Flutter
+app (`tool/glass_acceptance_app.dart`, app commit `d1c531d`) was run through its
+XCUITest classes on the same iOS 26.5 simulator, with the app built against a
+snapshot of this change instead of the hosted 0.3.0.
+
+| Class | Result |
+| --- | --- |
+| `RemotePageUITests` (1 test) | passed |
+| `RemoteEmptyTabUITests` (1 test) | passed |
+| `GlassInteractionUITests` (6 tests) | first run: 1 passed and 5 failed, all on waits that timed out (a stable frame, a hittable tab, a screenshot) while other builds saturated the machine, with test durations of 158-1237 s; the 5 rerun on the same build with the machine quiet all passed (73-216 s) |
+
+The hosted 0.3.0 was not run for comparison. The first run's failures are
+attributed to the load only because the identical build passed on rerun.
+
 ## Limits
 
 - Simulators only, one device size. Physical devices were not measured.
+- The consumer harness ran on iOS 26.5 only. The fallback path is unchanged by
+  this change and was not rerun through it.
 - The shortfall was measured in light appearance; dark appearance was inspected
   but not measured numerically.
 - The cause is described from the observed behaviour, the provider's source and

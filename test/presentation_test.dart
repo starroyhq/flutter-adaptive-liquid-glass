@@ -192,6 +192,287 @@ void main() {
     await future;
   });
 
+  group('fitContent sheet', () {
+    const surface = ValueKey('liquid-glass-sheet-surface');
+    const handleKey = ValueKey('liquid-glass-sheet-handle');
+    const contentKey = ValueKey('fit-content');
+
+    testWidgets('is as tall as its content and rests on the safe area', (
+      tester,
+    ) async {
+      final fixture = await _host(tester);
+      final future = showLiquidGlassSheet<String>(
+        context: fixture.context,
+        fitContent: true,
+        builder: (context) => Column(
+          key: contentKey,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 120, child: Center(child: Text('Compact'))),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'done'),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      final panel = tester.getRect(find.byKey(surface));
+      final content = tester.getSize(find.byKey(contentKey));
+      // The grab handle is 32 high; nothing else adds to the content.
+      expect(panel.height, content.height + 32);
+      expect(
+        panel.height,
+        lessThan(600 * LiquidGlassSheetDetent.medium.fraction),
+      );
+      // The default 800x600 test view has no insets: the route keeps its 8
+      // point bottom margin and caps the width at 640.
+      expect(panel.bottom, 592);
+      expect(panel.width, 640);
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(surface), findsNothing);
+      expect(await future, 'done');
+    });
+
+    testWidgets('keeps its full width without a handle', (tester) async {
+      final fixture = await _host(tester);
+      showLiquidGlassSheet<void>(
+        context: fixture.context,
+        fitContent: true,
+        showDragHandle: false,
+        builder: (_) => const Text('Narrow'),
+      );
+      await tester.pumpAndSettle();
+      final panel = tester.getRect(find.byKey(surface));
+      expect(find.byKey(handleKey), findsNothing);
+      expect(panel.width, 640);
+      expect(panel.height, tester.getSize(find.text('Narrow')).height);
+    });
+
+    testWidgets('stops at the large detent and lets its content scroll', (
+      tester,
+    ) async {
+      final fixture = await _host(tester);
+      ScrollController? controller;
+      showLiquidGlassSheet<void>(
+        context: fixture.context,
+        fitContent: true,
+        builder: (context) {
+          controller = PrimaryScrollController.of(context);
+          return ListView(
+            shrinkWrap: true,
+            primary: true,
+            children: [
+              for (var i = 0; i < 50; i++) ListTile(title: Text('Row $i')),
+            ],
+          );
+        },
+      );
+      await tester.pumpAndSettle();
+      // 600 high, less the 12 top and 8 bottom margins.
+      expect(
+        tester.getSize(find.byKey(surface)).height,
+        closeTo((600 - 12 - 8) * LiquidGlassSheetDetent.large.fraction, .01),
+      );
+      await tester.drag(find.text('Row 2'), const Offset(0, -250));
+      await tester.pumpAndSettle();
+      expect(controller!.offset, greaterThan(0));
+    });
+
+    testWidgets('the handle pulls the sheet down to dismiss or springs back', (
+      tester,
+    ) async {
+      final fixture = await _host(tester);
+      final future = showLiquidGlassSheet<String>(
+        context: fixture.context,
+        fitContent: true,
+        builder: (_) => const SizedBox(height: 200, child: Text('Body')),
+      );
+      await tester.pumpAndSettle();
+      final handle = find.byKey(handleKey);
+      final top = tester.getTopLeft(handle).dy;
+
+      // The sheet is 232 high, so 40 is less than a quarter of it.
+      final short = await tester.startGesture(tester.getCenter(handle));
+      await short.moveBy(const Offset(0, 40));
+      await tester.pump();
+      expect(tester.getTopLeft(handle).dy, greaterThan(top));
+      await short.up();
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(handle).dy, top);
+      expect(find.text('Body'), findsOneWidget);
+
+      await tester.drag(handle, const Offset(0, 160));
+      await tester.pumpAndSettle();
+      expect(find.text('Body'), findsNothing);
+      expect(await future, isNull);
+    });
+
+    testWidgets('a quick downward flick dismisses a barely moved sheet', (
+      tester,
+    ) async {
+      final fixture = await _host(tester);
+      final future = showLiquidGlassSheet<String>(
+        context: fixture.context,
+        fitContent: true,
+        builder: (_) => const SizedBox(height: 200, child: Text('Body')),
+      );
+      await tester.pumpAndSettle();
+      // 30 points is far less than a quarter of the sheet, but 2000 points per
+      // second is a flick. `WidgetTester.fling` cannot express this: its
+      // timestamps collapse to the same millisecond over so short a distance.
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(handleKey)),
+      );
+      for (var step = 1; step <= 3; step++) {
+        await gesture.moveBy(
+          const Offset(0, 10),
+          timeStamp: Duration(milliseconds: 5 * step),
+        );
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.text('Body'), findsNothing);
+      expect(await future, isNull);
+    });
+
+    testWidgets('a slow short pull is not mistaken for a flick', (
+      tester,
+    ) async {
+      final fixture = await _host(tester);
+      showLiquidGlassSheet<String>(
+        context: fixture.context,
+        fitContent: true,
+        builder: (_) => const SizedBox(height: 200, child: Text('Body')),
+      );
+      await tester.pumpAndSettle();
+      final handle = find.byKey(handleKey);
+      final top = tester.getTopLeft(handle).dy;
+      final gesture = await tester.startGesture(tester.getCenter(handle));
+      for (var step = 1; step <= 3; step++) {
+        await gesture.moveBy(
+          const Offset(0, 10),
+          timeStamp: Duration(milliseconds: 100 * step),
+        );
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.text('Body'), findsOneWidget);
+      expect(tester.getTopLeft(handle).dy, top);
+    });
+
+    testWidgets('does not move without drag, and honours the barrier', (
+      tester,
+    ) async {
+      final fixture = await _host(tester);
+      final future = showLiquidGlassSheet<String>(
+        context: fixture.context,
+        fitContent: true,
+        enableDrag: false,
+        builder: (_) => const SizedBox(height: 200, child: Text('Body')),
+      );
+      await tester.pumpAndSettle();
+      final handle = find.byKey(handleKey);
+      final top = tester.getTopLeft(handle).dy;
+      await tester.drag(handle, const Offset(0, 300));
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(handle).dy, top);
+      expect(find.text('Body'), findsOneWidget);
+      await tester.tapAt(const Offset(400, 20));
+      await tester.pumpAndSettle();
+      expect(find.text('Body'), findsNothing);
+      expect(await future, isNull);
+    });
+
+    testWidgets('shrinks above the keyboard and keeps its content state', (
+      tester,
+    ) async {
+      final media = ValueNotifier(const MediaQueryData(size: Size(800, 600)));
+      addTearDown(media.dispose);
+      final fixture = await _host(tester, media: media);
+      showLiquidGlassSheet<void>(
+        context: fixture.context,
+        fitContent: true,
+        builder: (context) => ListView(
+          shrinkWrap: true,
+          primary: true,
+          children: [
+            Text('Inset ${MediaQuery.viewInsetsOf(context).bottom}'),
+            const TextField(key: ValueKey('draft')),
+            for (var i = 0; i < 40; i++) ListTile(title: Text('Row $i')),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('draft')), '中文 👩🏽‍💻');
+      media.value = media.value.copyWith(
+        viewInsets: const EdgeInsets.only(bottom: 200),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Inset 0.0'), findsOneWidget);
+      expect(find.text('中文 👩🏽‍💻'), findsOneWidget);
+      final panel = tester.getRect(find.byKey(surface));
+      expect(panel.bottom, 392);
+      expect(
+        panel.height,
+        closeTo(
+          (600 - 200 - 12 - 8) * LiquidGlassSheetDetent.large.fraction,
+          .01,
+        ),
+      );
+    });
+
+    testWidgets('content sees none of the insets the sheet already applied', (
+      tester,
+    ) async {
+      final media = ValueNotifier(
+        const MediaQueryData(
+          size: Size(800, 600),
+          padding: EdgeInsets.fromLTRB(40, 20, 40, 34),
+        ),
+      );
+      addTearDown(media.dispose);
+      final fixture = await _host(tester, media: media);
+      EdgeInsets? padding;
+      showLiquidGlassSheet<void>(
+        context: fixture.context,
+        fitContent: true,
+        builder: (context) {
+          padding = MediaQuery.paddingOf(context);
+          return const SizedBox(height: 80);
+        },
+      );
+      await tester.pumpAndSettle();
+      expect(padding, EdgeInsets.zero);
+      final panel = tester.getRect(find.byKey(surface));
+      expect(panel.bottom, 600 - 34);
+      expect(panel.left, greaterThanOrEqualTo(40));
+    });
+
+    testWidgets('detents are ignored, and still checked without it', (
+      tester,
+    ) async {
+      final fixture = await _host(tester);
+      expect(
+        () => showLiquidGlassSheet<void>(
+          context: fixture.context,
+          detents: const [],
+          builder: (_) => const SizedBox(),
+        ),
+        throwsArgumentError,
+      );
+      showLiquidGlassSheet<void>(
+        context: fixture.context,
+        fitContent: true,
+        detents: const [],
+        builder: (_) => const SizedBox(height: 40),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(surface), findsOneWidget);
+    });
+  });
+
   testWidgets(
     'popover follows anchor and clamps above keyboard without ticking',
     (tester) async {

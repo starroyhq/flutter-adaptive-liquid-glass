@@ -348,6 +348,16 @@ the builder's **one primary vertical scroll view** must use `primary: true` or
 coordinate sheet expansion. Non-scrolling content can still use the drag handle.
 The route applies keyboard and safe-area constraints.
 
+Pass `fitContent: true` for a sheet that is only as tall as its content, up to
+the large detent, instead of one that opens at a detent; `detents` and
+`initialDetent` do not apply. As in a modal bottom sheet, the content is laid out
+with a bounded height and decides its own size, so use a `Column` with
+`mainAxisSize: MainAxisSize.min` and give anything that can outgrow the sheet its
+own scrolling (`ListView(shrinkWrap: true)`, or a `SingleChildScrollView` in a
+`Flexible`). The builder still receives a `PrimaryScrollController`. There are no
+intermediate stops: the handle pulls the whole sheet down, and releasing it a
+quarter of the way down, or with a quick downward flick, dismisses the sheet.
+
 `showLiquidGlassPopover<T>` requires `anchorContext` and `builder`, and accepts
 `width`, `maxHeight`, `gap` and `fitContent`. Keep the anchor mounted while
 presented. The popover is exactly `width` wide unless `fitContent` is set; it then

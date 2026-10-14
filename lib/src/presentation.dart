@@ -89,6 +89,16 @@ Future<T?> showLiquidGlassAlert<T>({
 /// scrolling to the sheet until its largest detent is reached. Non-scrollable
 /// content can still resize and dismiss the sheet using the drag handle.
 /// Keyboard space and system safe areas are removed from the available height.
+///
+/// With [fitContent] the sheet is only as tall as its content, up to the large
+/// detent, instead of opening at a detent; [detents] and [initialDetent] do not
+/// apply. As in a modal bottom sheet, the content is laid out with a bounded
+/// height and decides its own size: use a column with
+/// `mainAxisSize: MainAxisSize.min`, and give anything that can outgrow the
+/// sheet its own scrolling (a `ListView(shrinkWrap: true)`, or a
+/// `SingleChildScrollView` in a `Flexible`). The builder still receives a
+/// [PrimaryScrollController]. There are no intermediate stops, so the drag
+/// handle only drags the whole sheet down to dismiss it.
 Future<T?> showLiquidGlassSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -98,13 +108,14 @@ Future<T?> showLiquidGlassSheet<T>({
     LiquidGlassSheetDetent.large,
   ],
   LiquidGlassSheetDetent initialDetent = LiquidGlassSheetDetent.medium,
+  bool fitContent = false,
   bool barrierDismissible = true,
   bool enableDrag = true,
   bool showDragHandle = true,
   RouteSettings? routeSettings,
   String? semanticLabel,
 }) {
-  if (detents.isEmpty || !detents.contains(initialDetent)) {
+  if (!fitContent && (detents.isEmpty || !detents.contains(initialDetent))) {
     throw ArgumentError('detents must contain the initialDetent.');
   }
   final heights = detents.map((value) => value.fraction).toSet().toList()
@@ -115,14 +126,21 @@ Future<T?> showLiquidGlassSheet<T>({
     barrierDismissible: barrierDismissible,
     settings: routeSettings,
     slide: true,
-    builder: (context) => _Sheet(
-      builder: builder,
-      heights: heights,
-      initial: initialDetent.fraction,
-      enableDrag: enableDrag,
-      showDragHandle: showDragHandle,
-      semanticLabel: semanticLabel,
-    ),
+    builder: (context) => fitContent
+        ? _FitSheet(
+            builder: builder,
+            enableDrag: enableDrag,
+            showDragHandle: showDragHandle,
+            semanticLabel: semanticLabel,
+          )
+        : _Sheet(
+            builder: builder,
+            heights: heights,
+            initial: initialDetent.fraction,
+            enableDrag: enableDrag,
+            showDragHandle: showDragHandle,
+            semanticLabel: semanticLabel,
+          ),
   );
 }
 
@@ -608,6 +626,7 @@ class _SheetState extends State<_Sheet> with SingleTickerProviderStateMixin {
                           MaterialLocalizations.of(context).dialogLabel,
                       explicitChildNodes: true,
                       child: LiquidGlassSurface(
+                        key: const ValueKey('liquid-glass-sheet-surface'),
                         radius: 28,
                         child: Material(
                           color: Colors.transparent,
@@ -642,28 +661,7 @@ class _SheetState extends State<_Sheet> with SingleTickerProviderStateMixin {
                                   onVerticalDragCancel: widget.enableDrag
                                       ? () => _settle(DragEndDetails())
                                       : null,
-                                  child: SizedBox(
-                                    key: const ValueKey(
-                                      'liquid-glass-sheet-handle',
-                                    ),
-                                    height: 32,
-                                    width: double.infinity,
-                                    child: Center(
-                                      child: Container(
-                                        height: 5,
-                                        width: 36,
-                                        decoration: BoxDecoration(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurface
-                                              .withValues(alpha: .25),
-                                          borderRadius: BorderRadius.circular(
-                                            3,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                                  child: const _SheetGrabber(),
                                 ),
                               Expanded(
                                 child: PrimaryScrollController(
@@ -690,6 +688,187 @@ class _SheetState extends State<_Sheet> with SingleTickerProviderStateMixin {
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+/// The grab handle shared by both sheet kinds. Gestures are attached by the
+/// sheet, which knows what dragging means for it.
+class _SheetGrabber extends StatelessWidget {
+  const _SheetGrabber();
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    key: const ValueKey('liquid-glass-sheet-handle'),
+    height: 32,
+    width: double.infinity,
+    child: Center(
+      child: Container(
+        height: 5,
+        width: 36,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .25),
+          borderRadius: BorderRadius.circular(3),
+        ),
+      ),
+    ),
+  );
+}
+
+/// A sheet as tall as its content, up to the large detent. It has no
+/// intermediate stops, so the handle only drags the whole sheet down to dismiss
+/// it; there is no [DraggableScrollableSheet] to coordinate with.
+class _FitSheet extends StatefulWidget {
+  const _FitSheet({
+    required this.builder,
+    required this.enableDrag,
+    required this.showDragHandle,
+    required this.semanticLabel,
+  });
+
+  final WidgetBuilder builder;
+  final bool enableDrag;
+  final bool showDragHandle;
+  final String? semanticLabel;
+
+  @override
+  State<_FitSheet> createState() => _FitSheetState();
+}
+
+class _FitSheetState extends State<_FitSheet>
+    with SingleTickerProviderStateMixin {
+  final _panel = GlobalKey();
+  final _scroll = ScrollController();
+  // How far the handle has pulled the panel below its resting place.
+  late final AnimationController _pulled = AnimationController.unbounded(
+    vsync: this,
+  );
+  bool _closing = false;
+
+  @override
+  void dispose() {
+    _pulled.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _dismiss() {
+    if (_closing || !mounted || !ModalRoute.of(context)!.isCurrent) return;
+    _closing = true;
+    Navigator.of(context).pop();
+  }
+
+  void _pull(DragUpdateDetails details) {
+    if (_closing) return;
+    _pulled.value = (_pulled.value + details.delta.dy).clamp(
+      0.0,
+      double.infinity,
+    );
+  }
+
+  void _release(DragEndDetails details) {
+    if (_closing) return;
+    final height =
+        (_panel.currentContext?.findRenderObject() as RenderBox?)?.size.height;
+    // The same thresholds as the detent sheet: a quarter of the way down, or
+    // a quick downward flick.
+    if (_pulled.value > (height ?? 0) * .25 ||
+        (details.primaryVelocity ?? 0) > 900) {
+      _dismiss();
+      return;
+    }
+    if (LiquidGlassTheme.of(context).reduceMotion ||
+        MediaQuery.disableAnimationsOf(context)) {
+      _pulled.value = 0;
+    } else {
+      _pulled.animateTo(
+        0,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+        child: LayoutBuilder(
+          builder: (context, constraints) => Align(
+            alignment: Alignment.bottomCenter,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 640,
+                maxHeight:
+                    constraints.maxHeight *
+                    LiquidGlassSheetDetent.large.fraction,
+              ),
+              child: AnimatedBuilder(
+                animation: _pulled,
+                builder: (context, child) => Transform.translate(
+                  offset: Offset(0, _pulled.value),
+                  child: child,
+                ),
+                child: KeyedSubtree(
+                  key: _panel,
+                  child: Semantics(
+                    scopesRoute: true,
+                    namesRoute: true,
+                    label:
+                        widget.semanticLabel ??
+                        MaterialLocalizations.of(context).dialogLabel,
+                    explicitChildNodes: true,
+                    child: LiquidGlassSurface(
+                      key: const ValueKey('liquid-glass-sheet-surface'),
+                      radius: 28,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (widget.showDragHandle)
+                              GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onVerticalDragUpdate: widget.enableDrag
+                                    ? _pull
+                                    : null,
+                                onVerticalDragEnd: widget.enableDrag
+                                    ? _release
+                                    : null,
+                                onVerticalDragCancel: widget.enableDrag
+                                    ? () => _release(DragEndDetails())
+                                    : null,
+                                child: const _SheetGrabber(),
+                              ),
+                            Flexible(
+                              child: PrimaryScrollController(
+                                controller: _scroll,
+                                child: MediaQuery.removePadding(
+                                  context: context,
+                                  removeTop: true,
+                                  removeBottom: true,
+                                  child: MediaQuery.removeViewInsets(
+                                    context: context,
+                                    removeBottom: true,
+                                    child: Builder(builder: widget.builder),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );

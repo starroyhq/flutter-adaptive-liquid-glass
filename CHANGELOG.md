@@ -1,5 +1,10 @@
 ## Unreleased
 
+- Add opt-in `fitContent` to `showLiquidGlassSheet`. The sheet is as tall as its
+  content, up to the large detent, rests on the bottom safe area and rides above
+  the keyboard. There are no detents: the handle pulls the whole sheet down, and
+  dismisses it past a quarter of its height or on a quick flick. The default
+  sheet is unchanged.
 - Draw the native `LiquidGlassSurface` material with a package-owned UIKit view
   (`UIVisualEffectView` with `UIGlassEffect`) instead of the provider's SwiftUI
   `LiquidGlassContainer`. The provider's container lays its shape out inside the

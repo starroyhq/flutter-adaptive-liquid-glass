@@ -82,6 +82,35 @@ void main() {
     expect(find.text('First application page'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('a fit sheet is only as tall as its content', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(600, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      const ComponentCatalogApp(initialMode: LiquidGlassMode.fallback),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    tester
+        .widget<LiquidGlassTabBar>(find.byType(LiquidGlassTabBar))
+        .onSelected(2);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const ValueKey('catalog-fit-sheet')));
+    await tester.pumpAndSettle();
+    final panel = find.ancestor(
+      of: find.text('Fit content'),
+      matching: find.byType(LiquidGlassSurface),
+    );
+    // A medium sheet would be 500 high on this viewport.
+    expect(tester.getSize(panel).height, lessThan(250));
+    await tester.tap(find.byKey(const ValueKey('fit-close')));
+    await tester.pumpAndSettle();
+    expect(find.text('Fit content'), findsNothing);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('catalog-popup-result')))
+          .data,
+      'fit closed',
+    );
+  });
   for (final height in [568.0, 844.0]) {
     testWidgets('fallback device scenario at a 390×$height viewport', (
       tester,

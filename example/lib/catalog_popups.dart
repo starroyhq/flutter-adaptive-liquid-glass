@@ -106,6 +106,17 @@ class _CatalogPopupsState extends State<CatalogPopups> {
               ),
             ),
           ),
+          LiquidGlassButton(
+            key: const ValueKey('catalog-fit-sheet'),
+            label: 'Fit sheet',
+            onPressed: () async => record(
+              await showLiquidGlassSheet<String>(
+                context: context,
+                fitContent: true,
+                builder: (_) => const CatalogFitPane(),
+              ),
+            ),
+          ),
           Builder(
             builder: (anchor) => LiquidGlassButton(
               key: const ValueKey('catalog-popover'),
@@ -124,6 +135,35 @@ class _CatalogPopupsState extends State<CatalogPopups> {
       const SizedBox(height: 16),
       Text(result, key: const ValueKey('catalog-popup-result')),
     ],
+  );
+}
+
+/// Content for a `fitContent` sheet: shorter than a medium detent, so the sheet
+/// is visibly only as tall as this.
+class CatalogFitPane extends StatelessWidget {
+  const CatalogFitPane({super.key});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Fit content', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        const Text('The sheet is only as tall as this content.'),
+        const SizedBox(height: 16),
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: TextButton(
+            key: const ValueKey('fit-close'),
+            onPressed: () => Navigator.of(context).pop('fit closed'),
+            child: const Text('Close'),
+          ),
+        ),
+      ],
+    ),
   );
 }
 

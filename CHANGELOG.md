@@ -1,5 +1,15 @@
 ## Unreleased
 
+- Add `LiquidGlassActionBar`, the action row of a sheet or form. The last
+  action is a prominent button at the trailing edge and any earlier ones share
+  one glass capsule at the leading edge; they stack at the trailing edge when
+  they do not fit on one line.
+- `LiquidGlassButton` and `LiquidGlassButton.icon` take an optional `id`, the
+  accessibility identifier of the native button (`button` as before when null).
+- A disabled `prominent` `LiquidGlassButton` now drops its accent fill and is
+  drawn like any other disabled button. On iOS 26 it was a solid accent capsule
+  under a label too faint to read, and the fallback drew a gray pill. A loading
+  button keeps its fill.
 - Add opt-in `fitContent` to `showLiquidGlassSheet`. The sheet is as tall as its
   content, up to the large detent, rests on the bottom safe area and rides above
   the keyboard. There are no detents: the handle pulls the whole sheet down, and

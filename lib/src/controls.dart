@@ -22,6 +22,7 @@ class LiquidGlassButton extends StatelessWidget {
     this.longPressSemanticLabel,
     this.prominent = false,
     this.loading = false,
+    this.id,
   }) : label = null;
 
   const LiquidGlassButton({
@@ -35,6 +36,7 @@ class LiquidGlassButton extends StatelessWidget {
     this.longPressSemanticLabel,
     this.prominent = false,
     this.loading = false,
+    this.id,
   }) : assert(label != null || icon != null),
        assert(
          label != null || semanticLabel != null,
@@ -48,17 +50,29 @@ class LiquidGlassButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final VoidCallback? onLongPress;
   final String? longPressSemanticLabel;
+
+  /// Fills the button with the accent color. A disabled button is drawn without
+  /// the fill, like any other disabled button, until it can be pressed.
   final bool prominent;
   final bool loading;
+
+  /// Names the button to UI tests and accessibility tooling: it becomes the
+  /// accessibility identifier of the native button, `button` when null. Flutter
+  /// finders use [key] instead.
+  final String? id;
 
   @override
   Widget build(BuildContext context) {
     final callback = loading ? null : onPressed;
     final longCallback = loading ? null : onLongPress;
     final enabled = callback != null || longCallback != null;
+    // A solid accent fill under a faded label reads as broken, so a disabled
+    // button gives up its emphasis. A loading one keeps it: the fill is what
+    // shows that work is under way.
+    final emphasized = prominent && (enabled || loading);
     final colors = Theme.of(context).colorScheme;
     final glassColors = LiquidGlassTheme.of(context).colors;
-    final textColor = prominent
+    final textColor = emphasized
         ? glassColors.onAccent ?? colors.onPrimary
         : glassColors.foreground ?? colors.onSurface;
     final accent = glassColors.accent ?? colors.primary;
@@ -74,10 +88,10 @@ class LiquidGlassButton extends StatelessWidget {
     if (useNative) {
       if (label != null || longCallback != null) {
         return NativeCapsule(
-          prominent: prominent,
+          prominent: emphasized,
           items: [
             NativeCapsuleItem(
-              id: 'button',
+              id: id ?? 'button',
               label: semanticLabel ?? label!,
               title: label,
               icon: icon,
@@ -103,8 +117,8 @@ class LiquidGlassButton extends StatelessWidget {
         iconSize: NativeButtonLayout.iconSize,
         padding: const EdgeInsets.all(12),
         iconColor: textColor,
-        tint: prominent ? accent : glassColors.surfaceTint,
-        style: prominent
+        tint: emphasized ? accent : glassColors.surfaceTint,
+        style: emphasized
             ? native.LiquidGlassButtonStyle.prominentGlass
             : native.LiquidGlassButtonStyle.glass,
       );
@@ -129,7 +143,7 @@ class LiquidGlassButton extends StatelessWidget {
       ],
     );
     final button = Material(
-      color: prominent ? accent : Colors.transparent,
+      color: emphasized ? accent : Colors.transparent,
       borderRadius: BorderRadius.circular(24),
       child: FallbackPressable(
         borderRadius: BorderRadius.circular(24),
@@ -167,7 +181,7 @@ class LiquidGlassButton extends StatelessWidget {
       label: semanticLabel,
       child: Opacity(
         opacity: !enabled && !loading ? .48 : 1,
-        child: prominent
+        child: emphasized
             ? button
             : LiquidGlassSurface(
                 radius: 24,

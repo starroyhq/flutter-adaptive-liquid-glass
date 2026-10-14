@@ -41,7 +41,7 @@ appearance and accessibility preferences. Example locations below refer to
 | # | Capability and public API | Native or hybrid path on iOS 26+ | Fallback and key contract | Catalog entry | Regression source |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Surface / container: `LiquidGlassSurface` | Hybrid: package-owned UIKit glass view behind Flutter content; background ignores input | Bounded blur, protective fill and rim; `floating` / `control` styles, radius, padding and optional tint; opaque rendering removes blur | Controls → Surface and buttons | [surface_material_test.dart](../test/surface_material_test.dart), [color_theme_test.dart](../test/color_theme_test.dart) |
-| 2 | Button: `LiquidGlassButton` | Package UIKit capsule for text buttons; Flutter loading state | Frosted button or prominent fill; two null callbacks disable; loading disables submission; optional independent long press | Controls → Surface and buttons | [fallback_test.dart](../test/fallback_test.dart), [flutter_adaptive_liquid_glass_test.dart](../test/flutter_adaptive_liquid_glass_test.dart) |
+| 2 | Button: `LiquidGlassButton` | Package UIKit capsule for text buttons; Flutter loading state | Frosted button or prominent fill; two null callbacks disable, and a disabled `prominent` button drops its fill; loading disables submission and keeps it; optional independent long press | Controls → Surface and buttons | [fallback_test.dart](../test/fallback_test.dart), [flutter_adaptive_liquid_glass_test.dart](../test/flutter_adaptive_liquid_glass_test.dart) |
 | 3 | Icon button: `LiquidGlassButton.icon` | Provider icon button, or package capsule for long press; optional SF Symbol | Same button interaction with required `semanticLabel` and fallback `IconData` | Controls → Surface and buttons → Add | [status_toolbar_test.dart](../test/status_toolbar_test.dart), [flutter_adaptive_liquid_glass_test.dart](../test/flutter_adaptive_liquid_glass_test.dart) |
 | 4 | Shared action capsule: `LiquidGlassButtonGroup` | One package UIKit glass capsule containing plain buttons | One shared material, individual 48-point minimum targets, stable action IDs and per-action enabled state | Controls → Grouped toolbar | [button_group_test.dart](../test/button_group_test.dart) |
 | 5 | Navigation bar: `LiquidGlassNavigationBar` | Package `UINavigationBar` bridge with explicit action labels when its configuration is supported; otherwise Flutter title with adaptive controls | Explicit leading/trailing actions; adjacent actions share a capsule; app owns navigation | Catalog page header; accessibility probe | [native_navigation_test.dart](../test/native_navigation_test.dart), [button_group_test.dart](../test/button_group_test.dart), [flutter_adaptive_liquid_glass_test.dart](../test/flutter_adaptive_liquid_glass_test.dart) |
@@ -61,6 +61,16 @@ appearance and accessibility preferences. Example locations below refer to
 | 19 | Menu: `LiquidGlassMenuButton<T>` with `LiquidGlassMenuItem<T>` | Hybrid: Flutter menu content in a package glass popover | Independent triggers, nested items, selected/disabled/destructive states, selection/cancellation callbacks; tap/long-press trigger policy; unique item values within a menu tree | Popups → First / Second / Third menu | [menu_test.dart](../test/menu_test.dart) |
 | 20 | Sheet: `showLiquidGlassSheet<T>` | Hybrid: Flutter content and route over adaptive native glass | Medium/large detents, drag handle, optional drag/dismiss, safe-area and keyboard constraints; builder receives primary scroll controller scope; opt-in `fitContent` sizes the sheet to its content up to the large detent, the handle pulling it down to dismiss | Popups → Mixed sheet / Nest sheet / Fit sheet | [presentation_test.dart](../test/presentation_test.dart) |
 | 21 | Popover: `showLiquidGlassPopover<T>` | Hybrid: anchored Flutter route and content over adaptive native glass | Follows anchor during layout changes, flips/clamps to available space, dismisses when anchor disappears; typed result and optional barrier dismissal | Popups → Popover / Nest popover | [presentation_test.dart](../test/presentation_test.dart) |
+
+## Compositions
+
+`LiquidGlassActionBar` lays out its last action as a prominent
+`LiquidGlassButton` (capability 2) and the earlier ones as one
+`LiquidGlassButtonGroup` (capability 4), stacking them at the trailing edge when
+they do not fit on one line. It adds no rendering path of its own, so it is not
+counted among the 21 capabilities. Its regression source is
+[action_bar_test.dart](../test/action_bar_test.dart); the sheet entry in the
+catalog (Popups → Fit sheet) uses it.
 
 ## Value and editing contracts
 

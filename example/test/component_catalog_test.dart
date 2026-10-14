@@ -101,14 +101,14 @@ void main() {
     );
     // A medium sheet would be 500 high on this viewport.
     expect(tester.getSize(panel).height, lessThan(250));
-    await tester.tap(find.byKey(const ValueKey('fit-close')));
+    await tester.tap(find.byKey(const ValueKey('fit-done')));
     await tester.pumpAndSettle();
     expect(find.text('Fit content'), findsNothing);
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('catalog-popup-result')))
           .data,
-      'fit closed',
+      'fit done',
     );
   });
   for (final height in [568.0, 844.0]) {

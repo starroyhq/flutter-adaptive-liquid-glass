@@ -139,31 +139,42 @@ class _CatalogPopupsState extends State<CatalogPopups> {
 }
 
 /// Content for a `fitContent` sheet: shorter than a medium detent, so the sheet
-/// is visibly only as tall as this.
+/// is visibly only as tall as this, with the action bar a form would end in.
 class CatalogFitPane extends StatelessWidget {
   const CatalogFitPane({super.key});
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Fit content', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-        const Text('The sheet is only as tall as this content.'),
-        const SizedBox(height: 16),
-        Align(
-          alignment: AlignmentDirectional.centerEnd,
-          child: TextButton(
-            key: const ValueKey('fit-close'),
-            onPressed: () => Navigator.of(context).pop('fit closed'),
-            child: const Text('Close'),
-          ),
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Fit content', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            const Text('The sheet is only as tall as this content.'),
+          ],
         ),
-      ],
-    ),
+      ),
+      LiquidGlassActionBar(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        actions: [
+          LiquidGlassAction(
+            id: 'fit-cancel',
+            label: 'Cancel',
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          LiquidGlassAction(
+            id: 'fit-done',
+            label: 'Done',
+            onPressed: () => Navigator.of(context).pop('fit done'),
+          ),
+        ],
+      ),
+    ],
   );
 }
 

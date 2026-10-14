@@ -163,13 +163,15 @@ materials and app appearance.
 ## Component catalog
 
 The package covers 21 UI capabilities. Icon buttons are a constructor variant;
-alert and action sheet are two styles of the same helper. See the
+alert and action sheet are two styles of the same helper, and
+`LiquidGlassActionBar` composes the button and the shared capsule without a
+rendering path of its own. See the
 [component coverage matrix](doc/component-coverage.md) for individual rendering
 paths, constraints and regression sources.
 
 | Family | Public API |
 | --- | --- |
-| Surfaces and actions | `LiquidGlassSurface`, `LiquidGlassButton`, `LiquidGlassButton.icon`, `LiquidGlassButtonGroup` |
+| Surfaces and actions | `LiquidGlassSurface`, `LiquidGlassButton`, `LiquidGlassButton.icon`, `LiquidGlassButtonGroup`, `LiquidGlassActionBar` |
 | Navigation and grouping | `LiquidGlassNavigationBar`, `LiquidGlassTabBar`, `LiquidGlassSegmentedControl<T>`, `LiquidGlassToolbar` |
 | Values | `LiquidGlassSlider`, `LiquidGlassSwitch`, `LiquidGlassStepper` |
 | Status | `LiquidGlassActivityIndicator`, `LiquidGlassProgressView` |
@@ -357,6 +359,51 @@ own scrolling (`ListView(shrinkWrap: true)`, or a `SingleChildScrollView` in a
 `Flexible`). The builder still receives a `PrimaryScrollController`. There are no
 intermediate stops: the handle pulls the whole sheet down, and releasing it a
 quarter of the way down, or with a quick downward flick, dismisses the sheet.
+
+```dart
+final saved = await showLiquidGlassSheet<String>(
+  context: context,
+  fitContent: true,
+  builder: (sheetContext) => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text('Rename session'),
+        const TextField(),
+        LiquidGlassActionBar(
+          actions: [
+            LiquidGlassAction(
+              id: 'cancel',
+              label: 'Cancel',
+              onPressed: () => Navigator.of(sheetContext).pop(),
+            ),
+            LiquidGlassAction(
+              id: 'save',
+              label: 'Save',
+              onPressed: () => Navigator.of(sheetContext).pop('saved'),
+            ),
+          ],
+        ),
+      ],
+    ),
+  ),
+);
+```
+
+`LiquidGlassActionBar(actions: [...])` is the action row of a sheet or form. The
+last `LiquidGlassAction` is the one the form exists for, so it becomes a
+prominent button at the trailing edge; any earlier actions share one glass
+capsule at the leading edge. When both do not fit on one line, as with large text
+on a narrow screen, they stack at the trailing edge, and the capsule scrolls
+sideways if it still cannot fit. A disabled `prominent` button, including the
+bar's last action, is drawn like any other disabled button until it can be
+pressed, rather than as a solid accent fill under a faded label. Action IDs
+become widget keys and the accessibility identifiers of the native buttons, which
+are platform views that Flutter finders cannot press; UI tests find them by
+identifier. `padding` is the space around the buttons; the bar always keeps 8
+points above, below and before the capsule for its shadow.
 
 `showLiquidGlassPopover<T>` requires `anchorContext` and `builder`, and accepts
 `width`, `maxHeight`, `gap` and `fitContent`. Keep the anchor mounted while

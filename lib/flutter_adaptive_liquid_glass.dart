@@ -6,6 +6,7 @@ export 'src/appearance.dart';
 export 'src/surface.dart';
 export 'src/controls.dart';
 export 'src/actions.dart';
+export 'src/action_bar.dart';
 export 'src/button_group.dart';
 export 'src/navigation.dart';
 export 'src/navigator_observer.dart';

@@ -48,6 +48,7 @@ on timing.
 | Package-owned UIKit view | loaded, 3 runs | 840 pt, all frames present |
 | Package-owned UIKit view, content-sized sheet (`fitContent: true`) | idle, 1 run | 839.7 pt |
 | Package-owned UIKit view, content-sized sheet (`fitContent: true`) | loaded, 3 runs | 839.7 pt, all frames present |
+| Package-owned UIKit view, default `showLiquidGlassSheet` (medium detent) | 2 runs while other builds kept the machine busy | 839.7 pt |
 
 The package-owned view also rendered correctly in dark appearance on iOS 26.5
 and in light appearance on iOS 27.0. Its material, radius, tint and fill match

@@ -1,4 +1,4 @@
-## Unreleased
+## 0.4.0
 
 - Add `LiquidGlassActionBar`, the action row of a sheet or form. The last
   action is a prominent button at the trailing edge and any earlier ones share

@@ -35,12 +35,18 @@ class LiquidGlassTabBar extends StatelessWidget {
     required this.items,
     required this.selectedIndex,
     required this.onSelected,
+    this.trailingAction,
   }) : assert(items.length >= 2 && items.length <= 5),
        assert(selectedIndex >= 0 && selectedIndex < items.length);
 
   final List<LiquidGlassTabItem> items;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
+
+  /// A separate round button after the tabs, such as search. It never
+  /// changes the selected tab. On iOS 26 it is the tab bar's own search-style
+  /// item; its icon defaults to a magnifying glass.
+  final LiquidGlassAction? trailingAction;
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +67,20 @@ class LiquidGlassTabBar extends StatelessWidget {
           ],
           // Debug builds assert the range; keep the native bar valid in release.
           currentIndex: selectedIndex.clamp(0, items.length - 1),
+          iosActionButton: trailingAction == null
+              ? null
+              : nativeTabItem(
+                  label: trailingAction!.label,
+                  icon: trailingAction!.icon ?? Icons.search,
+                  sfSymbol: trailingAction!.sfSymbol ?? 'magnifyingglass',
+                ),
+          onActionButtonPressed: trailingAction?.onPressed == null
+              ? null
+              : () {
+                  if (!LiquidGlassFeedback.canInteract(context)) return;
+                  LiquidGlassFeedback.tap(context);
+                  trailingAction!.onPressed!();
+                },
           selectedItemColor:
               glassTheme.colors.selectedForeground ??
               glassTheme.colors.accent ??
@@ -84,28 +104,87 @@ class LiquidGlassTabBar extends StatelessWidget {
             )
           : tabBar;
     }
+    final tabs = LiquidGlassSurface(
+      radius: 32,
+      padding: const EdgeInsets.all(6),
+      child: FallbackSelectionTrack(
+        selectedIndex: selectedIndex,
+        children: [
+          for (var index = 0; index < items.length; index++)
+            _TabItem(
+              item: items[index],
+              selected: index == selectedIndex,
+              onTap: () {
+                if (!LiquidGlassFeedback.canInteract(context)) return;
+                if (index != selectedIndex) {
+                  LiquidGlassFeedback.selection(context);
+                }
+                onSelected(index);
+              },
+            ),
+        ],
+      ),
+    );
+    final action = trailingAction;
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      child: LiquidGlassSurface(
-        radius: 32,
-        padding: const EdgeInsets.all(6),
-        child: FallbackSelectionTrack(
-          selectedIndex: selectedIndex,
-          children: [
-            for (var index = 0; index < items.length; index++)
-              _TabItem(
-                item: items[index],
-                selected: index == selectedIndex,
-                onTap: () {
-                  if (!LiquidGlassFeedback.canInteract(context)) return;
-                  if (index != selectedIndex) {
-                    LiquidGlassFeedback.selection(context);
-                  }
-                  onSelected(index);
-                },
+      child: action == null
+          ? tabs
+          : Row(
+              children: [
+                Expanded(child: tabs),
+                const SizedBox(width: 10),
+                _TrailingTab(action: action),
+              ],
+            ),
+    );
+  }
+}
+
+/// The round button after the fallback tab capsule, as tall as the capsule.
+class _TrailingTab extends StatelessWidget {
+  const _TrailingTab({required this.action});
+  final LiquidGlassAction action;
+
+  @override
+  Widget build(BuildContext context) {
+    final onPressed = action.onPressed;
+    final glassColors = LiquidGlassTheme.of(context).colors;
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: action.label,
+      excludeSemantics: true,
+      onTap: onPressed,
+      child: Opacity(
+        opacity: onPressed == null ? .48 : 1,
+        child: LiquidGlassSurface(
+          radius: 32,
+          child: Material(
+            color: Colors.transparent,
+            shape: const CircleBorder(),
+            child: FallbackPressable(
+              borderRadius: BorderRadius.circular(32),
+              onTap: onPressed == null
+                  ? null
+                  : () {
+                      if (!LiquidGlassFeedback.canInteract(context)) return;
+                      onPressed();
+                    },
+              child: SizedBox.square(
+                // The capsule's 52-point items plus its 6-point padding.
+                dimension: 64,
+                child: Icon(
+                  action.icon ?? Icons.search,
+                  size: 24,
+                  color:
+                      glassColors.foreground ??
+                      Theme.of(context).colorScheme.onSurface,
+                ),
               ),
-          ],
+            ),
+          ),
         ),
       ),
     );

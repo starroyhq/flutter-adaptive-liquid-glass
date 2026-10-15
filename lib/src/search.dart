@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'feedback.dart';
 
+import 'actions.dart';
+import 'controls.dart';
 import 'navigation.dart';
 import 'surface.dart';
 import 'theme.dart';
@@ -185,6 +187,16 @@ class _LiquidGlassSearchFieldState extends State<LiquidGlassSearchField> {
   }
 }
 
+/// Where [LiquidGlassSearchScaffold] puts search.
+enum LiquidGlassSearchPlacement {
+  /// A search field above the body on every tab.
+  top,
+
+  /// A round search button after the tabs, as on iOS 26. Activating it docks
+  /// the search field at the bottom, above the keyboard, with a close button.
+  tabBar,
+}
+
 /// A layout for application-owned pages and search. No nested Navigator is
 /// created; pass a Router/ShellRoute child or your own state-preserving body.
 class LiquidGlassSearchScaffold extends StatefulWidget {
@@ -203,6 +215,8 @@ class LiquidGlassSearchScaffold extends StatefulWidget {
     this.onSearchSubmitted,
     this.searchResults,
     this.appBar,
+    this.searchPlacement = LiquidGlassSearchPlacement.top,
+    this.searchLabel,
   }) : assert(tabs.length >= 2 && tabs.length <= 5),
        assert(selectedIndex >= 0 && selectedIndex < tabs.length);
 
@@ -219,6 +233,12 @@ class LiquidGlassSearchScaffold extends StatefulWidget {
   final ValueChanged<String>? onSearchSubmitted;
   final Widget? searchResults;
   final PreferredSizeWidget? appBar;
+  final LiquidGlassSearchPlacement searchPlacement;
+
+  /// Accessibility label of the search button with
+  /// [LiquidGlassSearchPlacement.tabBar]; defaults to [searchHint], then to
+  /// the platform's search label.
+  final String? searchLabel;
 
   @override
   State<LiquidGlassSearchScaffold> createState() =>
@@ -257,8 +277,97 @@ class _LiquidGlassSearchScaffoldState extends State<LiquidGlassSearchScaffold> {
     super.dispose();
   }
 
+  Widget _field({required bool cancel}) => Focus(
+    onFocusChange: (focused) {
+      if (focused && !widget.searchActive) {
+        widget.onSearchActiveChanged(true);
+      }
+    },
+    child: LiquidGlassSearchField(
+      controller: widget.searchController,
+      focusNode: _focus,
+      hintText: widget.searchHint,
+      showCancelButton: cancel && widget.searchActive,
+      onCancelled: () => widget.onSearchActiveChanged(false),
+      onChanged: widget.onSearchChanged,
+      onSubmitted: widget.onSearchSubmitted,
+    ),
+  );
+
+  Widget _content() => Stack(
+    fit: StackFit.expand,
+    children: [
+      Visibility(
+        visible: !widget.searchActive || widget.searchResults == null,
+        maintainState: true,
+        child: widget.body,
+      ),
+      if (widget.searchActive && widget.searchResults != null)
+        widget.searchResults!,
+    ],
+  );
+
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) =>
+      widget.searchPlacement == LiquidGlassSearchPlacement.tabBar
+      ? _tabBarSearch(context)
+      : _topSearch(context);
+
+  Widget _tabBarSearch(BuildContext context) {
+    final label =
+        widget.searchLabel ??
+        widget.searchHint ??
+        MaterialLocalizations.of(context).searchFieldLabel;
+    return Scaffold(
+      appBar: widget.appBar,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Expanded(child: _content()),
+            // The body resizes for the keyboard, so the docked field rides
+            // above it; the tab bar stays out of the way while searching.
+            if (widget.searchActive)
+              SafeArea(
+                top: false,
+                minimum: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                child: Row(
+                  children: [
+                    Expanded(child: _field(cancel: false)),
+                    const SizedBox(width: 10),
+                    LiquidGlassButton.icon(
+                      id: 'search-close',
+                      icon: Icons.close,
+                      sfSymbol: 'xmark',
+                      semanticLabel: MaterialLocalizations.of(
+                        context,
+                      ).closeButtonLabel,
+                      onPressed: () => widget.onSearchActiveChanged(false),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: widget.searchActive
+          ? null
+          : LiquidGlassTabBar(
+              items: widget.tabs,
+              selectedIndex: widget.selectedIndex,
+              onSelected: widget.onTabChanged,
+              trailingAction: LiquidGlassAction(
+                id: 'search',
+                label: label,
+                icon: Icons.search,
+                sfSymbol: 'magnifyingglass',
+                onPressed: () => widget.onSearchActiveChanged(true),
+              ),
+            ),
+    );
+  }
+
+  Widget _topSearch(BuildContext context) => Scaffold(
     appBar: widget.appBar,
     body: SafeArea(
       bottom: false,
@@ -266,37 +375,9 @@ class _LiquidGlassSearchScaffoldState extends State<LiquidGlassSearchScaffold> {
         children: [
           Padding(
             padding: const EdgeInsets.all(12),
-            child: Focus(
-              onFocusChange: (focused) {
-                if (focused && !widget.searchActive) {
-                  widget.onSearchActiveChanged(true);
-                }
-              },
-              child: LiquidGlassSearchField(
-                controller: widget.searchController,
-                focusNode: _focus,
-                hintText: widget.searchHint,
-                showCancelButton: widget.searchActive,
-                onCancelled: () => widget.onSearchActiveChanged(false),
-                onChanged: widget.onSearchChanged,
-                onSubmitted: widget.onSearchSubmitted,
-              ),
-            ),
+            child: _field(cancel: true),
           ),
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Visibility(
-                  visible: !widget.searchActive || widget.searchResults == null,
-                  maintainState: true,
-                  child: widget.body,
-                ),
-                if (widget.searchActive && widget.searchResults != null)
-                  widget.searchResults!,
-              ],
-            ),
-          ),
+          Expanded(child: _content()),
         ],
       ),
     ),

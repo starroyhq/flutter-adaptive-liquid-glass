@@ -18,6 +18,13 @@
 - Alerts and sheets dim the page more deeply in a dark theme (48% black instead
   of 20%), and `showLiquidGlassAlert` and `showLiquidGlassSheet` take a
   `barrierColor`.
+- `LiquidGlassTabBar` takes a `trailingAction`, a separate round button after
+  the tabs such as search. On iOS 26 it is the native tab bar's search-style
+  item; it never changes the selected tab.
+- `LiquidGlassSearchScaffold` takes `searchPlacement`. The default `top` keeps
+  the search field above the body; `tabBar` puts a search button after the tabs
+  and, while searching, docks the field at the bottom above the keyboard with a
+  close button, hiding the tabs.
 - The example app has a `GLASS_NEW_CONTROLS` page showing these additions.
 
 ## 0.4.0

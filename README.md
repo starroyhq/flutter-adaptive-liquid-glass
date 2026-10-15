@@ -348,6 +348,12 @@ Scaffold(
 Alerts and sheets dim the page with 20% black in a light theme and 48% in a
 dark one; pass `barrierColor` to choose another scrim.
 
+`LiquidGlassTabBar(trailingAction: ...)` adds a separate round button after the
+tabs, the native search-style item on iOS 26. With
+`LiquidGlassSearchScaffold(searchPlacement: LiquidGlassSearchPlacement.tabBar)`
+that button starts search, and the field docks at the bottom above the keyboard
+with a close button until search ends.
+
 ### Menus and typed presentations
 
 ```dart

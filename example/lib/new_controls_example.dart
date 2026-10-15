@@ -16,6 +16,8 @@ class _NewControlsExampleState extends State<NewControlsExample> {
   final observer = LiquidGlassNavigatorObserver();
   late ThemeMode themeMode = widget.themeMode;
   String model = 'High';
+  int tab = 0;
+  int searches = 0;
 
   @override
   void didUpdateWidget(NewControlsExample oldWidget) {
@@ -54,6 +56,33 @@ class _NewControlsExampleState extends State<NewControlsExample> {
     const bar = 64.0;
     return Scaffold(
       extendBodyBehindAppBar: true,
+      extendBody: true,
+      bottomNavigationBar: LiquidGlassTabBar(
+        items: const [
+          LiquidGlassTabItem(
+            label: 'Inbox',
+            icon: Icons.inbox_outlined,
+            sfSymbol: 'tray',
+          ),
+          LiquidGlassTabItem(
+            label: 'Sessions',
+            icon: Icons.chat_bubble_outline,
+            sfSymbol: 'bubble.left.and.bubble.right',
+          ),
+          LiquidGlassTabItem(
+            label: 'Account',
+            icon: Icons.person_outline,
+            sfSymbol: 'person.crop.circle',
+          ),
+        ],
+        selectedIndex: tab,
+        onSelected: (value) => setState(() => tab = value),
+        trailingAction: LiquidGlassAction(
+          id: 'search',
+          label: 'Search',
+          onPressed: () => setState(() => searches++),
+        ),
+      ),
       appBar: LiquidGlassNavigationBar(
         title: 'New controls',
         subtitle: 'Synthetic workspace',
@@ -71,14 +100,14 @@ class _NewControlsExampleState extends State<NewControlsExample> {
       ),
       body: LiquidGlassScrollEdgeEffect(
         top: padding.top + bar + 16,
-        bottom: padding.bottom + 40,
+        bottom: padding.bottom + 96,
         child: ListView(
           key: const ValueKey('new-controls-list'),
           padding: EdgeInsets.fromLTRB(
             16,
             padding.top + bar + 8,
             16,
-            padding.bottom + 40,
+            padding.bottom + 96,
           ),
           children: [
             Wrap(

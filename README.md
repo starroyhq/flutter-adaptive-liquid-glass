@@ -9,6 +9,14 @@ imports use `flutter_adaptive_liquid_glass`, following Dart's
 [package naming rules](https://dart.dev/tools/pub/pubspec#name); hyphens are not
 valid in a pubspec package name.
 
+Version **0.5.0** adds controls for status-heavy apps: a button `detail`, a
+coloured `iconColor`/`iconSize` mark and a `menuIndicator`; the iOS 26 scroll
+edge effect for Flutter scrollables (`LiquidGlassScrollEdgeEffect`); a navigation
+bar `subtitle`; a tab bar `trailingAction` such as search; and a search field that
+docks at the bottom (`LiquidGlassSearchScaffold.searchPlacement`). Native capsule
+titles end with an ellipsis, and alerts and sheets dim the page more deeply in a
+dark theme. See the [0.5.0 release notes](doc/release-0.5.0.md).
+
 Version **0.4.0** draws the native `LiquidGlassSurface` material with a
 package-owned UIKit view, so a sheet no longer ends short of its content or misses
 its glass on first layout. It adds content-sized sheets
@@ -39,7 +47,7 @@ Fallback color wells also expose semantic activation. See its
 **Known validation limit:** some hosted iOS 26.5 runs fail to display the system
 color palette after its first real tap. A standalone UIKit app reproduces the
 failure both with and without a Simulator window. The cause is unresolved;
-0.4.0 does not claim to fix that first-use failure or prove hardware is unaffected.
+0.5.0 does not claim to fix that first-use failure or prove hardware is unaffected.
 The 0.3.0 selected native run passed 9/10 cases and reproduced this failure;
 publication explicitly accepts that known limitation. See the
 [0.3.0 release decision](doc/release-0.3.0.md#validation-and-accepted-release-limitation).
@@ -54,7 +62,7 @@ Or add the version to your app's `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_adaptive_liquid_glass: ^0.4.0
+  flutter_adaptive_liquid_glass: ^0.5.0
 ```
 
 Requires Flutter 3.41.2 or later and Dart 3.11 or later. Supported platforms are
@@ -64,10 +72,18 @@ Development and CI retain Flutter **3.41.9** / Dart **3.11.5**. The production
 dependency `native_liquid_glass` remains pinned to **0.3.1**; this release adds no
 production dependency and does not require a global toolchain upgrade.
 
+### Upgrading from 0.4.x
+
+Change the constraint to `^0.5.0`, run `flutter pub get`, and rebuild the native
+app. The existing APIs remain available and every new parameter is optional. Two
+visible changes need no code: a native capsule title that does not fit ends with
+an ellipsis instead of being clipped, and in a dark theme alerts and sheets dim
+the page with 48% black instead of 20%; pass `barrierColor` to keep the old scrim.
+
 ### Upgrading from 0.3.x
 
-Change the constraint to `^0.4.0`, run `flutter pub get`, and rebuild the native
-app. The existing APIs remain available; sheet `fitContent`, `LiquidGlassActionBar`
+Change the constraint to `^0.5.0`, run `flutter pub get`, and rebuild the native
+app, reading the 0.4.x notes above as well. The existing APIs remain available; sheet `fitContent`, `LiquidGlassActionBar`
 and `LiquidGlassButton.id` are new and optional. Two visible changes need no code:
 the native `LiquidGlassSurface` material is now a package-owned UIKit view with
 the same radius, tint and fill, and a disabled `prominent` button is drawn like
@@ -76,8 +92,8 @@ the accessibility identifier `button` unless an `id` is given.
 
 ### Upgrading from 0.2.x
 
-Change the constraint to `^0.4.0`, run `flutter pub get`, and rebuild the native
-app, reading the 0.3.x notes above as well. The existing APIs and defaults remain
+Change the constraint to `^0.5.0`, run `flutter pub get`, and rebuild the native
+app, reading the 0.4.x and 0.3.x notes above as well. The existing APIs and defaults remain
 available; `fitContent` is opt-in.
 Two-action alerts now use a horizontal row when text size permits, and action
 sheets keep cancel actions in a separate group. Native action sheets retain
@@ -85,7 +101,7 @@ fading and subtle scaling without sliding; Flutter fallbacks continue to slide.
 
 ### Upgrading from 0.1.1
 
-Change `^0.1.1` to `^0.4.0`, run `flutter pub get`, then perform a full native
+Change `^0.1.1` to `^0.5.0`, run `flutter pub get`, then perform a full native
 rebuild. Dart's `^0.1.1` constraint does not select later minor versions automatically.
 Keep the existing `LiquidGlassAppearance` and `LiquidGlassNavigatorObserver`
 installation. Existing surfaces, buttons, shared capsules, tabs, segments,

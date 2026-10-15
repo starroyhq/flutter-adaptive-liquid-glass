@@ -1,4 +1,4 @@
-## 0.5.0 (unreleased)
+## 0.5.0
 
 - `LiquidGlassButton` takes a `detail` shown after the label in a quieter
   colour, an `iconColor` and `iconSize` for marks such as a status dot, and

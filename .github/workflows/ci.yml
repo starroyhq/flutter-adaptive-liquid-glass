@@ -182,6 +182,37 @@ jobs:
         env:
           GLASS_SIMULATOR_ID: ${{ steps.simulator.outputs.device_id }}
         working-directory: example/ios
+      - name: Require palette cases that actually ran
+        # A case whose first system palette never appears is skipped as the
+        # known first-use limitation. The gate still fails if every palette
+        # case was skipped, so a palette that never appears cannot pass.
+        run: |
+          xcrun xcresulttool get test-results tests --path ../build/native-interaction.xcresult --format json > "$RUNNER_TEMP/tests.json"
+          python3 - "$RUNNER_TEMP/tests.json" <<'PY'
+          import json
+          import os
+          import sys
+
+          palette_cases = 8
+          skipped = []
+
+          def walk(node):
+              if node.get('nodeType') == 'Test Case' and node.get('result') == 'Skipped':
+                  skipped.append(node['name'])
+              for child in node.get('children', []):
+                  walk(child)
+
+          for node in json.load(open(sys.argv[1]))['testNodes']:
+              walk(node)
+          lines = [f'Skipped palette cases (first-use limitation): {len(skipped)} of {palette_cases}']
+          lines += [f'- {name}' for name in skipped]
+          print('\n'.join(lines))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('\n'.join(lines) + '\n')
+          if len(skipped) >= palette_cases:
+              raise SystemExit('Every palette case was skipped; the system palette never appeared.')
+          PY
+        working-directory: example/ios
       - name: Preserve native test results
         if: always()
         uses: actions/upload-artifact@v4

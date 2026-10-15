@@ -621,6 +621,32 @@ it is not rerun or presented as green. The tag adds only release documentation,
 and the successful build-job artifacts retain their tested source identity.
 See the [0.3.0 release notes](release-0.3.0.md) for the exception and artifact checks.
 
+### First-use skip in the gate (from 0.5.0)
+
+The same commit `595896a` ran `Component checks` three times around the 0.4.0
+release: the branch run
+[38510623761](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38510623761)
+and the `main` run
+[38512467651](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38512467651)
+passed, and the `v0.4.0` tag run
+[38512487668](https://github.com/starroyhq/flutter-adaptive-liquid-glass/actions/runs/38512487668)
+failed the first palette of `testBackgroundCancelsPaletteWhileItsFullScreenChildIsPresented`.
+The three 0.5.0 candidate runs failed one or two palette cases each, every time
+on the first palette of the case, with different cases each time. With eight of
+the nine accessibility cases opening a palette, the strict gate passed or failed
+by chance.
+
+On 2026-10-15 the maintainer approved a narrower gate. When the first system
+palette of a case, which is the first of its app process, does not appear within
+15 seconds, the case is skipped with `XCTSkip` as the known first-use limitation.
+Every later palette in the case, and every assertion after a palette appears,
+remains strict. A `Component checks` step lists the skipped cases in the job
+summary and fails the job if all eight palette cases were skipped, so a palette
+that never appears still fails the gate. The slider cases and the label case are
+unchanged. The first-use diagnostics workflow keeps its original strict
+assertions. This replaces the "all ten native cases must pass" rule above; the
+gate run is still not rerun to seek a green result.
+
 ## Limits
 
 Simulator accessibility trees and activation tests do not establish the complete

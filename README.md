@@ -51,6 +51,10 @@ failure both with and without a Simulator window. The cause is unresolved;
 The 0.3.0 selected native run passed 9/10 cases and reproduced this failure;
 publication explicitly accepts that known limitation. See the
 [0.3.0 release decision](doc/release-0.3.0.md#validation-and-accepted-release-limitation).
+From 0.5.0 the native CI gate skips a palette case whose first palette does not
+appear, keeps every later palette strict, and fails if every palette case was
+skipped; see the
+[gate decision](doc/native-accessibility-validation.md#first-use-skip-in-the-gate-from-050).
 
 ## Installation
 

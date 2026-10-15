@@ -66,8 +66,10 @@ iOS 26.5 interaction job, is linked from the GitHub release.
 The independent first-use system color-palette failure recorded for 0.2.1 remains
 unresolved in some hosted iOS 26.5 runs. This release does not modify that
 presentation path or claim that the failure is fixed or that physical devices are
-unaffected. See the
-[existing validation record](native-accessibility-validation.md#release-decision-and-remaining-boundary).
+unaffected. From this release the native CI gate skips a palette case only when
+its first palette does not appear, keeps later palettes strict and fails if every
+palette case was skipped; the release lists any skipped cases. See the
+[gate decision](native-accessibility-validation.md#first-use-skip-in-the-gate-from-050).
 
 The scroll edge effect is drawn by Flutter and approximates the system effect; it
 was compared with the system only by eye on simulators. Physical devices and

@@ -15,12 +15,14 @@ class NativeNavigationBar extends StatefulWidget {
   const NativeNavigationBar({
     super.key,
     required this.title,
+    this.subtitle,
     required this.tintColor,
     required this.leading,
     required this.actions,
   });
 
   final String title;
+  final String? subtitle;
   final Color tintColor;
   final List<LiquidGlassAction> leading, actions;
 
@@ -95,6 +97,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar>
     ];
     return {
       'title': widget.title,
+      'subtitle': widget.subtitle,
       'tintColor': widget.tintColor.toARGB32(),
       'dark': Theme.of(context).brightness == Brightness.dark,
       'rtl': Directionality.of(context) == TextDirection.rtl,

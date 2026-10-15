@@ -23,7 +23,11 @@ class LiquidGlassButton extends StatelessWidget {
     this.prominent = false,
     this.loading = false,
     this.id,
-  }) : label = null;
+  }) : label = null,
+       detail = null,
+       iconColor = null,
+       iconSize = null,
+       menuIndicator = false;
 
   const LiquidGlassButton({
     super.key,
@@ -37,7 +41,13 @@ class LiquidGlassButton extends StatelessWidget {
     this.prominent = false,
     this.loading = false,
     this.id,
+    this.detail,
+    this.iconColor,
+    this.iconSize,
+    this.menuIndicator = false,
   }) : assert(label != null || icon != null),
+       assert(detail == null || label != null, 'A detail follows a label.'),
+       assert(iconSize == null || iconSize > 0),
        assert(
          label != null || semanticLabel != null,
          'Icon buttons require a semantic label.',
@@ -60,6 +70,25 @@ class LiquidGlassButton extends StatelessWidget {
   /// accessibility identifier of the native button, `button` when null. Flutter
   /// finders use [key] instead.
   final String? id;
+
+  /// Secondary text after [label] on the same line, in a quieter colour, such
+  /// as a state ("Online") or the current choice of a picker.
+  final String? detail;
+
+  /// Colours the icon instead of the foreground, for example a status dot.
+  /// Pick a colour that stays legible on the glass in both brightnesses.
+  final Color? iconColor;
+
+  /// Icon size in logical pixels; 22 by default. Smaller sizes suit marks such
+  /// as a status dot.
+  final double? iconSize;
+
+  /// Shows the platform's pop-up indicator after the label, marking a button
+  /// that opens a menu or a picker.
+  final bool menuIndicator;
+
+  String? get _accessibleLabel =>
+      semanticLabel ?? (detail == null ? label : '$label, $detail');
 
   @override
   Widget build(BuildContext context) {
@@ -92,10 +121,14 @@ class LiquidGlassButton extends StatelessWidget {
           items: [
             NativeCapsuleItem(
               id: id ?? 'button',
-              label: semanticLabel ?? label!,
+              label: _accessibleLabel ?? label!,
               title: label,
+              detail: detail,
               icon: icon,
               sfSymbol: sfSymbol,
+              iconColor: iconColor,
+              iconSize: iconSize,
+              menuIndicator: menuIndicator,
               onPressed: callback,
               onLongPress: longCallback,
               longPressSemanticLabel: longPressSemanticLabel,
@@ -135,11 +168,27 @@ class LiquidGlassButton extends StatelessWidget {
             child: CircularProgressIndicator(strokeWidth: 2, color: textColor),
           )
         else if (icon != null)
-          Icon(icon, size: 22),
+          Icon(icon, size: iconSize ?? 22, color: iconColor),
         if ((icon != null || loading) && label != null)
           const SizedBox(width: 8),
         if (label != null)
           Flexible(child: Text(label!, textAlign: TextAlign.center)),
+        if (detail != null) ...[
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              detail!,
+              style: TextStyle(
+                color: textColor.withValues(alpha: textColor.a * .6),
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+        ],
+        if (menuIndicator) ...[
+          const SizedBox(width: 4),
+          const Icon(Icons.unfold_more, size: 18),
+        ],
       ],
     );
     final button = Material(
@@ -178,7 +227,8 @@ class LiquidGlassButton extends StatelessWidget {
     return Semantics(
       button: true,
       enabled: enabled,
-      label: semanticLabel,
+      label: detail == null ? semanticLabel : _accessibleLabel,
+      excludeSemantics: detail != null,
       child: Opacity(
         opacity: !enabled && !loading ? .48 : 1,
         child: emphasized

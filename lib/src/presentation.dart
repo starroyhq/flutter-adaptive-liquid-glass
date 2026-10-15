@@ -45,6 +45,8 @@ class LiquidGlassAlertAction<T> {
 /// glass is in use. Like a dialog, local inherited themes are captured on open.
 /// Barrier, back, escape and cancel actions return null. Programmatic
 /// `Navigator.pop<T>(context, result)` has the usual Navigator behavior.
+/// [barrierColor] replaces the default scrim: 20% black in a light theme,
+/// 48% in a dark one.
 Future<T?> showLiquidGlassAlert<T>({
   required BuildContext context,
   required List<LiquidGlassAlertAction<T>> actions,
@@ -55,6 +57,7 @@ Future<T?> showLiquidGlassAlert<T>({
   bool useRootNavigator = true,
   RouteSettings? routeSettings,
   String? semanticLabel,
+  Color? barrierColor,
 }) {
   if (actions.isEmpty) {
     throw ArgumentError.value(actions, 'actions', 'Must not be empty.');
@@ -72,6 +75,7 @@ Future<T?> showLiquidGlassAlert<T>({
     slide:
         style == LiquidGlassAlertStyle.actionSheet &&
         LiquidGlassTheme.modeOf(context) != LiquidGlassMode.native,
+    barrierColor: barrierColor ?? _modalBarrier(context),
     builder: (context) => _Alert<T>(
       title: title,
       content: content,
@@ -99,6 +103,9 @@ Future<T?> showLiquidGlassAlert<T>({
 /// `SingleChildScrollView` in a `Flexible`). The builder still receives a
 /// [PrimaryScrollController]. There are no intermediate stops, so the drag
 /// handle only drags the whole sheet down to dismiss it.
+///
+/// [barrierColor] replaces the default scrim: 20% black in a light theme, 48%
+/// in a dark one.
 Future<T?> showLiquidGlassSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -114,6 +121,7 @@ Future<T?> showLiquidGlassSheet<T>({
   bool showDragHandle = true,
   RouteSettings? routeSettings,
   String? semanticLabel,
+  Color? barrierColor,
 }) {
   if (!fitContent && (detents.isEmpty || !detents.contains(initialDetent))) {
     throw ArgumentError('detents must contain the initialDetent.');
@@ -126,6 +134,7 @@ Future<T?> showLiquidGlassSheet<T>({
     barrierDismissible: barrierDismissible,
     settings: routeSettings,
     slide: true,
+    barrierColor: barrierColor ?? _modalBarrier(context),
     builder: (context) => fitContent
         ? _FitSheet(
             builder: builder,
@@ -181,7 +190,7 @@ Future<T?> showLiquidGlassPopover<T>({
     useRootNavigator: useRootNavigator,
     barrierDismissible: barrierDismissible,
     settings: routeSettings,
-    barrierOpacity: .08,
+    barrierColor: Colors.black.withValues(alpha: .08),
     // The popover scales itself from its anchor edge; the route only fades.
     scale: false,
     builder: (context) => _Popover(
@@ -196,6 +205,12 @@ Future<T?> showLiquidGlassPopover<T>({
   );
 }
 
+/// The default dimming behind alerts and sheets. A dark page needs a deeper
+/// scrim for the modal layer to read as separate, as on iOS.
+Color _modalBarrier(BuildContext context) => Colors.black.withValues(
+  alpha: Theme.of(context).brightness == Brightness.dark ? .48 : .2,
+);
+
 Future<T?> _showPopup<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -204,7 +219,7 @@ Future<T?> _showPopup<T>({
   required RouteSettings? settings,
   bool slide = false,
   bool scale = true,
-  double barrierOpacity = .2,
+  required Color barrierColor,
 }) {
   final navigator = Navigator.of(context, rootNavigator: useRootNavigator);
   final localGlass = LiquidGlassTheme.of(context);
@@ -223,7 +238,7 @@ Future<T?> _showPopup<T>({
           localGlass.reduceMotion || MediaQuery.disableAnimationsOf(context),
       slide: slide,
       scale: scale,
-      barrierOpacity: barrierOpacity,
+      barrierColor: barrierColor,
       settings: settings,
     ),
   );
@@ -239,7 +254,7 @@ class _GlassPopupRoute<T> extends PopupRoute<T> {
     required this.reduceMotion,
     required this.slide,
     required this.scale,
-    required this.barrierOpacity,
+    required this.barrierColor,
     super.settings,
   }) : super(traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop);
 
@@ -251,10 +266,8 @@ class _GlassPopupRoute<T> extends PopupRoute<T> {
   final bool reduceMotion;
   final bool slide;
   final bool scale;
-  final double barrierOpacity;
-
   @override
-  Color get barrierColor => Colors.black.withValues(alpha: barrierOpacity);
+  final Color barrierColor;
   @override
   bool get barrierDismissible => dismissible;
   @override

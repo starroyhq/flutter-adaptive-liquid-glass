@@ -19,6 +19,9 @@ class NativeButtonLayout {
     required bool usesSfSymbol,
     required TextScaler textScaler,
     required TextDirection direction,
+    String? detail,
+    double? iconSize,
+    bool menuIndicator = false,
   }) {
     final style = TextStyle(
       fontSize: textScaler.scale(17),
@@ -32,12 +35,34 @@ class NativeButtonLayout {
     )..layout();
     // SF Symbols have natural aspect ratios; the upstream SwiftUI path sizes
     // their font height, so wide symbols need more horizontal room than bitmaps.
+    final glyph = iconSize ?? NativeButtonLayout.iconSize;
     final iconWidth = hasIcon
-        ? (usesSfSymbol ? 32.0 : iconSize) + imagePadding
+        ? (usesSfSymbol ? glyph + 10 : glyph) + imagePadding
         : 0.0;
+    var detailWidth = 0.0;
+    if (detail != null) {
+      final detailPainter = TextPainter(
+        text: TextSpan(
+          text: ' $detail',
+          style: style.copyWith(fontWeight: FontWeight.w400),
+        ),
+        textDirection: direction,
+        maxLines: 1,
+      )..layout();
+      detailWidth = detailPainter.width;
+      detailPainter.dispose();
+    }
+    // UIKit's pop-up indicator: a small chevron pair and its padding.
+    final indicatorWidth = menuIndicator ? textScaler.scale(17) + 6 : 0.0;
     final width = math.max(
       height,
-      (painter.width + padding.horizontal + iconWidth + 4).ceilToDouble(),
+      (painter.width +
+              detailWidth +
+              indicatorWidth +
+              padding.horizontal +
+              iconWidth +
+              4)
+          .ceilToDouble(),
     );
     painter.dispose();
     return NativeButtonLayout(width, style);

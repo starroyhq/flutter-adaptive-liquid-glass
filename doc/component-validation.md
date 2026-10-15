@@ -20,7 +20,7 @@ Subsequent release checks are recorded separately in
 
 ## Implementation and review
 
-The [coverage matrix](component-coverage.md) maps all 21 capabilities to working
+The [coverage matrix](component-coverage.md) maps all 22 capabilities to working
 examples, rendering paths and behavior tests. Existing frosted materials remain
 in use; no refraction shader or dynamic material fusion was introduced.
 

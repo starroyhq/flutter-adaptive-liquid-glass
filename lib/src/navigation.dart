@@ -188,10 +188,15 @@ class LiquidGlassNavigationBar extends StatelessWidget
   const LiquidGlassNavigationBar({
     super.key,
     required this.title,
+    this.subtitle,
     this.leading = const [],
     this.actions = const [],
   });
   final String title;
+
+  /// A second line under the title, such as the context of the page. On
+  /// iOS 26 it is the navigation item's own subtitle.
+  final String? subtitle;
   final List<LiquidGlassAction> leading;
   final List<LiquidGlassAction> actions;
 
@@ -220,6 +225,7 @@ class LiquidGlassNavigationBar extends StatelessWidget
         child: NativeVisibility(
           child: NativeNavigationBar(
             title: title,
+            subtitle: subtitle,
             tintColor:
                 glassColors.foreground ??
                 glassColors.accent ??
@@ -255,14 +261,49 @@ class LiquidGlassNavigationBar extends StatelessWidget
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: glassColors.foreground,
-                  ),
-                ),
+                child: subtitle == null
+                    ? Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: glassColors.foreground,
+                        ),
+                      )
+                    // Large text scales the two lines down rather than
+                    // overflowing the bar's fixed height.
+                    : FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: glassColors.foreground,
+                                  ),
+                            ),
+                            Text(
+                              subtitle!,
+                              maxLines: 1,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color:
+                                        (glassColors.foreground ??
+                                                Theme.of(
+                                                  context,
+                                                ).colorScheme.onSurface)
+                                            .withValues(alpha: .6),
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
               ),
             ),
             if (actions.length > 1)

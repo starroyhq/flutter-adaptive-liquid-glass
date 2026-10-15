@@ -114,23 +114,42 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       config.background.backgroundColor = .clear
       config.imagePadding = 8
       config.imagePlacement = .leading
-      config.titleLineBreakMode = .byClipping
+      // A capsule narrower than its title ends it with an ellipsis instead of
+      // cutting glyphs; the accessibility label keeps the whole text.
+      config.titleLineBreakMode = .byTruncatingTail
       config.contentInsets = title == nil
         ? .zero : NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
       if let title {
         var attributes = AttributeContainer()
         attributes.font = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
-        config.attributedTitle = AttributedString(title, attributes: attributes)
+        var text = AttributedString(title, attributes: attributes)
+        if let detail = item["detail"] as? String {
+          // A quieter run on the same line, such as a state or current choice.
+          var quiet = AttributeContainer()
+          quiet.font = UIFont.systemFont(ofSize: fontSize, weight: .regular)
+          quiet.foregroundColor = foreground.withAlphaComponent(foreground.cgColor.alpha * 0.6)
+          text += AttributedString(" " + detail, attributes: quiet)
+        }
+        config.attributedTitle = text
       }
+      let iconSize = CGFloat((item["iconSize"] as? NSNumber)?.doubleValue ?? 22)
+      let iconColor = Self.color(item["iconColor"])
       if let symbol = item["symbol"] as? String {
-        config.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .regular))
+        let image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: iconSize, weight: .regular))
+        config.image = iconColor.flatMap { image?.withTintColor($0, renderingMode: .alwaysOriginal) } ?? image
       } else if let png = item["png"] as? FlutterStandardTypedData,
                 let image = UIImage(data: png.data) {
-        let ratio = min(22 / image.size.width, 22 / image.size.height)
+        let ratio = min(iconSize / image.size.width, iconSize / image.size.height)
         let size = CGSize(width: image.size.width * ratio, height: image.size.height * ratio)
-        config.image = UIGraphicsImageRenderer(size: size).image { _ in
+        let drawn = UIGraphicsImageRenderer(size: size).image { _ in
           image.draw(in: CGRect(origin: .zero, size: size))
-        }.withRenderingMode(.alwaysTemplate)
+        }
+        config.image = iconColor.map { drawn.withTintColor($0, renderingMode: .alwaysOriginal) }
+          ?? drawn.withRenderingMode(.alwaysTemplate)
+      }
+      if item["menuIndicator"] as? Bool == true {
+        // The platform's own pop-up affordance for a button that opens a menu.
+        config.indicator = .popup
       }
       let button = AdaptiveGlassCapsuleButton(configuration: config)
       button.actionId = id

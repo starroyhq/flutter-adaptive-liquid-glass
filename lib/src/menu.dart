@@ -55,7 +55,12 @@ class LiquidGlassMenuButton<T extends Object> extends StatefulWidget {
     this.width = 300,
     this.fitContent = false,
     this.builder,
+    this.detail,
+    this.iconColor,
+    this.iconSize,
+    this.menuIndicator = false,
   }) : assert(label != null || semanticLabel != null || builder != null),
+       assert(detail == null || label != null, 'A detail follows a label.'),
        assert(width > 0 && width.isFinite);
 
   final List<LiquidGlassMenuItem<T>> items;
@@ -81,6 +86,14 @@ class LiquidGlassMenuButton<T extends Object> extends StatefulWidget {
   /// controls only the default button; this callback may be used for either
   /// gesture without changing the existing builder signature.
   final Widget Function(BuildContext context, VoidCallback? open)? builder;
+
+  /// Passed to the default trigger; see [LiquidGlassButton.detail],
+  /// [LiquidGlassButton.iconColor], [LiquidGlassButton.iconSize] and
+  /// [LiquidGlassButton.menuIndicator].
+  final String? detail;
+  final Color? iconColor;
+  final double? iconSize;
+  final bool menuIndicator;
 
   @override
   State<LiquidGlassMenuButton<T>> createState() =>
@@ -160,7 +173,11 @@ class _LiquidGlassMenuButtonState<T extends Object>
           : null;
       return LiquidGlassButton(
         label: widget.label,
+        detail: widget.detail,
         icon: widget.icon,
+        iconColor: widget.iconColor,
+        iconSize: widget.iconSize,
+        menuIndicator: widget.menuIndicator,
         sfSymbol: widget.sfSymbol,
         semanticLabel: widget.semanticLabel ?? widget.label,
         onPressed: widget.trigger == LiquidGlassMenuTrigger.longPress

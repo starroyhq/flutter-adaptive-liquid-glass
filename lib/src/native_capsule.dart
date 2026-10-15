@@ -21,15 +21,22 @@ class NativeCapsuleItem {
     required this.id,
     required this.label,
     this.title,
+    this.detail,
     this.icon,
     this.sfSymbol,
+    this.iconColor,
+    this.iconSize,
+    this.menuIndicator = false,
     this.onPressed,
     this.onLongPress,
     this.longPressSemanticLabel,
   });
   final String id, label;
-  final String? title, sfSymbol;
+  final String? title, detail, sfSymbol;
   final IconData? icon;
+  final Color? iconColor;
+  final double? iconSize;
+  final bool menuIndicator;
   final VoidCallback? onPressed;
   final VoidCallback? onLongPress;
   final String? longPressSemanticLabel;
@@ -61,7 +68,9 @@ class _NativeCapsuleState extends State<NativeCapsule>
   double? _measuredWidth;
   int? _measurementSignature;
   int get _iconSignature => Object.hashAll(
-    widget.items.map((item) => Object.hash(item.icon, item.sfSymbol)),
+    widget.items.map(
+      (item) => Object.hash(item.icon, item.sfSymbol, item.iconSize),
+    ),
   );
 
   @override
@@ -119,7 +128,9 @@ class _NativeCapsuleState extends State<NativeCapsule>
   void didUpdateWidget(covariant NativeCapsule oldWidget) {
     super.didUpdateWidget(oldWidget);
     final old = Object.hashAll(
-      oldWidget.items.map((item) => Object.hash(item.icon, item.sfSymbol)),
+      oldWidget.items.map(
+        (item) => Object.hash(item.icon, item.sfSymbol, item.iconSize),
+      ),
     );
     if (old != _iconSignature) _prepareIcons();
   }
@@ -139,7 +150,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
           style: TextStyle(
             fontFamily: icon.fontFamily,
             package: icon.fontPackage,
-            fontSize: 22,
+            fontSize: item.iconSize ?? 22,
             color: Colors.white,
           ),
         ),
@@ -261,7 +272,11 @@ class _NativeCapsuleState extends State<NativeCapsule>
             'id': widget.items[i].id,
             'label': widget.items[i].label,
             'title': widget.items[i].title,
+            'detail': widget.items[i].detail,
             'symbol': widget.items[i].sfSymbol,
+            'iconColor': widget.items[i].iconColor?.toARGB32(),
+            'iconSize': widget.items[i].iconSize,
+            'menuIndicator': widget.items[i].menuIndicator,
             'png': _icons[i],
             'enabled':
                 widget.items[i].onPressed != null ||
@@ -285,9 +300,13 @@ class _NativeCapsuleState extends State<NativeCapsule>
           (item) => Object.hash(
             item.id,
             item.title,
+            item.detail,
             item.label,
             item.icon,
             item.sfSymbol,
+            item.iconColor,
+            item.iconSize,
+            item.menuIndicator,
             item.onPressed != null,
             item.onLongPress != null,
             item.longPressSemanticLabel,
@@ -308,8 +327,11 @@ class _NativeCapsuleState extends State<NativeCapsule>
           sum +
           NativeButtonLayout.measure(
             label: item.title,
+            detail: item.detail,
             hasIcon: item.icon != null || item.sfSymbol != null,
             usesSfSymbol: item.sfSymbol != null,
+            iconSize: item.iconSize,
+            menuIndicator: item.menuIndicator,
             textScaler: MediaQuery.textScalerOf(context),
             direction: Directionality.of(context),
           ).width,

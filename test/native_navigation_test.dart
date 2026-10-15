@@ -81,6 +81,7 @@ void main() {
 
   Widget host({
     String title = 'Components',
+    String? subtitle,
     String label = 'Toggle theme',
     String actionId = 'theme',
     VoidCallback? onPressed,
@@ -94,6 +95,7 @@ void main() {
       child: Scaffold(
         body: NativeNavigationBar(
           title: title,
+          subtitle: subtitle,
           tintColor: tint,
           leading: [
             LiquidGlassAction(id: 'back', label: 'Back', onPressed: () {}),
@@ -111,6 +113,17 @@ void main() {
       ),
     ),
   );
+
+  testWidgets('the subtitle reaches the native navigation item', (
+    tester,
+  ) async {
+    await tester.pumpWidget(host(subtitle: 'Synthetic workspace'));
+    await tester.pumpAndSettle();
+    expect(creation[id]!['subtitle'], 'Synthetic workspace');
+    await tester.pumpWidget(host());
+    await tester.pumpAndSettle();
+    expect(config()['subtitle'], isNull);
+  });
 
   testWidgets('native bar receives business labels separately from symbols', (
     tester,

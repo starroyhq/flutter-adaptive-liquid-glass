@@ -181,7 +181,7 @@ materials and app appearance.
 
 ## Component catalog
 
-The package covers 21 UI capabilities. Icon buttons are a constructor variant;
+The package covers 22 UI capabilities. Icon buttons are a constructor variant;
 alert and action sheet are two styles of the same helper, and
 `LiquidGlassActionBar` composes the button and the shared capsule without a
 rendering path of its own. See the
@@ -191,7 +191,7 @@ paths, constraints and regression sources.
 | Family | Public API |
 | --- | --- |
 | Surfaces and actions | `LiquidGlassSurface`, `LiquidGlassButton`, `LiquidGlassButton.icon`, `LiquidGlassButtonGroup`, `LiquidGlassActionBar` |
-| Navigation and grouping | `LiquidGlassNavigationBar`, `LiquidGlassTabBar`, `LiquidGlassSegmentedControl<T>`, `LiquidGlassToolbar` |
+| Navigation and grouping | `LiquidGlassNavigationBar`, `LiquidGlassTabBar`, `LiquidGlassSegmentedControl<T>`, `LiquidGlassToolbar`, `LiquidGlassScrollEdgeEffect` |
 | Values | `LiquidGlassSlider`, `LiquidGlassSwitch`, `LiquidGlassStepper` |
 | Status | `LiquidGlassActivityIndicator`, `LiquidGlassProgressView` |
 | Picking | `LiquidGlassDatePicker`, `LiquidGlassColorPicker` |
@@ -302,6 +302,51 @@ unlike Dart's integer `AARRGGBB` notation. Invalid HEX does not emit an edit.
 `supportsAlpha: false` hides alpha editing and emits opaque colors. Changes are
 continuous; closing is not a rollback or a second commit. Maintain a separate
 draft if the application needs explicit confirmation.
+
+### Button details, subtitles and scroll edges
+
+A button can carry a quieter detail after its label, a coloured mark and the
+platform's pop-up indicator. On iOS 26 they map to the native button's title,
+image and indicator, so the native press effect is kept; a native title that
+does not fit ends with an ellipsis and its accessibility label stays whole.
+
+```dart
+LiquidGlassButton(
+  label: 'Studio',
+  detail: 'Online',
+  sfSymbol: 'circle.fill',
+  icon: Icons.circle,
+  iconColor: Colors.green,
+  iconSize: 10,
+  menuIndicator: true,
+  onPressed: openSwitcher,
+);
+```
+
+`LiquidGlassMenuButton` passes the same options to its default trigger, and
+`LiquidGlassNavigationBar(subtitle: ...)` shows a second line under the title,
+the navigation item's own subtitle on iOS 26.
+
+iOS 26 softens content where it scrolls beneath floating bars, but only for
+`UIScrollView`. `LiquidGlassScrollEdgeEffect` draws that effect for Flutter
+scrollables in every mode: a progressive blur fading into the page colour
+(`soft`), or an opaque band with a hairline (`hard`, also used when
+transparency is reduced). An edge appears only while content is beneath it.
+
+```dart
+Scaffold(
+  extendBodyBehindAppBar: true,
+  appBar: const LiquidGlassNavigationBar(title: 'Files', subtitle: 'Workspace'),
+  body: LiquidGlassScrollEdgeEffect(
+    top: MediaQuery.paddingOf(context).top + 80,
+    bottom: 96,
+    child: ListView(padding: listPadding, children: rows),
+  ),
+);
+```
+
+Alerts and sheets dim the page with 20% black in a light theme and 48% in a
+dark one; pass `barrierColor` to choose another scrim.
 
 ### Menus and typed presentations
 

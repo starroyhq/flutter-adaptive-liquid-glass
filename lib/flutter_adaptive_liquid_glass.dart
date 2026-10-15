@@ -17,3 +17,4 @@ export 'src/value_controls.dart';
 export 'src/pickers.dart';
 export 'src/presentation.dart';
 export 'src/menu.dart';
+export 'src/scroll_edge.dart';

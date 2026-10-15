@@ -1,3 +1,25 @@
+## 0.5.0 (unreleased)
+
+- `LiquidGlassButton` takes a `detail` shown after the label in a quieter
+  colour, an `iconColor` and `iconSize` for marks such as a status dot, and
+  `menuIndicator` for the platform's pop-up indicator. On iOS 26 they map to
+  the native button's attributed title, image and indicator. The accessibility
+  label joins the label and the detail. `LiquidGlassMenuButton` passes the same
+  options to its default trigger.
+- A native capsule title that does not fit now ends with an ellipsis instead of
+  being cut mid-glyph; its accessibility label keeps the whole text.
+- Add `LiquidGlassScrollEdgeEffect`, the iOS 26 scroll edge effect for Flutter
+  scrollables, which the system applies to `UIScrollView` only. `soft` is a
+  progressive blur fading into the page colour, `hard` an opaque band with a
+  hairline. An edge shows only while content is beneath it; reduced
+  transparency and high contrast use `hard`.
+- `LiquidGlassNavigationBar` takes a `subtitle`, the navigation item's own
+  subtitle on iOS 26 and a second line in the fallback.
+- Alerts and sheets dim the page more deeply in a dark theme (48% black instead
+  of 20%), and `showLiquidGlassAlert` and `showLiquidGlassSheet` take a
+  `barrierColor`.
+- The example app has a `GLASS_NEW_CONTROLS` page showing these additions.
+
 ## 0.4.0
 
 - Add `LiquidGlassActionBar`, the action row of a sheet or form. The last

@@ -2,7 +2,7 @@
 
 This matrix describes the current source API, its rendering paths and the
 regression tests that exercise it. It is not a record of device or CI results.
-The package covers 21 UI capabilities associated with the pinned
+The package covers 22 UI capabilities associated with the pinned
 `native_liquid_glass` provider. Public APIs are package-owned; they are not a
 one-to-one copy of the provider or of UIKit. Icon buttons are counted separately
 and exposed through `LiquidGlassButton.icon`, without another widget class.
@@ -30,7 +30,7 @@ surfaces. Opaque mode or reduced transparency adds a solid backdrop. Other
 fixed-height controls can use Flutter layout when large text or unsupported
 action configurations require it.
 
-## The 21 capabilities
+## The 22 capabilities
 
 The default example opens the **Component catalog**. Its tabs are **Controls**,
 **Pickers**, **Popups** and **Search**. The **Appearance** action changes colors,
@@ -41,10 +41,10 @@ appearance and accessibility preferences. Example locations below refer to
 | # | Capability and public API | Native or hybrid path on iOS 26+ | Fallback and key contract | Catalog entry | Regression source |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Surface / container: `LiquidGlassSurface` | Hybrid: package-owned UIKit glass view behind Flutter content; background ignores input | Bounded blur, protective fill and rim; `floating` / `control` styles, radius, padding and optional tint; opaque rendering removes blur | Controls → Surface and buttons | [surface_material_test.dart](../test/surface_material_test.dart), [color_theme_test.dart](../test/color_theme_test.dart) |
-| 2 | Button: `LiquidGlassButton` | Package UIKit capsule for text buttons; Flutter loading state | Frosted button or prominent fill; two null callbacks disable, and a disabled `prominent` button drops its fill; loading disables submission and keeps it; optional independent long press | Controls → Surface and buttons | [fallback_test.dart](../test/fallback_test.dart), [flutter_adaptive_liquid_glass_test.dart](../test/flutter_adaptive_liquid_glass_test.dart) |
+| 2 | Button: `LiquidGlassButton` | Package UIKit capsule for text buttons; Flutter loading state | Frosted button or prominent fill; two null callbacks disable, and a disabled `prominent` button drops its fill; loading disables submission and keeps it; optional independent long press; optional `detail`, icon colour and size and pop-up indicator (native title, image and indicator), read as one label; a native title that does not fit ends with an ellipsis | Controls → Surface and buttons; `GLASS_NEW_CONTROLS` page | [fallback_test.dart](../test/fallback_test.dart), [flutter_adaptive_liquid_glass_test.dart](../test/flutter_adaptive_liquid_glass_test.dart), [button_detail_test.dart](../test/button_detail_test.dart) |
 | 3 | Icon button: `LiquidGlassButton.icon` | Provider icon button, or package capsule for long press; optional SF Symbol | Same button interaction with required `semanticLabel` and fallback `IconData` | Controls → Surface and buttons → Add | [status_toolbar_test.dart](../test/status_toolbar_test.dart), [flutter_adaptive_liquid_glass_test.dart](../test/flutter_adaptive_liquid_glass_test.dart) |
 | 4 | Shared action capsule: `LiquidGlassButtonGroup` | One package UIKit glass capsule containing plain buttons | One shared material, individual 48-point minimum targets, stable action IDs and per-action enabled state | Controls → Grouped toolbar | [button_group_test.dart](../test/button_group_test.dart) |
-| 5 | Navigation bar: `LiquidGlassNavigationBar` | Package `UINavigationBar` bridge with explicit action labels when its configuration is supported; otherwise Flutter title with adaptive controls | Explicit leading/trailing actions; adjacent actions share a capsule; app owns navigation | Catalog page header; accessibility probe | [native_navigation_test.dart](../test/native_navigation_test.dart), [button_group_test.dart](../test/button_group_test.dart), [flutter_adaptive_liquid_glass_test.dart](../test/flutter_adaptive_liquid_glass_test.dart) |
+| 5 | Navigation bar: `LiquidGlassNavigationBar` | Package `UINavigationBar` bridge with explicit action labels when its configuration is supported; otherwise Flutter title with adaptive controls | Explicit leading/trailing actions; adjacent actions share a capsule; app owns navigation; optional subtitle (the navigation item's own on iOS 26, a second line otherwise) | Catalog page header; accessibility probe; `GLASS_NEW_CONTROLS` page | [native_navigation_test.dart](../test/native_navigation_test.dart), [navigation_subtitle_test.dart](../test/navigation_subtitle_test.dart), [button_group_test.dart](../test/button_group_test.dart), [flutter_adaptive_liquid_glass_test.dart](../test/flutter_adaptive_liquid_glass_test.dart) |
 | 6 | Tab bar: `LiquidGlassTabBar` | Provider system `UITabBarController` / `UITabBar`, retained on iOS 26+ | Shared moving selection capsule; 2–5 controlled items, optional badges, selected icons and labels | Catalog bottom tabs | [fallback_selection_test.dart](../test/fallback_selection_test.dart), [flutter_adaptive_liquid_glass_test.dart](../test/flutter_adaptive_liquid_glass_test.dart) |
 | 7 | Segmented control: `LiquidGlassSegmentedControl<T>` | Provider segmented control | Shared moving selection capsule; unique typed values, controlled selection, nullable callback disables | Controls → Segmented control | [fallback_selection_test.dart](../test/fallback_selection_test.dart), [color_theme_test.dart](../test/color_theme_test.dart) |
 | 8 | Activity indicator: `LiquidGlassActivityIndicator` | Package `UIActivityIndicatorView` bridge with atomic configuration and retained instances | Package-painted indicator; medium/large size, stopped visibility and semantic label; reduced motion uses a static indicator | Controls → Activity and progress | [status_toolbar_test.dart](../test/status_toolbar_test.dart), [native_status_test.dart](../test/native_status_test.dart) |
@@ -57,10 +57,11 @@ appearance and accessibility preferences. Example locations below refer to
 | 15 | Search field: `LiquidGlassSearchField` | Hybrid: Flutter `TextField` in an adaptive glass surface | Same editor, clear/cancel actions, external or internally owned controller/focus; change and submit callbacks | Search → Search field | [search_test.dart](../test/search_test.dart) |
 | 16 | Search scaffold: `LiquidGlassSearchScaffold` | Flutter layout, adaptive search field and native tab bar | Caller-owned body, results, selected tab and search-active state; retains body state while results are displayed; hides tabs while keyboard is visible | Search → Open search scaffold | [search_test.dart](../test/search_test.dart) |
 | 17 | Toolbar: `LiquidGlassToolbar` | Flutter layout of package-native shared capsules | Explicit groups of `LiquidGlassAction`; separate groups retain spacing and scroll horizontally when constrained | Controls → Grouped toolbar | [status_toolbar_test.dart](../test/status_toolbar_test.dart) |
-| 18 | Alert / action sheet: `showLiquidGlassAlert<T>` | Hybrid: Flutter `PopupRoute`, content and actions over adaptive native glass | Same typed-result route; alert/action-sheet styles, disabled/destructive/cancel actions and optional barrier dismissal | Popups → Alert / Action sheet | [presentation_test.dart](../test/presentation_test.dart) |
+| 18 | Alert / action sheet: `showLiquidGlassAlert<T>` | Hybrid: Flutter `PopupRoute`, content and actions over adaptive native glass | Same typed-result route; alert/action-sheet styles, disabled/destructive/cancel actions and optional barrier dismissal; scrim 20% black in light, 48% in dark, or `barrierColor` | Popups → Alert / Action sheet | [presentation_test.dart](../test/presentation_test.dart), [barrier_test.dart](../test/barrier_test.dart) |
 | 19 | Menu: `LiquidGlassMenuButton<T>` with `LiquidGlassMenuItem<T>` | Hybrid: Flutter menu content in a package glass popover | Independent triggers, nested items, selected/disabled/destructive states, selection/cancellation callbacks; tap/long-press trigger policy; unique item values within a menu tree | Popups → First / Second / Third menu | [menu_test.dart](../test/menu_test.dart) |
-| 20 | Sheet: `showLiquidGlassSheet<T>` | Hybrid: Flutter content and route over adaptive native glass | Medium/large detents, drag handle, optional drag/dismiss, safe-area and keyboard constraints; builder receives primary scroll controller scope; opt-in `fitContent` sizes the sheet to its content up to the large detent, the handle pulling it down to dismiss | Popups → Mixed sheet / Nest sheet / Fit sheet | [presentation_test.dart](../test/presentation_test.dart) |
+| 20 | Sheet: `showLiquidGlassSheet<T>` | Hybrid: Flutter content and route over adaptive native glass | Medium/large detents, drag handle, optional drag/dismiss, safe-area and keyboard constraints; builder receives primary scroll controller scope; opt-in `fitContent` sizes the sheet to its content up to the large detent, the handle pulling it down to dismiss; scrim as for alerts | Popups → Mixed sheet / Nest sheet / Fit sheet | [presentation_test.dart](../test/presentation_test.dart), [barrier_test.dart](../test/barrier_test.dart) |
 | 21 | Popover: `showLiquidGlassPopover<T>` | Hybrid: anchored Flutter route and content over adaptive native glass | Follows anchor during layout changes, flips/clamps to available space, dismisses when anchor disappears; typed result and optional barrier dismissal | Popups → Popover / Nest popover | [presentation_test.dart](../test/presentation_test.dart) |
+| 22 | Scroll edge effect: `LiquidGlassScrollEdgeEffect` | Flutter-drawn in every mode: iOS 26 applies its scroll edge effect to `UIScrollView` only, never to Flutter scrollables | `soft` progressive blur (grouped backdrop slices) fading into the page colour, or `hard` opaque band with a hairline; per-edge extent; shows only while content is beneath the edge; reduced transparency and high contrast use `hard`; pointers pass through | `GLASS_NEW_CONTROLS` page | [scroll_edge_test.dart](../test/scroll_edge_test.dart) |
 
 ## Compositions
 
@@ -68,7 +69,7 @@ appearance and accessibility preferences. Example locations below refer to
 `LiquidGlassButton` (capability 2) and the earlier ones as one
 `LiquidGlassButtonGroup` (capability 4), stacking them at the trailing edge when
 they do not fit on one line. It adds no rendering path of its own, so it is not
-counted among the 21 capabilities. Its regression source is
+counted among the 22 capabilities. Its regression source is
 [action_bar_test.dart](../test/action_bar_test.dart); the sheet entry in the
 catalog (Popups → Fit sheet) uses it.
 
@@ -111,7 +112,7 @@ body from the existing application layout or router.
 ## Presentation and lifecycle foundation
 
 Lifecycle and appearance are shared infrastructure, not additional entries in
-the 21 UI capabilities:
+the 22 UI capabilities:
 
 - Install `LiquidGlassAppearance` with the application's selected `ThemeMode`
   so native controls follow manual light/dark appearance as well as system mode.

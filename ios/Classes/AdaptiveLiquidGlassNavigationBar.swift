@@ -100,6 +100,7 @@ private final class AdaptiveLiquidGlassNavigationBar: NSObject, FlutterPlatformV
     bar.semanticContentAttribute = direction
     bar.tintColor = Self.color(props["tintColor"])
     item.title = props["title"] as? String ?? ""
+    if #available(iOS 26.0, *) { item.subtitle = props["subtitle"] as? String }
     let nextLeading = updateItems(leading, from: props["leading"] as? [[String: Any]] ?? [])
     let nextActions = updateItems(actions, from: props["actions"] as? [[String: Any]] ?? [])
     // Keep existing UIBarButtonItems when only labels, symbols or colors change,

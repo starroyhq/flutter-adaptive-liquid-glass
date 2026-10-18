@@ -147,7 +147,10 @@ class LiquidGlassButton extends StatelessWidget {
               },
         tooltip: semanticLabel,
         size: NativeButtonLayout.height,
-        iconSize: NativeButtonLayout.iconSize,
+        // Upstream sizes a symbol as a font and a bitmap as a box.
+        iconSize: sfSymbol != null
+            ? NativeButtonLayout.iconSize * NativeButtonLayout.symbolScale
+            : NativeButtonLayout.iconSize,
         padding: const EdgeInsets.all(12),
         iconColor: textColor,
         tint: emphasized ? accent : glassColors.surfaceTint,
@@ -272,7 +275,7 @@ class LiquidGlassSegmentedControl<T> extends StatelessWidget {
     final glassColors = LiquidGlassTheme.of(context).colors;
     if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native &&
         MediaQuery.textScalerOf(context).scale(14) <= 20) {
-      return NativeVisibility(
+      final control = NativeVisibility(
         child: native.LiquidGlassSegmentedControl(
           labels: [for (final segment in segments) segment.label],
           selectedIndex: segments.indexWhere(
@@ -287,6 +290,22 @@ class LiquidGlassSegmentedControl<T> extends StatelessWidget {
             }
           },
         ),
+      );
+      // native_liquid_glass 0.3.1 insets its SwiftUI picker by 16 points on
+      // each side. Widen the platform view by that much so the segments span
+      // the width this control was given; touches still land only inside it.
+      return LayoutBuilder(
+        builder: (context, constraints) => !constraints.hasBoundedWidth
+            ? control
+            : SizedBox(
+                width: constraints.maxWidth,
+                height: 48,
+                child: OverflowBox(
+                  minWidth: constraints.maxWidth + 32,
+                  maxWidth: constraints.maxWidth + 32,
+                  child: control,
+                ),
+              ),
       );
     }
     final colors = Theme.of(context).colorScheme;

@@ -89,8 +89,9 @@ void main() {
         textScaler: TextScaler.noScaling,
         direction: TextDirection.ltr,
       );
-      expect(withSymbol.width, greaterThan(100));
-      expect(withSymbol.width - plain.width, 40);
+      // A symbol beside a title is as large as the title's 17-point font.
+      expect(withSymbol.width, greaterThan(90));
+      expect(withSymbol.width - plain.width, inInclusiveRange(29, 30));
       expect(withSymbol.labelStyle.fontSize, 17);
       expect(NativeButtonLayout.padding.horizontal, 32);
       final scaled = NativeButtonLayout.measure(

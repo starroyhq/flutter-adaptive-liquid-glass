@@ -132,10 +132,21 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
         }
         config.attributedTitle = text
       }
-      let iconSize = CGFloat((item["iconSize"] as? NSNumber)?.doubleValue ?? 22)
+      let requestedIconSize = (item["iconSize"] as? NSNumber).map { CGFloat($0.doubleValue) }
+      let iconSize = requestedIconSize ?? 22
       let iconColor = Self.color(item["iconColor"])
       if let symbol = item["symbol"] as? String {
-        let image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: iconSize, weight: .regular))
+        // A symbol's point size is a font size, so a 22-point symbol is far
+        // larger than a 22-point Material icon. Beside a title the symbol takes
+        // the title's font, as UIKit's own buttons do; alone, or at a requested
+        // size, it takes the font size whose glyph matches that icon size.
+        let symbolConfiguration = requestedIconSize == nil && title != nil
+          ? UIImage.SymbolConfiguration(
+              font: UIFont.systemFont(ofSize: fontSize, weight: .semibold), scale: .medium)
+          : UIImage.SymbolConfiguration(
+              pointSize: iconSize * Self.symbolScale, weight: .regular, scale: .medium)
+        let image = UIImage(systemName: symbol, withConfiguration: symbolConfiguration)
+        config.preferredSymbolConfigurationForImage = symbolConfiguration
         config.image = iconColor.flatMap { image?.withTintColor($0, renderingMode: .alwaysOriginal) } ?? image
       } else if let png = item["png"] as? FlutterStandardTypedData,
                 let image = UIImage(data: png.data) {
@@ -273,6 +284,10 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     if let suppressionObserver { suppression.remove(suppressionObserver) }
     for observer in lifecycleObservers { NotificationCenter.default.removeObserver(observer) }
   }
+
+  /// The point size of an SF Symbol whose glyph is about as large as a
+  /// Material icon of one point.
+  static let symbolScale: CGFloat = 0.75
 
   private static func color(_ value: Any?) -> UIColor? {
     guard let number = value as? NSNumber else { return nil }

@@ -757,7 +757,8 @@ class _ValueColors {
     return _ValueColors(
       tone(palette.accent ?? scheme.primary),
       tone(palette.selection ?? scheme.onSurface.withValues(alpha: .16)),
-      tone(palette.surfaceTint ?? scheme.surfaceContainerLowest),
+      // White in both appearances, as iOS draws slider and switch thumbs.
+      tone(palette.surfaceTint ?? Colors.white),
       tone(palette.foreground ?? scheme.onSurface),
       tone(palette.border ?? scheme.onSurface.withValues(alpha: .15)),
       tone(palette.highlight ?? Colors.white.withValues(alpha: .75)),

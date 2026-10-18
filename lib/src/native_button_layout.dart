@@ -13,6 +13,10 @@ class NativeButtonLayout {
   static const iconSize = 22.0;
   static const imagePadding = 8.0;
 
+  /// The point size of an SF Symbol whose glyph is about as large as a
+  /// Material icon of one point: a symbol's point size is a font size.
+  static const symbolScale = 0.75;
+
   factory NativeButtonLayout.measure({
     required String? label,
     required bool hasIcon,
@@ -33,11 +37,12 @@ class NativeButtonLayout {
       textDirection: direction,
       maxLines: 1,
     )..layout();
-    // SF Symbols have natural aspect ratios; the upstream SwiftUI path sizes
-    // their font height, so wide symbols need more horizontal room than bitmaps.
+    // A symbol beside a title takes the title's font, otherwise the font size
+    // matching the icon size; wide symbols are about 1.25 times that size.
     final glyph = iconSize ?? NativeButtonLayout.iconSize;
+    final symbolFont = iconSize == null ? style.fontSize! : glyph * symbolScale;
     final iconWidth = hasIcon
-        ? (usesSfSymbol ? glyph + 10 : glyph) + imagePadding
+        ? (usesSfSymbol ? symbolFont * 1.25 : glyph) + imagePadding
         : 0.0;
     var detailWidth = 0.0;
     if (detail != null) {

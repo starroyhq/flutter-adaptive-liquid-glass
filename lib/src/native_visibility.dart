@@ -36,9 +36,13 @@ class NativeRouteCoverage extends ChangeNotifier {
 /// Keeps a covered native subtree laid out and alive, but excludes it from
 /// painting, hit testing and accessibility until its overlay has fully exited.
 class NativeVisibility extends StatelessWidget {
-  const NativeVisibility({super.key, required this.child});
+  const NativeVisibility({super.key, required this.child, this.replacement});
 
   final Widget child;
+
+  /// Painted in place of [child] while it is covered, such as an opaque
+  /// material under a sheet's content while an alert is above it.
+  final Widget? replacement;
 
   bool _isVisible(BuildContext context) {
     Route<dynamic>? route = ModalRoute.of(context);
@@ -62,12 +66,23 @@ class NativeVisibility extends StatelessWidget {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: nativeRouteCoverage,
     child: child,
-    builder: (context, child) => Visibility(
-      visible: _isVisible(context),
-      maintainState: true,
-      maintainAnimation: true,
-      maintainSize: true,
-      child: child!,
-    ),
+    builder: (context, child) {
+      final visible = _isVisible(context);
+      final kept = Visibility(
+        visible: visible,
+        maintainState: true,
+        maintainAnimation: true,
+        maintainSize: true,
+        child: child!,
+      );
+      if (replacement == null) return kept;
+      return Stack(
+        fit: StackFit.passthrough,
+        children: [
+          if (!visible) Positioned.fill(child: replacement!),
+          kept,
+        ],
+      );
+    },
   );
 }

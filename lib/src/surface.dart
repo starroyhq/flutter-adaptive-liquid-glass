@@ -58,6 +58,23 @@ class LiquidGlassSurface extends StatelessWidget {
           Positioned.fill(
             child: IgnorePointer(
               child: NativeVisibility(
+                // While a route above hides the native material, the content
+                // keeps an opaque Flutter material instead of floating over
+                // the page, as a sheet does under an alert.
+                // Its tone is the system material's over a plain page: 6% of
+                // the way from the surface to the foreground.
+                replacement: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color:
+                        resolvedTint?.withValues(alpha: 1) ??
+                        Color.lerp(
+                          theme.colorScheme.surface,
+                          theme.colorScheme.onSurface,
+                          .06,
+                        ),
+                    borderRadius: borderRadius,
+                  ),
+                ),
                 child: NativeSurface(
                   radius: radius,
                   dark: dark,

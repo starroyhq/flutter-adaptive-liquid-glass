@@ -315,6 +315,22 @@ class LiquidGlassNavigationBar extends StatelessWidget
         ),
       );
     }
+    // Like the native bar's items, a grouped bar action shows its icon or
+    // its label, never both.
+    List<LiquidGlassAction> barGroup(List<LiquidGlassAction> actions) => [
+      for (final action in actions)
+        action.showLabel
+            ? LiquidGlassAction(
+                id: action.id,
+                label: action.label,
+                icon: action.icon,
+                sfSymbol: action.sfSymbol,
+                onPressed: action.onPressed,
+                onLongPress: action.onLongPress,
+                longPressSemanticLabel: action.longPressSemanticLabel,
+              )
+            : action,
+    ];
     Widget actionButton(LiquidGlassAction action) => Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: LiquidGlassButton(
@@ -334,7 +350,7 @@ class LiquidGlassNavigationBar extends StatelessWidget
         child: Row(
           children: [
             if (leading.length > 1)
-              LiquidGlassButtonGroup(actions: leading)
+              LiquidGlassButtonGroup(actions: barGroup(leading))
             else
               ...leading.map(actionButton),
             Expanded(
@@ -386,7 +402,7 @@ class LiquidGlassNavigationBar extends StatelessWidget
               ),
             ),
             if (actions.length > 1)
-              LiquidGlassButtonGroup(actions: actions)
+              LiquidGlassButtonGroup(actions: barGroup(actions))
             else
               ...actions.map(actionButton),
           ],

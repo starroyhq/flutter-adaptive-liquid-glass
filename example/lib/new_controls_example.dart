@@ -174,6 +174,49 @@ class _NewControlsExampleState extends State<NewControlsExample> {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            // Labelled actions: one group per row, so both stay in view.
+            for (final group in [
+              [
+                LiquidGlassAction(
+                  id: 'previous',
+                  label: 'Previous',
+                  icon: Icons.keyboard_arrow_up,
+                  sfSymbol: 'chevron.up',
+                  showLabel: true,
+                  onPressed: () {},
+                ),
+                LiquidGlassAction(
+                  id: 'next',
+                  label: 'Next',
+                  icon: Icons.keyboard_arrow_down,
+                  sfSymbol: 'chevron.down',
+                  onPressed: () {},
+                ),
+              ],
+              [
+                LiquidGlassAction(
+                  id: 'save',
+                  label: 'Save',
+                  icon: Icons.download,
+                  sfSymbol: 'square.and.arrow.down',
+                  showLabel: true,
+                  onPressed: () {},
+                ),
+                LiquidGlassAction(
+                  id: 'share',
+                  label: 'Share',
+                  icon: Icons.ios_share,
+                  sfSymbol: 'square.and.arrow.up',
+                  showLabel: true,
+                  onPressed: () {},
+                ),
+              ],
+            ])
+              LiquidGlassToolbar(
+                padding: const EdgeInsets.only(bottom: 12),
+                groups: [group],
+              ),
             const SizedBox(height: 24),
             for (var i = 0; i < 40; i++)
               Container(

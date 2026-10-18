@@ -22,6 +22,12 @@ class LiquidGlassButtonGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final foreground = LiquidGlassTheme.of(context).colors.foreground;
+    Widget icon(LiquidGlassAction action) =>
+        Icon(action.icon, size: NativeButtonLayout.iconSize, color: foreground);
+    Widget label(LiquidGlassAction action) => Text(
+      action.label,
+      style: foreground == null ? null : TextStyle(color: foreground),
+    );
     if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native &&
         MediaQuery.textScalerOf(context).scale(17) <= 24) {
       return NativeCapsule(
@@ -30,7 +36,9 @@ class LiquidGlassButtonGroup extends StatelessWidget {
             NativeCapsuleItem(
               id: action.id,
               label: action.label,
-              title: action.icon == null && action.sfSymbol == null
+              title:
+                  action.showLabel ||
+                      action.icon == null && action.sfSymbol == null
                   ? action.label
                   : null,
               icon: action.icon,
@@ -100,18 +108,20 @@ class LiquidGlassButtonGroup extends StatelessWidget {
                             horizontal: 12,
                             vertical: 10,
                           ),
-                          child: action.icon != null
-                              ? Icon(
-                                  action.icon,
-                                  size: NativeButtonLayout.iconSize,
-                                  color: foreground,
+                          child: action.icon == null
+                              ? label(action)
+                              : action.showLabel
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    icon(action),
+                                    const SizedBox(
+                                      width: NativeButtonLayout.imagePadding,
+                                    ),
+                                    label(action),
+                                  ],
                                 )
-                              : Text(
-                                  action.label,
-                                  style: foreground == null
-                                      ? null
-                                      : TextStyle(color: foreground),
-                                ),
+                              : icon(action),
                         ),
                       ),
                     ),

@@ -1,3 +1,14 @@
+## 0.5.1
+
+- `LiquidGlassAction` takes `showLabel`, which shows the label after the icon
+  in a `LiquidGlassButtonGroup`, and so in a `LiquidGlassToolbar` and the
+  leading capsule of a `LiquidGlassActionBar`. It is off by default, so an
+  action with an icon still shows only the icon there. On iOS 26 the native
+  capsule item shows the label as its title beside the image. Navigation and
+  tab bars keep showing an icon or a label, in the fallback as well.
+- The example app's `GLASS_NEW_CONTROLS` page has a toolbar with labelled
+  actions.
+
 ## 0.5.0
 
 - `LiquidGlassButton` takes a `detail` shown after the label in a quieter

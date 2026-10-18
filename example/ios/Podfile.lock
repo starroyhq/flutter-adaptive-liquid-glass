@@ -3,7 +3,7 @@ PODS:
     - CocoaLumberjack/Core (= 3.9.1)
   - CocoaLumberjack/Core (3.9.1)
   - Flutter (1.0.0)
-  - flutter_adaptive_liquid_glass (0.5.1):
+  - flutter_adaptive_liquid_glass (0.5.2):
     - Flutter
   - integration_test (0.0.1):
     - Flutter
@@ -37,7 +37,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   CocoaLumberjack: e4ba3b414dfca8c1916c6303d37f63b3a95134c6
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  flutter_adaptive_liquid_glass: bddef4b545f6dec555c1acd39c2deabcc482c4fa
+  flutter_adaptive_liquid_glass: 4192af448abb193c095b6ca6553ca8e9b82e6804
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
   native_liquid_glass: c77cd74256902cf8afcc6bf6baf0ebdc11bb4fad
   SVGKit: 1ad7513f8c74d9652f94ed64ddecda1a23864dea

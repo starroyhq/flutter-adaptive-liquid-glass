@@ -1,3 +1,22 @@
+## 0.5.2
+
+- On iOS 26 an SF Symbol in a native button is now about as large as the
+  matching Material icon in the fallback. Beside a title it takes the title's
+  font, as UIKit buttons do; alone, or at a requested `iconSize`, it is sized at
+  0.75 of the icon size, so a 22-point icon becomes a 16.5-point symbol.
+  Icon-only buttons pass the same size to `native_liquid_glass`; bitmap icons
+  keep their box. Symbols were sized as 22-point fonts before and looked about
+  a third larger.
+- A native `LiquidGlassSurface` whose route is covered, such as a sheet under
+  an alert, keeps an opaque Flutter material in the system material's tone
+  instead of leaving its content over the page. Native controls inside it
+  still hide until the route above leaves.
+- The native `LiquidGlassSegmentedControl` spans the width it is given.
+  `native_liquid_glass` 0.3.1 insets its picker by 16 points on each side,
+  which the package now offsets; touches still land only inside the control.
+- Fallback slider and switch thumbs are white in both appearances, as on iOS,
+  unless the palette sets `surfaceTint`.
+
 ## 0.5.1
 
 - `LiquidGlassAction` takes `showLabel`, which shows the label after the icon

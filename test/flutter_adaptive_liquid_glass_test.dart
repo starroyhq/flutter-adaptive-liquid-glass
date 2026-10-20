@@ -103,15 +103,45 @@ void main() {
               expected,
             );
             expect(
-              LiquidGlassThemeData(
-                mode: mode,
-              ).resolve(nativeAvailable: available, disableAnimations: true),
+              LiquidGlassThemeData(mode: mode).resolve(
+                nativeAvailable: available,
+                // The deprecated argument must stay without effect.
+                // ignore: deprecated_member_use_from_same_package
+                disableAnimations: true,
+              ),
               expected,
             );
           }
         }
       },
     );
+
+    testWidgets('maybeOf reports a missing theme that of fills in', (
+      tester,
+    ) async {
+      const data = LiquidGlassThemeData(mode: LiquidGlassMode.opaque);
+      late BuildContext outside, inside;
+      await tester.pumpWidget(
+        Builder(
+          builder: (context) {
+            outside = context;
+            return LiquidGlassTheme(
+              data: data,
+              child: Builder(
+                builder: (context) {
+                  inside = context;
+                  return const SizedBox.shrink();
+                },
+              ),
+            );
+          },
+        ),
+      );
+      expect(LiquidGlassTheme.maybeOf(outside), isNull);
+      expect(LiquidGlassTheme.of(outside), const LiquidGlassThemeData());
+      expect(LiquidGlassTheme.maybeOf(inside), data);
+      expect(LiquidGlassTheme.of(inside), data);
+    });
   });
 
   testWidgets(

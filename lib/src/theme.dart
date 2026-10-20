@@ -78,6 +78,10 @@ class LiquidGlassThemeData {
   LiquidGlassMode resolve({
     required bool nativeAvailable,
     bool highContrast = false,
+    @Deprecated(
+      'Has no effect: reduced motion never changes the rendering mode. '
+      'Deprecated after 0.5.2.',
+    )
     bool disableAnimations = false,
   }) {
     if (mode == LiquidGlassMode.opaque || reduceTransparency || highContrast) {
@@ -97,9 +101,14 @@ class LiquidGlassTheme extends InheritedWidget {
 
   final LiquidGlassThemeData data;
 
+  /// The data of the closest [LiquidGlassTheme], or null without one.
+  static LiquidGlassThemeData? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<LiquidGlassTheme>()?.data;
+
+  /// The data of the closest [LiquidGlassTheme], or the default
+  /// [LiquidGlassThemeData] without one.
   static LiquidGlassThemeData of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<LiquidGlassTheme>()?.data ??
-      const LiquidGlassThemeData();
+      maybeOf(context) ?? const LiquidGlassThemeData();
 
   /// Returns the effective strategy, never [LiquidGlassMode.auto].
   static LiquidGlassMode modeOf(BuildContext context) {
@@ -107,6 +116,8 @@ class LiquidGlassTheme extends InheritedWidget {
     return of(context).resolve(
       nativeAvailable: liquidGlassPlatformSupported,
       highContrast: media?.highContrast ?? false,
+      // Overrides of resolve keep receiving it until it is removed.
+      // ignore: deprecated_member_use_from_same_package
       disableAnimations: media?.disableAnimations ?? false,
     );
   }

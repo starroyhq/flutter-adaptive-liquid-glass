@@ -344,6 +344,11 @@ one package-owned `UIColorPickerViewController` presentation. Unlabeled native
 wells retain UIKit's default interaction and accessibility behavior.
 HEX accepts `RRGGBB` or `RRGGBBAA`, optionally prefixed with `#`; alpha is last,
 unlike Dart's integer `AARRGGBB` notation. Invalid HEX does not emit an edit.
+The fallback sheet's English text can be replaced: `hexLabelText` and
+`hexErrorText` replace the HEX field's label and error, and
+`channelSemanticFormatterCallback` the values that screen readers announce for
+the R, G, B and A sliders. Without `semanticLabel` or `title`, the fallback
+well is labelled `Color`.
 `supportsAlpha: false` hides alpha editing and emits opaque colors. Changes are
 continuous; closing is not a rollback or a second commit. Maintain a separate
 draft if the application needs explicit confirmation.
@@ -521,8 +526,8 @@ identifier. `padding` is the space around the buttons; the bar always keeps 8
 points above, below and before the capsule for its shadow.
 
 `showLiquidGlassPopover<T>` requires `anchorContext` and `builder`, and accepts
-`width`, `maxHeight`, `gap` and `fitContent`. Keep the anchor mounted while
-presented. The popover is exactly `width` wide unless `fitContent` is set; it then
+`width`, `maxHeight`, `gap`, `fitContent` and `barrierColor`, which replaces its
+8% black scrim. Keep the anchor mounted while presented. The popover is exactly `width` wide unless `fitContent` is set; it then
 takes the content's intrinsic width between 160 and `width` (`LiquidGlassMenuButton`
 accepts the same flag). It scales from the anchor edge it is attached to. The
 popover follows layout changes, flips/clamps within available keyboard-safe
@@ -758,6 +763,68 @@ is disabled or its IconData lacks an SF Symbol. Basic icon-only navigation shoul
 supply both. The supported native layout uses a package-owned `UINavigationBar`
 bridge and announces each action's business label. UIKit retains the system
 material and bar-button rendering.
+
+## Performance
+
+On iOS 26 each native control is its own platform view (`UiKitView`): every
+button or button-group capsule, segmented control, slider, switch, stepper, date
+picker, color well, progress or activity indicator and native
+`LiquidGlassSurface` material, as well as the navigation bar and the tab bar.
+Flutter composites each platform view separately, so many of them cost more GPU
+time and memory than the same number of Flutter widgets. A list or settings page
+with a switch on every row creates a UIKit switch for every row that is built.
+The Flutter fallback has no platform views, but every fallback surface,
+including the one behind each non-prominent button, segmented control, stepper
+and color well, applies its own background blur. No hardware GPU, frame-time or
+memory profile has been recorded for either path.
+
+Keep glass on navigation and floating controls. Give a long list, a form or a
+settings page the Flutter controls, keeping the app's colors and feedback:
+
+```dart
+LiquidGlassTheme(
+  data: LiquidGlassTheme.of(context).copyWith(mode: LiquidGlassMode.fallback),
+  child: ListView(children: settingsRows),
+)
+```
+
+`LiquidGlassMode.opaque` costs less still: its solid surfaces have no blur. The
+tab bar stays native on iOS 26 in every mode (see
+[Rendering policy](#rendering-policy)). Profile pages that combine many native
+controls in profile mode on a device.
+
+## Known limitations
+
+- Native glass needs iOS 26 or later; older iOS versions and Android use the
+  Flutter approximation. The package declares only Android and iOS: web and
+  desktop should take the fallback path but are neither declared nor tested.
+- The package builds on Material. Presentations, search and pickers read
+  `MaterialLocalizations`, so use a `MaterialApp` or install the Material
+  localization delegates; a `CupertinoApp` alone is not enough. Fallback
+  controls draw Material icons: keep `uses-material-design: true` in the app's
+  pubspec.
+- A few defaults are English: the fallback color sheet's HEX label, HEX error
+  and channel values (see [Date and color pickers](#date-and-color-pickers)) and
+  the slider's percentage value, which `semanticFormatterCallback` replaces.
+- Some native controls switch to Flutter rendering without notice: buttons
+  while `loading` and fixed-height controls at large text sizes, and the
+  navigation bar unless it has at most one leading and one trailing action, all
+  enabled, without long presses and with an `sfSymbol` beside every icon. Native
+  sliders, switches and steppers stay native at every text size.
+- iPad, landscape and Split View have not been validated. The tab bar has no
+  sidebar form, and sheets are at most 640 points wide.
+- On iOS 26 a tab icon without an `sfSymbol` is drawn from its `IconData` as a
+  bitmap and looks larger than a symbol, and the tab bar is empty for its first
+  frame while icons are prepared. The native segmented control keeps showing a
+  choice the parent does not adopt until its selection next changes; the tab bar
+  reverts it.
+- `liquidGlassNativeAvailable` reads only the iOS major version and ignores
+  `UIDesignRequiresCompatibility`. Custom `OverlayEntry` presentations do not
+  hide native views (see [Native rendering and overlays](#native-rendering-and-overlays)).
+- Some hosted iOS 26.5 simulator runs do not show the system color palette after
+  its first real tap (see the note at the top). Physical haptics and sound, full
+  VoiceOver/TalkBack and keyboard/IME acceptance, and hardware rendering and
+  performance have not been verified (see [Validation](#validation)).
 
 ## Validation
 

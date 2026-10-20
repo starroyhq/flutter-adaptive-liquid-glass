@@ -20,6 +20,19 @@
 - A native icon-only button without a long press now uses its `id` as the
   native accessibility identifier (`button` by default) and its `semanticLabel`
   as the native accessibility label.
+- An enabled fallback control shows the click cursor and a light highlight
+  under a mouse pointer. Before, it showed the click cursor only on the web and
+  no hover highlight.
+- `LiquidGlassTheme.maybeOf` returns null when there is no `LiquidGlassTheme`
+  above the context.
+- `showLiquidGlassPopover` accepts a `barrierColor`; the default scrim stays 8%
+  black.
+- `LiquidGlassColorPicker` accepts `hexLabelText`, `hexErrorText` and
+  `channelSemanticFormatterCallback` to replace the English text of its
+  fallback sheet. The defaults are unchanged.
+- The `disableAnimations` argument of `LiquidGlassThemeData.resolve` is
+  deprecated. It never affected the result.
+- The README gains Performance and Known limitations sections.
 
 ## 0.5.2
 

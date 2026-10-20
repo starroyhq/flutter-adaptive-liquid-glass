@@ -3,10 +3,13 @@ import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart
 
 import 'native_modal_example.dart';
 import 'component_catalog.dart';
+import 'native_controls_probe.dart';
 import 'new_controls_example.dart';
 
 void main() => runApp(
-  const bool.fromEnvironment('GLASS_NEW_CONTROLS')
+  const bool.fromEnvironment('GLASS_NATIVE_CONTROLS_PROBE')
+      ? const NativeControlsProbeApp()
+      : const bool.fromEnvironment('GLASS_NEW_CONTROLS')
       ? const NewControlsExample()
       : const bool.fromEnvironment('GLASS_MODAL_PROBE')
       ? const NativeModalExample()

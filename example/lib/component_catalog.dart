@@ -3,6 +3,7 @@ import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'catalog_popups.dart';
 import 'native_accessibility_example.dart';
+import 'native_controls_probe.dart';
 
 /// Independent synthetic data only. No account, network or application services.
 class ComponentCatalogApp extends StatefulWidget {
@@ -130,6 +131,15 @@ class _ComponentCatalogAppState extends State<ComponentCatalogApp> {
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const _SearchDemo()),
               ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const NativeControlsProbePage(),
+                ),
+              ),
+              child: const Text('Open native controls probe'),
             ),
           ],
           const SizedBox(height: 32),

@@ -228,3 +228,65 @@ jobs:
         run: |
           xcrun simctl shutdown "$GLASS_SIMULATOR_ID" || true
           xcrun simctl delete "$GLASS_SIMULATOR_ID"
+
+  # The jobs above pin the reference toolchain and build iOS through CocoaPods.
+  # The *-stable jobs follow the current stable channel, where Flutter 3.44+
+  # integrates iOS plugins through Swift Package Manager by default. They upload
+  # no artifacts; release assets come from the pinned jobs.
+  quality-stable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      # flutter_test pins SDK packages that change with every Flutter release,
+      # so the committed lockfiles only resolve on the pinned version.
+      - run: flutter pub get
+      - run: flutter pub get
+        working-directory: example
+      - run: flutter analyze --no-pub
+      - run: flutter analyze --no-pub
+        working-directory: example
+      - run: flutter test --no-pub
+      - run: flutter test --no-pub
+        working-directory: example
+
+  ios-simulator-stable:
+    needs: quality-stable
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter pub get
+        working-directory: example
+      # With Swift Package Manager enabled this also adds the generated plugin
+      # package to the Runner project.
+      - run: flutter build ios --simulator --debug --config-only --no-pub
+        working-directory: example
+      - name: Require the Swift Package Manager integration
+        run: grep -q FlutterGeneratedPluginSwiftPackage Runner.xcodeproj/project.pbxproj
+        working-directory: example/ios
+      # Same architecture pin as the CocoaPods job above.
+      - run: >-
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner
+          -configuration Debug -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath ../build/ios-ci-spm
+          ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
+        working-directory: example/ios
+      # SwiftPM names a target's resource bundle <package>_<target>.bundle;
+      # a CocoaPods build would add flutter_adaptive_liquid_glass_privacy.bundle.
+      - name: Require the plugin to come from its Swift package
+        run: |
+          app=build/ios-ci-spm/Build/Products/Debug-iphonesimulator/Runner.app
+          test -n "$(find "$app" -path '*/flutter_adaptive_liquid_glass_flutter_adaptive_liquid_glass.bundle/PrivacyInfo.xcprivacy')"
+          test -z "$(find "$app" -name 'flutter_adaptive_liquid_glass_privacy.bundle')"
+        working-directory: example

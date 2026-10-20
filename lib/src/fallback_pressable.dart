@@ -192,14 +192,19 @@ class _FallbackPressableState extends State<FallbackPressable>
             if (_pressed != pressed) setState(() => _pressed = pressed);
           },
           splashFactory: NoSplash.splashFactory,
+          // InkWell's adaptive default shows the click cursor only on the web.
+          mouseCursor: WidgetStateMouseCursor.clickable,
+          // A hovering pointer gets a lighter highlight than a press or focus.
           overlayColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.pressed) ||
-                states.contains(WidgetState.focused)) {
-              return (colors.foreground ??
-                      Theme.of(context).colorScheme.onSurface)
-                  .withValues(alpha: .06);
+            final active =
+                states.contains(WidgetState.pressed) ||
+                states.contains(WidgetState.focused);
+            if (!active && !states.contains(WidgetState.hovered)) {
+              return Colors.transparent;
             }
-            return Colors.transparent;
+            return (colors.foreground ??
+                    Theme.of(context).colorScheme.onSurface)
+                .withValues(alpha: active ? .06 : .04);
           }),
           child: AnimatedScale(
             scale: _pressed && !reduced && widget.scaleOnPress ? .97 : 1,

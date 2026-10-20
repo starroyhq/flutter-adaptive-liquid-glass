@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart';
@@ -152,6 +153,51 @@ void main() {
       expect(tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale, 1);
     }
     expect(taps, 2);
+  });
+
+  testWidgets('a mouse gets a click cursor and a lighter hover highlight', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            LiquidGlassButton(label: 'Enabled', onPressed: () {}),
+            const LiquidGlassButton(label: 'Disabled'),
+          ],
+        ),
+      ),
+    );
+    final mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+      pointer: 1,
+    );
+    await mouse.addPointer(location: tester.getCenter(find.text('Enabled')));
+    addTearDown(mouse.removePointer);
+    await tester.pump();
+    expect(
+      tester.binding.mouseTracker.debugDeviceActiveCursor(1),
+      SystemMouseCursors.click,
+    );
+    await mouse.moveTo(tester.getCenter(find.text('Disabled')));
+    await tester.pump();
+    expect(
+      tester.binding.mouseTracker.debugDeviceActiveCursor(1),
+      SystemMouseCursors.basic,
+    );
+    final overlay = tester
+        .widget<InkWell>(
+          find.descendant(
+            of: find.widgetWithText(LiquidGlassButton, 'Enabled'),
+            matching: find.byType(InkWell),
+          ),
+        )
+        .overlayColor!;
+    final hovered = overlay.resolve({WidgetState.hovered})!;
+    expect(hovered.a, greaterThan(0));
+    expect(hovered.a, lessThan(overlay.resolve({WidgetState.pressed})!.a));
+    expect(overlay.resolve(<WidgetState>{}), Colors.transparent);
   });
 }
 

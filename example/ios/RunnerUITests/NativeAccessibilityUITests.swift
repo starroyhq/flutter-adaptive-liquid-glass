@@ -307,6 +307,55 @@ final class NativeAccessibilityUITests: XCTestCase {
     expectText("Color value: ff000000")
   }
 
+  func testNativeControlsReachFlutterCallbacks() throws {
+    app.buttons["back"].tap()
+    let searchTab = app.buttons["Search"]
+    XCTAssertTrue(searchTab.waitForExistence(timeout: 10))
+    searchTab.tap()
+    let openProbe = app.buttons["Open native controls probe"]
+    XCTAssertTrue(openProbe.waitForExistence(timeout: 10))
+    openProbe.tap()
+    expectText("Tab: 2")
+
+    // The system tab bar: a tab, then its separate search-style button.
+    let alpha = app.buttons["Alpha"]
+    XCTAssertTrue(alpha.waitForExistence(timeout: 10))
+    alpha.tap()
+    expectText("Tab: 0")
+    app.buttons["Find"].tap()
+    expectText("Find presses: 1")
+    expectText("Tab: 0")
+
+    // The system segmented control.
+    app.buttons["Two"].tap()
+    expectText("Segment: 1")
+
+    // Standalone icon buttons carry their id and semantic label natively.
+    let add = app.buttons["probe-add"]
+    XCTAssertTrue(add.waitForExistence(timeout: 10))
+    XCTAssertEqual(add.label, "Add item")
+    add.tap()
+    expectText("Icon presses: 1")
+    app.buttons["probe-close"].tap()
+    expectText("Icon presses: 2")
+    XCTAssertFalse(app.buttons["probe-disabled"].isEnabled)
+    attachHierarchy("Native controls probe after its callbacks")
+
+    // The covered catalog tab bar takes taps again once the probe has left.
+    app.buttons["Back"].tap()
+    XCTAssertTrue(waitUntilHittable(searchTab))
+    app.buttons["Controls"].tap()
+    XCTAssertTrue(openProbe.waitForNonExistence(timeout: 10))
+    searchTab.tap()
+    XCTAssertTrue(openProbe.waitForExistence(timeout: 10))
+  }
+
+  private func waitUntilHittable(_ element: XCUIElement, timeout: TimeInterval = 10) -> Bool {
+    let hittable = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "exists == true AND hittable == true"), object: element)
+    return XCTWaiter.wait(for: [hittable], timeout: timeout) == .completed
+  }
+
   private func openCatalogColorPicker() throws {
     let well = app.buttons["Preview color"]
     for _ in 0..<4 {

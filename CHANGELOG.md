@@ -6,9 +6,14 @@
   dependency.
 - On iOS 26 the tab bar, the segmented control, standalone icon buttons and the
   check for native support are package-owned: a `UITabBarController`, a
-  `UISegmentedControl` and the package's glass capsule. Their look, interaction
-  and API are unchanged. The segmented control is as wide as the space it is
-  given without the previous 32-point widening.
+  `UISegmentedControl` and the package's glass capsule. Their API is unchanged,
+  and so is their look except as noted below. The segmented control is as wide
+  as the space it is given without the previous 32-point widening.
+- A native icon-only `LiquidGlassButton(...)` without a long press now applies
+  its `iconColor`, `iconSize` and `menuIndicator`, as the fallback already did.
+- Like a text button, a native icon-only button without a long press now gets a
+  new native view when it is enabled or disabled, or when its emphasis or
+  colors change; 0.5.2 updated that view in place.
 - Apps that also depend on `native_liquid_glass` no longer share its platform
   views or its `liquid-glass-lifecycle` channel with this package, so neither
   hides the other's native views.

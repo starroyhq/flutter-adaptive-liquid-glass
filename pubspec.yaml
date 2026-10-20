@@ -14,7 +14,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  native_liquid_glass: 0.3.1
 
 dev_dependencies:
   flutter_localizations:

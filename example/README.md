@@ -7,11 +7,11 @@ demonstrates the **0.5.2** component catalog. Applications can use the hosted
 its local path so it tests the same source checkout. See the
 [upgrade notes](../README.md#upgrading-from-02x) when moving from 0.2.x.
 
-Development and the pinned CI jobs use Flutter 3.41.9 / Dart 3.11.5 with
-`native_liquid_glass` pinned to 0.3.1; CI also builds this example on the current
-stable channel with Swift Package Manager. Use the committed lockfiles with the
-pinned toolchain; no production dependency or global toolchain upgrade is
-introduced by the new fallbacks.
+Development and the pinned CI jobs use Flutter 3.41.9 / Dart 3.11.5; CI also
+builds this example on the current stable channel with Swift Package Manager.
+Use the committed lockfiles with the pinned toolchain. The package's only
+production dependency is the Flutter SDK, so the example installs no
+third-party pods or Swift packages besides Flutter's own `integration_test`.
 
 From the package root:
 
@@ -153,6 +153,24 @@ of color, inspect rapid shared-capsule retargeting, then test reduced motion and
 reduced transparency separately. Enter Chinese, Japanese and emoji into the
 composer and confirm it rises above the keyboard. Tabs hide while editing and
 return after keyboard dismissal.
+
+## Native controls probe
+
+```sh
+flutter run -d <device-id> --dart-define=GLASS_NATIVE_CONTROLS_PROBE=true
+```
+
+This starts `NativeControlsProbeApp`, a fixed page for comparing screenshots and
+for UI tests; the catalog's Search page opens the same page with **Open native
+controls probe**. It holds four standalone icon buttons without long-press
+actions: `probe-add` (an SF Symbol), `probe-close` (a Material glyph only),
+`probe-up` (prominent) and the disabled `probe-disabled`. Below them are an
+enabled segmented control, a disabled one and the native tab bar with a dot
+badge on Beta, Material glyphs for Gamma and a trailing **Find** button. Text
+counters show the icon presses, the selected segment and tab, and the Find
+presses. The title bar is a Flutter `AppBar` and nothing animates, so two
+renderings differ only in these native controls. This flag takes precedence over
+the other probe flags.
 
 ## Original mixed native/Flutter modal probe
 

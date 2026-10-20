@@ -84,11 +84,11 @@ Android and iOS 16+. Native system glass is available on iOS 26+; older iOS and
 Android use the Flutter fallback. Build native iOS glass with Xcode 26 or later.
 On iOS the plugin supports both Swift Package Manager and CocoaPods. Flutter uses
 Swift Package Manager when it is enabled, the default from Flutter 3.44, and
-CocoaPods otherwise; `native_liquid_glass` 0.3.1 ships a Swift package too.
-Development uses Flutter **3.41.9** / Dart **3.11.5**; CI checks that pinned
-version and the current stable channel. The production dependency
-`native_liquid_glass` remains pinned to **0.3.1**; this release adds no
-production dependency and does not require a global toolchain upgrade.
+CocoaPods otherwise. Development uses Flutter **3.41.9** / Dart **3.11.5**; CI
+checks that pinned version and the current stable channel. The package has no
+production dependency besides the Flutter SDK: every native control, including
+the tab bar, the segmented control and icon buttons, is a package-owned UIKit
+bridge. It does not require a global toolchain upgrade.
 
 ### Upgrading from 0.5.x
 
@@ -215,12 +215,15 @@ The fallback similarly has one surface, with tooltip/semantic labels and
 `ValueKey(action.id)` on each action. Do not wrap groups in another glass surface.
 
 Native text buttons use the same small UIKit bridge. `UIButton.Configuration`
-and native title measurement own their layout, replacing the upstream SwiftUI
+and native title measurement own their layout, replacing the earlier SwiftUI
 path that compressed Chinese titles even with an explicit platform-view width.
 The Flutter estimate prevents first-frame collapse; UIKit's intrinsic content
-width can enlarge it, never shrink it. Icon-only standalone controls without
-long-press actions continue to use the pinned provider. Both paths retain native
-materials and app appearance.
+width can enlarge it, never shrink it. Icon-only buttons use the same capsule
+bridge. One without a long-press action keeps its standalone look: a semibold
+symbol, or the Material glyph trimmed to the icon size, in colors that do not
+change when pressed or disabled. Its `id` is the native accessibility identifier
+and its `semanticLabel` the native label. Every path retains native materials
+and app appearance.
 
 ## Component catalog
 
@@ -274,8 +277,7 @@ Status indicators do not add another glass layer behind their content. On the
 native path, package-owned bridges use `UIActivityIndicatorView` and
 `UIProgressView`. Progress, animation and color updates retain the UIKit instance;
 configuration is reapplied after creation and native visibility participates in
-nested popup suppression. The pinned provider remains in use for existing
-components, rather than presenting these status controls.
+nested popup suppression.
 
 `LiquidGlassToolbar(groups: [...])` takes groups of `LiquidGlassAction`. Each
 group shares one capsule; distinct groups retain spacing and can scroll
@@ -721,15 +723,19 @@ surfaces, shared button capsules and system tabs retain their existing implement
 Keep glass on toolbars/floating controls; use solid reading surfaces for code,
 messages and forms. Text fields remain Flutter widgets inside a surface.
 
-## Native dependency and overlays
+## Native rendering and overlays
 
-`native_liquid_glass` is pinned to **0.3.1** (Flutter >=3.41.2, Dart >=3.11).
-Its types do not appear in this package's public API. It supplies the system tab bar,
-segmented control, icon buttons and platform detection; the native material behind
-`LiquidGlassSurface` is a package-owned UIKit view, because the provider's SwiftUI
-container does not keep its shape in step with the safe area while a sheet slides in.
-Only ordinary tab destinations are exposed; the provider's
-detached action-tab path, including dynamic prominent-tab lookup, is not used.
+Every native control is a package-owned UIKit bridge; no third-party native
+package is involved. The tab bar is a system `UITabBarController` built with
+`UITab`, with text and dot badges; a `trailingAction` is a `UISearchTab`, which
+UIKit draws as the separate round button and which is the prominent tab on
+iOS 27. The segmented control is a `UISegmentedControl` exactly as wide as the
+control. Icon buttons use the same glass capsule as text buttons. The native
+material behind `LiquidGlassSurface` is a UIKit view too, because a SwiftUI glass
+container does not keep its shape in step with the safe area while a sheet slides
+in. `liquidGlassNativeAvailable` is synchronous and valid on the first frame: it
+is true when the target platform is iOS and the iOS major version is 26 or later.
+It does not read `UIDesignRequiresCompatibility`.
 
 Install a separate `LiquidGlassNavigatorObserver` on every Navigator that presents
 popup routes. Dispose it when discarding a Navigator. Covered routes retain their
@@ -740,8 +746,9 @@ in composition and clip the Flutter content of a mixed native/Flutter popup.
 The observer tracks nested coverage across navigator boundaries and balances
 removal, replacement and disposal. Flutter children of `LiquidGlassSurface` remain
 painted while only its native material is excluded. No plugin cache edits or
-whole-page fallback are required. The provider's UIKit suppression and the owned
-capsule's reference-counted listener remain in use as an additional occlusion guard.
+whole-page fallback are required. As an additional occlusion guard, the observer
+also tells the plugin when the first popup appears and the last one leaves, over
+the package's own lifecycle channel, and native views beneath it hide in UIKit.
 Custom `OverlayEntry` presentations are not Navigator routes: stop painting the
 underlying native controls while such an overlay is active. Changing themes does
 not remove the native tab platform view. Verify system materials on iOS hardware.
@@ -785,8 +792,8 @@ and hardware rendering/performance remain outside simulator validation. See the
 
 ## License
 
-Released under the [MIT License](LICENSE). Upstream dependency attribution is
-preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Released under the [MIT License](LICENSE). Attribution for adapted code is in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Continuous integration
 

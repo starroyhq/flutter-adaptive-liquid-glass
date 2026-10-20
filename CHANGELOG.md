@@ -1,3 +1,21 @@
+## Unreleased
+
+- The package no longer depends on `native_liquid_glass`, and so no longer
+  brings its pods and packages (SVGKit, CocoaLumberjack, `flutter_svg`,
+  `path_parsing` and others) into apps. The Flutter SDK is its only production
+  dependency.
+- On iOS 26 the tab bar, the segmented control, standalone icon buttons and the
+  check for native support are package-owned: a `UITabBarController`, a
+  `UISegmentedControl` and the package's glass capsule. Their look, interaction
+  and API are unchanged. The segmented control is as wide as the space it is
+  given without the previous 32-point widening.
+- Apps that also depend on `native_liquid_glass` no longer share its platform
+  views or its `liquid-glass-lifecycle` channel with this package, so neither
+  hides the other's native views.
+- A native icon-only button without a long press now uses its `id` as the
+  native accessibility identifier (`button` by default) and its `semanticLabel`
+  as the native accessibility label.
+
 ## 0.5.2
 
 - On iOS 26 an SF Symbol in a native button is now about as large as the

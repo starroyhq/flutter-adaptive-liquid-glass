@@ -44,6 +44,13 @@ void main() {
         barrierColor: color,
         actions: const [LiquidGlassAlertAction(value: null, label: 'OK')],
       );
+  Future<void> popover(BuildContext context, {Color? color}) =>
+      showLiquidGlassPopover<void>(
+        context: context,
+        anchorContext: context,
+        barrierColor: color,
+        builder: (_) => const Text('Content'),
+      );
 
   testWidgets('a dark theme dims more deeply than a light one', (tester) async {
     for (final open in [sheet, alert]) {
@@ -62,6 +69,22 @@ void main() {
     );
     expect(
       await barrier(tester, Brightness.dark, (c) => alert(c, color: custom)),
+      custom,
+    );
+  });
+
+  testWidgets('a popover dims lightly unless barrierColor is given', (
+    tester,
+  ) async {
+    for (final brightness in Brightness.values) {
+      expect(
+        await barrier(tester, brightness, (c) => popover(c)),
+        Colors.black.withValues(alpha: .08),
+      );
+    }
+    const custom = Color(0x38000000);
+    expect(
+      await barrier(tester, Brightness.dark, (c) => popover(c, color: custom)),
       custom,
     );
   });

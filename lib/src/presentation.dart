@@ -163,6 +163,8 @@ Future<T?> showLiquidGlassSheet<T>({
 /// By default the popover is exactly [width] wide. With [fitContent] it takes
 /// the content's intrinsic width, between 160 and [width]; the content must
 /// then support intrinsic sizing (no lazy lists or unbounded flex).
+///
+/// [barrierColor] replaces the default scrim, 8% black in both themes.
 Future<T?> showLiquidGlassPopover<T>({
   required BuildContext context,
   required BuildContext anchorContext,
@@ -175,6 +177,7 @@ Future<T?> showLiquidGlassPopover<T>({
   bool fitContent = false,
   RouteSettings? routeSettings,
   String? semanticLabel,
+  Color? barrierColor,
 }) {
   if (!width.isFinite ||
       width <= 0 ||
@@ -190,7 +193,7 @@ Future<T?> showLiquidGlassPopover<T>({
     useRootNavigator: useRootNavigator,
     barrierDismissible: barrierDismissible,
     settings: routeSettings,
-    barrierColor: Colors.black.withValues(alpha: .08),
+    barrierColor: barrierColor ?? Colors.black.withValues(alpha: .08),
     // The popover scales itself from its anchor edge; the route only fades.
     scale: false,
     builder: (context) => _Popover(

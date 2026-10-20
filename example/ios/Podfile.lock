@@ -37,7 +37,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   CocoaLumberjack: e4ba3b414dfca8c1916c6303d37f63b3a95134c6
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  flutter_adaptive_liquid_glass: 4192af448abb193c095b6ca6553ca8e9b82e6804
+  flutter_adaptive_liquid_glass: 65a4c3b1bae37cef4346f9657e4569ea699c83d7
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
   native_liquid_glass: c77cd74256902cf8afcc6bf6baf0ebdc11bb4fad
   SVGKit: 1ad7513f8c74d9652f94ed64ddecda1a23864dea

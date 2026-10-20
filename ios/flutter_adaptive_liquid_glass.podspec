@@ -7,9 +7,14 @@ Pod::Spec.new do |s|
   s.license = { :type => 'MIT', :file => '../LICENSE' }
   s.author = { 'starroyhq' => 'https://github.com/starroyhq' }
   s.source = { :path => '.' }
-  s.source_files = 'Classes/**/*'
+  # Sources are shared with the Swift package in flutter_adaptive_liquid_glass/.
+  s.source_files = 'flutter_adaptive_liquid_glass/Sources/flutter_adaptive_liquid_glass/**/*.swift'
+  s.resource_bundles = {
+    'flutter_adaptive_liquid_glass_privacy' => ['flutter_adaptive_liquid_glass/Sources/flutter_adaptive_liquid_glass/PrivacyInfo.xcprivacy']
+  }
   s.dependency 'Flutter'
+  # Keep in step with `platforms` in flutter_adaptive_liquid_glass/Package.swift.
   s.platform = :ios, '16.0'
-  s.swift_version = '5.0'
+  s.swift_version = '5.9'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
 end

@@ -1,9 +1,23 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart';
 import 'package:flutter_adaptive_liquid_glass/src/native_capsule.dart';
 import 'package:flutter_adaptive_liquid_glass/src/native_visibility.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+// Exercise the native branch on a Dart host without pretending that its real
+// operating system has native Liquid Glass support.
+class _NativeTheme extends LiquidGlassThemeData {
+  const _NativeTheme();
+
+  @override
+  LiquidGlassMode resolve({
+    required bool nativeAvailable,
+    bool highContrast = false,
+    bool disableAnimations = false,
+  }) => LiquidGlassMode.native;
+}
 
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
@@ -193,6 +207,77 @@ void main() {
     await event('longPressed', 'one', sequence: 2);
     expect(holds, 1);
   });
+
+  Widget iconButton({
+    IconData icon = Icons.add,
+    String? symbol,
+    bool hold = false,
+  }) => MaterialApp(
+    home: LiquidGlassTheme(
+      data: const _NativeTheme(),
+      child: Scaffold(
+        body: Center(
+          child: LiquidGlassButton.icon(
+            icon: icon,
+            sfSymbol: symbol,
+            semanticLabel: 'Add',
+            onPressed: () {},
+            onLongPress: hold ? () {} : null,
+          ),
+        ),
+      ),
+    ),
+  );
+
+  testWidgets(
+    'only an icon-only button without a long press is standalone',
+    (tester) async {
+      await tester.pumpWidget(iconButton(symbol: 'plus'));
+      await tester.pumpAndSettle();
+      expect(params[id]!['standaloneIcon'], isTrue);
+      final item = (params[id]!['items'] as List).single as Map;
+      expect(item['id'], 'button');
+      expect(item['label'], 'Add');
+      expect(item['symbol'], 'plus');
+      expect(item['title'], isNull);
+      await tester.pumpWidget(iconButton(symbol: 'plus', hold: true));
+      await tester.pumpAndSettle();
+      expect(params[id]!['standaloneIcon'], isFalse);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
+  testWidgets(
+    'a standalone bitmap icon is created once its glyph is drawn',
+    (tester) async {
+      await tester.pumpWidget(iconButton(icon: Icons.close));
+      expect(find.byType(UiKitView), findsNothing);
+      expect(
+        tester.getSize(find.byType(LiquidGlassButton)),
+        const Size(48, 48),
+      );
+      for (
+        var i = 0;
+        i < 50 && find.byType(UiKitView).evaluate().isEmpty;
+        ++i
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+      expect(find.byType(UiKitView), findsOneWidget);
+      expect(params[id]!['standaloneIcon'], isTrue);
+      final png = ((params[id]!['items'] as List).single as Map)['png'];
+      // The padded 64-point glyph square, at the test view's pixel ratio of 3.
+      expect(ByteData.sublistView(png as Uint8List).getUint32(16), 192);
+      expect(
+        tester.getSize(find.byType(LiquidGlassButton)),
+        const Size(48, 48),
+      );
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
 
   testWidgets('backgrounding cancels native action epoch before resuming', (
     tester,

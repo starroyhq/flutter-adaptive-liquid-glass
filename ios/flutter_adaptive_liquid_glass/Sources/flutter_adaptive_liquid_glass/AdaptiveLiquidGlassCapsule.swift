@@ -1,32 +1,7 @@
+// The standalone icon's bitmap trimming is adapted from native_liquid_glass
+// 0.3.1 (MIT); see THIRD_PARTY_NOTICES.md.
 import Flutter
 import UIKit
-
-/// Track the provider's aggregate notifications from plugin registration onward,
-/// so a platform view created beneath an existing popup starts hidden as well.
-final class AdaptiveLiquidGlassSuppression {
-  private(set) var active = false
-  private var observers: [NSObjectProtocol] = []
-  private var listeners: [UUID: () -> Void] = [:]
-
-  init() {
-    for (name, value) in [("LiquidGlassSuppressAll", true), ("LiquidGlassUnsuppressAll", false)] {
-      observers.append(NotificationCenter.default.addObserver(
-        forName: Notification.Name(name), object: nil, queue: .main
-      ) { [weak self] _ in
-        guard let self else { return }
-        self.active = value
-        for update in self.listeners.values { update() }
-      })
-    }
-  }
-  func observe(_ update: @escaping () -> Void) -> UUID {
-    let token = UUID()
-    listeners[token] = update
-    return token
-  }
-  func remove(_ token: UUID) { listeners.removeValue(forKey: token) }
-  deinit { for observer in observers { NotificationCenter.default.removeObserver(observer) } }
-}
 
 final class AdaptiveLiquidGlassCapsuleFactory: NSObject, FlutterPlatformViewFactory {
   private let messenger: FlutterBinaryMessenger
@@ -47,6 +22,12 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   private let channel: FlutterMethodChannel
   private var buttons: [AdaptiveGlassCapsuleButton] = []
   private let grouped: Bool
+  /// A lone icon-only button without a long press. It keeps the look of the
+  /// SwiftUI glass button that drew it before: a semibold symbol or a trimmed
+  /// bitmap, constant colors in every state, the window's appearance, and a
+  /// fade instead of hiding.
+  private let standalone: Bool
+  private var fade: AdaptiveLiquidGlassFade?
   private let suppression: AdaptiveLiquidGlassSuppression
   private let popupOwner: Bool
   private var routeSuppressed: Bool
@@ -59,6 +40,7 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
 
   init(frame: CGRect, identifier: Int64, arguments: [String: Any], messenger: FlutterBinaryMessenger, suppression: AdaptiveLiquidGlassSuppression) {
     grouped = arguments["grouped"] as? Bool ?? false
+    standalone = arguments["standaloneIcon"] as? Bool ?? false
     self.suppression = suppression
     popupOwner = arguments["popupOwner"] as? Bool ?? false
     routeSuppressed = arguments["suppressed"] as? Bool ?? false
@@ -79,7 +61,12 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     container.layer.cornerRadius = 24
     container.layer.cornerCurve = .continuous
     container.clipsToBounds = true
-    container.overrideUserInterfaceStyle = arguments["dark"] as? Bool == true ? .dark : .light
+    if standalone {
+      fade = AdaptiveLiquidGlassFade(view: container, suppression: suppression,
+                                     routeSuppressed: routeSuppressed, popupOwner: popupOwner)
+    } else {
+      container.overrideUserInterfaceStyle = arguments["dark"] as? Bool == true ? .dark : .light
+    }
     container.onWindowChanged = { [weak self] in self?.updateVisibility() }
     for (name, active) in [(UIApplication.willResignActiveNotification, false),
                            (UIApplication.didBecomeActiveNotification, true)] {
@@ -139,15 +126,32 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
         // A symbol's point size is a font size, so a 22-point symbol is far
         // larger than a 22-point Material icon. Beside a title the symbol takes
         // the title's font, as UIKit's own buttons do; alone, or at a requested
-        // size, it takes the font size whose glyph matches that icon size.
-        let symbolConfiguration = requestedIconSize == nil && title != nil
+        // size, it takes the font size whose glyph matches that icon size. A
+        // standalone icon keeps the semibold weight it was drawn with before.
+        let symbolConfiguration = standalone
+          ? UIImage.SymbolConfiguration(
+              pointSize: iconSize * Self.symbolScale, weight: .semibold, scale: .medium)
+          : requestedIconSize == nil && title != nil
           ? UIImage.SymbolConfiguration(
               font: UIFont.systemFont(ofSize: fontSize, weight: .semibold), scale: .medium)
           : UIImage.SymbolConfiguration(
               pointSize: iconSize * Self.symbolScale, weight: .regular, scale: .medium)
-        let image = UIImage(systemName: symbol, withConfiguration: symbolConfiguration)
+        var image = UIImage(systemName: symbol, withConfiguration: symbolConfiguration)
         config.preferredSymbolConfigurationForImage = symbolConfiguration
+        if standalone, let symbolImage = image {
+          // UIKit centres a symbol's typographic box, which leaves the ink of
+          // a glyph such as a trash can off centre; the SwiftUI button this
+          // replaces centred the ink.
+          image = Self.centringInk(of: symbolImage, in: 48).withRenderingMode(.alwaysTemplate)
+        }
         config.image = iconColor.flatMap { image?.withTintColor($0, renderingMode: .alwaysOriginal) } ?? image
+      } else if standalone, let png = item["png"] as? FlutterStandardTypedData,
+                let image = UIImage(data: png.data) {
+        // The glyph arrives centred in a padded square: trim the padding and
+        // fit the glyph into an icon-sized square.
+        let drawn = Self.fit(Self.trimmingTransparentEdges(of: image), in: iconSize)
+        config.image = iconColor.map { drawn.withTintColor($0, renderingMode: .alwaysOriginal) }
+          ?? drawn.withRenderingMode(.alwaysTemplate)
       } else if let png = item["png"] as? FlutterStandardTypedData,
                 let image = UIImage(data: png.data) {
         let ratio = min(iconSize / image.size.width, iconSize / image.size.height)
@@ -162,7 +166,16 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
         // The platform's own pop-up affordance for a button that opens a menu.
         config.indicator = .popup
       }
+      if standalone {
+        config.imageColorTransformer = UIConfigurationColorTransformer { _ in foreground }
+      }
       let button = AdaptiveGlassCapsuleButton(configuration: config)
+      if standalone {
+        // Highlighted and disabled states keep the configuration as it is,
+        // as the SwiftUI button style that returned its label unchanged did.
+        let fixed = config
+        button.configurationUpdateHandler = { button in button.configuration = fixed }
+      }
       button.actionId = id
       button.tapEnabled = item["tapEnabled"] as? Bool ?? (item["enabled"] as? Bool ?? false)
       button.longPressEnabled = item["longPressEnabled"] as? Bool ?? false
@@ -244,8 +257,14 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     _ = activate(button, longPress: true)
   }
 
+  /// Hidden by its own route, or by a popup it does not belong to. Controls
+  /// inside the popup must not be hidden by their own popup. A nested popup
+  /// makes that owner's route non-current, and route suppression wins.
+  private var suppressed: Bool { routeSuppressed || (suppression.active && !popupOwner) }
+
   private func activate(_ button: AdaptiveGlassCapsuleButton, longPress: Bool) -> Bool {
-    guard !container.isHidden, container.window != nil,
+    // A standalone icon fades rather than hides, so its state is checked.
+    guard standalone ? !suppressed : !container.isHidden, container.window != nil,
           interactionEnabled, applicationActive, button.isEnabled,
           longPress ? button.longPressEnabled : button.tapEnabled else { return false }
     sequence += 1
@@ -264,12 +283,14 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   }
 
   private func updateVisibility() {
-    // Controls inside the popup must not be hidden by their own popup. A nested
-    // popup makes that owner's route non-current, and route suppression wins.
-    let hidden = routeSuppressed || (suppression.active && !popupOwner)
+    let hidden = suppressed
     let canInteract = !hidden && interactionEnabled && applicationActive && container.window != nil
     if !canInteract { cancelInteractions() }
-    container.isHidden = hidden
+    if let fade {
+      fade.setRoute(suppressed: routeSuppressed, popupOwner: popupOwner)
+    } else {
+      container.isHidden = hidden
+    }
     container.accessibilityElementsHidden = hidden
     for button in buttons {
       button.isEnabled = canInteract && (button.tapEnabled || button.longPressEnabled)
@@ -288,6 +309,87 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   /// The point size of an SF Symbol whose glyph is about as large as a
   /// Material icon of one point.
   static let symbolScale: CGFloat = 0.75
+
+  /// Draws [image] aspect-fit and centred in a square of [side] points.
+  private static func fit(_ image: UIImage, in side: CGFloat) -> UIImage {
+    guard image.size.width > 0, image.size.height > 0 else { return image }
+    let scale = min(side / image.size.width, side / image.size.height)
+    let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+    let renderer = UIGraphicsImageRenderer(
+      size: CGSize(width: side, height: side), format: UIGraphicsImageRendererFormat.preferred())
+    return renderer.image { context in
+      context.cgContext.interpolationQuality = .high
+      image.draw(in: CGRect(x: (side - size.width) / 2, y: (side - size.height) / 2,
+                            width: size.width, height: size.height))
+    }
+  }
+
+  /// Draws a symbol into a square of [side] points with its ink centred, on
+  /// whole device pixels and rounding half a pixel right and down.
+  private static func centringInk(of symbol: UIImage, in side: CGFloat) -> UIImage {
+    let format = UIGraphicsImageRendererFormat.preferred()
+    // An 8-bit bitmap, so that its alpha can be read; only alpha is used.
+    format.preferredRange = .standard
+    let scale = format.scale
+    let renderer = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format)
+    let origin = CGPoint(x: ((side - symbol.size.width) / 2 * scale).rounded(.down) / scale,
+                         y: ((side - symbol.size.height) / 2 * scale).rounded(.down) / scale)
+    let drawn = renderer.image { _ in symbol.draw(at: origin) }
+    // Ink is where the glyph covers at least half a pixel.
+    guard let cgImage = drawn.cgImage, let ink = opaqueBounds(of: cgImage, threshold: 128) else {
+      return symbol
+    }
+    let pixels = side * scale
+    let dx = ((pixels - ink.width) / 2).rounded(.up) - ink.minX
+    let dy = ((pixels - ink.height) / 2).rounded(.up) - ink.minY
+    let centred = renderer.image { _ in
+      symbol.draw(at: CGPoint(x: origin.x + dx / scale, y: origin.y + dy / scale))
+    }
+    return symbol.flipsForRightToLeftLayoutDirection
+      ? centred.imageFlippedForRightToLeftLayoutDirection() : centred
+  }
+
+  /// The pixel rectangle of a bitmap whose alpha is at least [threshold].
+  private static func opaqueBounds(of cgImage: CGImage, threshold: UInt8) -> CGRect? {
+    guard cgImage.width > 0, cgImage.height > 0, cgImage.bitsPerComponent == 8,
+          let alphaIndex = alphaByteIndex(cgImage),
+          cgImage.bitsPerPixel / 8 >= 4,
+          let data = cgImage.dataProvider?.data,
+          let bytes = CFDataGetBytePtr(data) else { return nil }
+    let width = cgImage.width, height = cgImage.height
+    let bytesPerPixel = cgImage.bitsPerPixel / 8, bytesPerRow = cgImage.bytesPerRow
+    var minX = width, minY = height, maxX = -1, maxY = -1
+    for y in 0..<height {
+      for x in 0..<width where bytes[y * bytesPerRow + x * bytesPerPixel + alphaIndex] >= threshold {
+        minX = min(minX, x)
+        maxX = max(maxX, x)
+        minY = min(minY, y)
+        maxY = max(maxY, y)
+      }
+    }
+    guard maxX >= minX, maxY >= minY else { return nil }
+    return CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
+  }
+
+  /// Crops fully transparent rows and columns from every edge of a bitmap.
+  private static func trimmingTransparentEdges(of image: UIImage) -> UIImage {
+    guard let cgImage = image.cgImage,
+          let bounds = opaqueBounds(of: cgImage, threshold: 1) else { return image }
+    if bounds.width == CGFloat(cgImage.width), bounds.height == CGFloat(cgImage.height) { return image }
+    guard let cropped = cgImage.cropping(to: bounds) else { return image }
+    return UIImage(cgImage: cropped, scale: image.scale, orientation: image.imageOrientation)
+  }
+
+  /// The byte holding alpha within a pixel; a little-endian 32-bit bitmap,
+  /// as UIKit renderers create, stores its components in reverse.
+  private static func alphaByteIndex(_ image: CGImage) -> Int? {
+    let reversed = image.byteOrderInfo == .order32Little
+    switch image.alphaInfo {
+    case .premultipliedFirst, .first, .noneSkipFirst: return reversed ? 3 : 0
+    case .premultipliedLast, .last, .noneSkipLast: return reversed ? 0 : 3
+    default: return nil
+    }
+  }
 
   private static func color(_ value: Any?) -> UIColor? {
     guard let number = value as? NSNumber else { return nil }

@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 
 /// The native glass material behind a `LiquidGlassSurface` on iOS 26+.
 ///
-/// This is a package-owned UIKit view rather than the provider's SwiftUI
+/// This is a package-owned UIKit view rather than a SwiftUI glass
 /// container. A SwiftUI-hosted glass shape lays itself out inside the window's
 /// safe area and does not refresh the insets it read when its platform view
 /// first laid out. A sheet is created below the screen and slides up, so the
@@ -51,7 +51,7 @@ class _NativeSurfaceState extends State<NativeSurface> {
     'backgroundColor': surface.backgroundColor?.toARGB32(),
   };
 
-  /// Whether the surface lives in a popup, which the provider's global
+  /// Whether the surface lives in a popup, which the package's global
   /// suppression of covered glass must not hide.
   bool _inPopup(BuildContext context) {
     Route<dynamic>? route = ModalRoute.of(context);

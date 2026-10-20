@@ -33,6 +33,32 @@ class NativeRouteCoverage extends ChangeNotifier {
   }
 }
 
+/// The routes around [context], innermost first, through enclosing navigators.
+List<Route<dynamic>> nativeRouteChain(BuildContext context) {
+  Route<dynamic>? route = ModalRoute.of(context);
+  final routes = <Route<dynamic>>{};
+  while (route != null && routes.add(route)) {
+    final navigator = route.navigator;
+    route = navigator == null ? null : ModalRoute.of(navigator.context);
+  }
+  return routes.toList();
+}
+
+/// Whether a native view at [context] must hide: an active route around it is
+/// not current, or a popup still covers it. [popupOwner] marks a view inside a
+/// popup, which the global suppression for that popup must not hide.
+({bool suppressed, bool popupOwner}) nativeRouteState(BuildContext context) {
+  final routes = nativeRouteChain(context);
+  return (
+    suppressed: routes.any(
+      (route) =>
+          (route.isActive && !route.isCurrent) ||
+          nativeRouteCoverage.covers(route),
+    ),
+    popupOwner: routes.any((route) => route is PopupRoute),
+  );
+}
+
 /// Keeps a covered native subtree laid out and alive, but excludes it from
 /// painting, hit testing and accessibility until its overlay has fully exited.
 class NativeVisibility extends StatelessWidget {

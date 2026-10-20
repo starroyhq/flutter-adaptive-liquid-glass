@@ -709,7 +709,7 @@ void main() {
   testWidgets('native route coverage remains until actual popup exit', (
     tester,
   ) async {
-    const channel = MethodChannel('liquid-glass-lifecycle');
+    const channel = MethodChannel('flutter_adaptive_liquid_glass/lifecycle');
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       channel,
       (_) async => null,

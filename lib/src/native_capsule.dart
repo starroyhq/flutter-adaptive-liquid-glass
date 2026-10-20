@@ -7,11 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'native_button_layout.dart';
+import 'native_icon_raster.dart';
 import 'theme.dart';
 import 'native_visibility.dart';
 import 'feedback.dart';
 
-/// Also used by upstream adapters before invoking a package-owned action.
+/// Whether a native capsule event may still invoke its action.
 bool nativeCapsuleActionAllowed(BuildContext context) =>
     LiquidGlassFeedback.canInteract(context);
 
@@ -49,9 +50,16 @@ class NativeCapsule extends StatefulWidget {
     required this.items,
     this.grouped = false,
     this.prominent = false,
-  });
+    this.standaloneIcon = false,
+  }) : assert(!standaloneIcon || (!grouped && items.length == 1));
   final List<NativeCapsuleItem> items;
   final bool grouped, prominent;
+
+  /// A single icon-only button without a long press, drawn as the standalone
+  /// glass icon button: a semibold symbol, or a glyph bitmap trimmed to the
+  /// icon size, in colors that do not change when pressed or disabled. A
+  /// bitmap icon reserves its space until the bitmap is drawn.
+  final bool standaloneIcon;
   @override
   State<NativeCapsule> createState() => _NativeCapsuleState();
 }
@@ -64,6 +72,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
   int _viewGeneration = 0;
   int _lastEvent = 0;
   final _icons = <int, Uint8List>{};
+  bool _iconsReady = false;
   int _generation = 0;
   double? _measuredWidth;
   int? _measurementSignature;
@@ -138,11 +147,19 @@ class _NativeCapsuleState extends State<NativeCapsule>
   Future<void> _prepareIcons() async {
     final epoch = ++_generation;
     _icons.clear();
+    _iconsReady = false;
     for (var index = 0; index < widget.items.length; ++index) {
       final item = widget.items[index], icon = widget.items[index].icon;
       if (item.sfSymbol != null || icon == null) continue;
-      // Rasterize at the glyph's actual bounds, avoiding upstream's 64-point
-      // padded bitmap which makes an IconData appear too small inside UIKit.
+      if (widget.standaloneIcon) {
+        // The standalone button trims the padded glyph square natively.
+        final png = await nativeIconPng(icon);
+        if (!mounted || epoch != _generation) return;
+        if (png != null) _icons[index] = png;
+        continue;
+      }
+      // Rasterize at the glyph's actual bounds, avoiding a 64-point padded
+      // bitmap which makes an IconData appear too small inside UIKit.
       final painter = TextPainter(
         textDirection: TextDirection.ltr,
         text: TextSpan(
@@ -169,7 +186,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
       if (!mounted || epoch != _generation) return;
       if (bytes != null) _icons[index] = bytes.buffer.asUint8List();
     }
-    if (mounted && epoch == _generation) setState(() {});
+    if (mounted && epoch == _generation) setState(() => _iconsReady = true);
   }
 
   Future<void> _created(int id, int signature, int generation) async {
@@ -254,6 +271,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
     final params = <String, Object?>{
       'dark': theme.brightness == Brightness.dark,
       'grouped': widget.grouped,
+      'standaloneIcon': widget.standaloneIcon,
       'foreground':
           (widget.prominent
                   ? glassColors.onAccent ?? colors.onPrimary
@@ -293,6 +311,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
       fontSize,
       widget.grouped,
       widget.prominent,
+      widget.standaloneIcon,
       params['foreground'],
       params['tint'],
       Object.hashAll(
@@ -339,6 +358,13 @@ class _NativeCapsuleState extends State<NativeCapsule>
     final width = _measuredWidth != null && _measuredWidth! > estimate
         ? _measuredWidth!
         : estimate;
+    if (widget.standaloneIcon && !_iconsReady) {
+      final item = widget.items.single;
+      // Reserve the button's space until its bitmap is drawn.
+      if (item.sfSymbol == null && item.icon != null) {
+        return SizedBox(width: width, height: 48);
+      }
+    }
     return SizedBox(
       width: width,
       height: 48,

@@ -2,10 +2,33 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:native_liquid_glass/native_liquid_glass.dart' as native;
 
 import 'theme.dart';
 import 'native_visibility.dart';
+
+/// Hides the package's native views beneath popups, counting nested popups
+/// so that only the first and the last reach the platform.
+///
+/// Adapted from native_liquid_glass 0.3.1 (MIT); see THIRD_PARTY_NOTICES.md.
+abstract final class _NativeGlassLifecycle {
+  static const _channel = MethodChannel(
+    'flutter_adaptive_liquid_glass/lifecycle',
+  );
+  static int _count = 0;
+
+  static Future<void> suppress() async {
+    _count++;
+    if (_count == 1) await _channel.invokeMethod<void>('suppressGlassEffects');
+  }
+
+  static Future<void> unsuppress() async {
+    _count--;
+    if (_count <= 0) {
+      _count = 0;
+      await _channel.invokeMethod<void>('unsuppressGlassEffects');
+    }
+  }
+}
 
 /// Add a distinct instance to each Navigator that presents dialogs or sheets.
 ///
@@ -56,9 +79,9 @@ class LiquidGlassNavigatorObserver extends NavigatorObserver {
     final pending = (_pending ?? Future<void>.value()).then((_) async {
       try {
         if (add) {
-          await native.NativeLiquidGlassLifecycle.suppressGlassEffects();
+          await _NativeGlassLifecycle.suppress();
         } else {
-          await native.NativeLiquidGlassLifecycle.unsuppressGlassEffects();
+          await _NativeGlassLifecycle.unsuppress();
         }
       } on MissingPluginException {
         // Rendering still works through Flutter when an embedder omits iOS plugins.

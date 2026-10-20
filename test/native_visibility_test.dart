@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
-  const channel = MethodChannel('liquid-glass-lifecycle');
+  const channel = MethodChannel('flutter_adaptive_liquid_glass/lifecycle');
 
   setUp(() {
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (_) async {

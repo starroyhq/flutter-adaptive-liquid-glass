@@ -34,15 +34,18 @@ void main() {
         selectedIcon: Icons.computer,
         sfSymbol: 'desktopcomputer',
       );
-      expect(item.icon.sfSymbolName, 'desktopcomputer');
-      expect(item.selectedIcon?.sfSymbolName, 'desktopcomputer');
-      expect(item.selectedIcon?.iconDataValue, isNull);
+      // The symbol draws both states; no bitmap is sent beside it.
+      expect(item.symbol, 'desktopcomputer');
+      expect(item.icon, isNull);
+      expect(item.selectedIcon, isNull);
       final fallback = nativeTabItem(
         label: 'Computer',
         icon: Icons.computer_outlined,
         selectedIcon: Icons.computer,
       );
-      expect(fallback.selectedIcon?.iconDataValue, Icons.computer);
+      expect(fallback.symbol, isNull);
+      expect(fallback.icon, Icons.computer_outlined);
+      expect(fallback.selectedIcon, Icons.computer);
     },
   );
   group('rendering policy', () {

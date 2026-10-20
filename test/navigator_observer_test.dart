@@ -6,7 +6,7 @@ import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart
 import 'package:flutter_adaptive_liquid_glass/src/native_visibility.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _lifecycle = MethodChannel('liquid-glass-lifecycle');
+const _lifecycle = MethodChannel('flutter_adaptive_liquid_glass/lifecycle');
 
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();

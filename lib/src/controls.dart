@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:native_liquid_glass/native_liquid_glass.dart' as native;
 
 import 'surface.dart';
 import 'fallback_pressable.dart';
@@ -7,8 +6,8 @@ import 'fallback_selection_track.dart';
 import 'feedback.dart';
 import 'theme.dart';
 import 'native_visibility.dart';
-import 'native_button_layout.dart';
 import 'native_capsule.dart';
+import 'native_segmented_control.dart';
 
 class LiquidGlassButton extends StatelessWidget {
   /// An icon-only button with a required accessibility label.
@@ -105,61 +104,31 @@ class LiquidGlassButton extends StatelessWidget {
         ? glassColors.onAccent ?? colors.onPrimary
         : glassColors.foreground ?? colors.onSurface;
     final accent = glassColors.accent ?? colors.primary;
-    final nativeIcon = sfSymbol != null
-        ? native.NativeLiquidGlassIcon.sfSymbol(sfSymbol!)
-        : icon != null
-        ? native.NativeLiquidGlassIcon.iconData(icon!)
-        : null;
     final useNative =
         LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native &&
         !loading &&
         MediaQuery.textScalerOf(context).scale(14) <= 20;
     if (useNative) {
-      if (label != null || longCallback != null) {
-        return NativeCapsule(
-          prominent: emphasized,
-          items: [
-            NativeCapsuleItem(
-              id: id ?? 'button',
-              label: _accessibleLabel ?? label!,
-              title: label,
-              detail: detail,
-              icon: icon,
-              sfSymbol: sfSymbol,
-              iconColor: iconColor,
-              iconSize: iconSize,
-              menuIndicator: menuIndicator,
-              onPressed: callback,
-              onLongPress: longCallback,
-              longPressSemanticLabel: longPressSemanticLabel,
-            ),
-          ],
-        );
-      }
-      final button = native.LiquidGlassButton.icon(
-        icon: nativeIcon!,
-        onPressed: callback == null
-            ? null
-            : () {
-                if (!nativeCapsuleActionAllowed(context)) return;
-                LiquidGlassFeedback.tap(context);
-                callback();
-              },
-        tooltip: semanticLabel,
-        size: NativeButtonLayout.height,
-        // Upstream sizes a symbol as a font and a bitmap as a box.
-        iconSize: sfSymbol != null
-            ? NativeButtonLayout.iconSize * NativeButtonLayout.symbolScale
-            : NativeButtonLayout.iconSize,
-        padding: const EdgeInsets.all(12),
-        iconColor: textColor,
-        tint: emphasized ? accent : glassColors.surfaceTint,
-        style: emphasized
-            ? native.LiquidGlassButtonStyle.prominentGlass
-            : native.LiquidGlassButtonStyle.glass,
-      );
-      return NativeVisibility(
-        child: Semantics(label: semanticLabel, child: button),
+      // An icon-only button without a long press keeps its standalone look.
+      return NativeCapsule(
+        standaloneIcon: label == null && longCallback == null,
+        prominent: emphasized,
+        items: [
+          NativeCapsuleItem(
+            id: id ?? 'button',
+            label: _accessibleLabel ?? label!,
+            title: label,
+            detail: detail,
+            icon: icon,
+            sfSymbol: sfSymbol,
+            iconColor: iconColor,
+            iconSize: iconSize,
+            menuIndicator: menuIndicator,
+            onPressed: callback,
+            onLongPress: longCallback,
+            longPressSemanticLabel: longPressSemanticLabel,
+          ),
+        ],
       );
     }
     final content = Row(
@@ -275,37 +244,20 @@ class LiquidGlassSegmentedControl<T> extends StatelessWidget {
     final glassColors = LiquidGlassTheme.of(context).colors;
     if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native &&
         MediaQuery.textScalerOf(context).scale(14) <= 20) {
-      final control = NativeVisibility(
-        child: native.LiquidGlassSegmentedControl(
+      return NativeVisibility(
+        child: NativeSegmentedControl(
           labels: [for (final segment in segments) segment.label],
           selectedIndex: segments.indexWhere(
             (segment) => segment.value == selected,
           ),
           enabled: onChanged != null,
           color: glassColors.accent ?? Theme.of(context).colorScheme.primary,
-          height: 48,
           onValueChanged: (index) {
             if (index >= 0 && index < segments.length) {
               onChanged?.call(segments[index].value);
             }
           },
         ),
-      );
-      // native_liquid_glass 0.3.1 insets its SwiftUI picker by 16 points on
-      // each side. Widen the platform view by that much so the segments span
-      // the width this control was given; touches still land only inside it.
-      return LayoutBuilder(
-        builder: (context, constraints) => !constraints.hasBoundedWidth
-            ? control
-            : SizedBox(
-                width: constraints.maxWidth,
-                height: 48,
-                child: OverflowBox(
-                  minWidth: constraints.maxWidth + 32,
-                  maxWidth: constraints.maxWidth + 32,
-                  child: control,
-                ),
-              ),
       );
     }
     final colors = Theme.of(context).colorScheme;

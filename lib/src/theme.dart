@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:native_liquid_glass/native_liquid_glass.dart' as native;
 
 import 'colors.dart';
 import 'feedback_data.dart';
+import 'native_platform.dart';
 export 'colors.dart';
 export 'feedback_data.dart';
 
@@ -105,7 +105,7 @@ class LiquidGlassTheme extends InheritedWidget {
   static LiquidGlassMode modeOf(BuildContext context) {
     final media = MediaQuery.maybeOf(context);
     return of(context).resolve(
-      nativeAvailable: native.NativeLiquidGlassUtils.supportsLiquidGlass,
+      nativeAvailable: liquidGlassPlatformSupported,
       highContrast: media?.highContrast ?? false,
       disableAnimations: media?.disableAnimations ?? false,
     );
@@ -115,6 +115,11 @@ class LiquidGlassTheme extends InheritedWidget {
   bool updateShouldNotify(LiquidGlassTheme oldWidget) => data != oldWidget.data;
 }
 
-/// Platform support, without exposing the native provider's types.
-bool get liquidGlassNativeAvailable =>
-    native.NativeLiquidGlassUtils.supportsLiquidGlass;
+/// Whether native Liquid Glass is available: true on iOS 26 and later.
+///
+/// Synchronous and valid from the first frame. The target platform is checked
+/// on every read, so on a test host it is false even when the target platform
+/// is overridden to iOS; the iOS major version is read from the operating
+/// system once. `UIDesignRequiresCompatibility` is not consulted. Tests that
+/// need the native branch override [LiquidGlassThemeData.resolve] instead.
+bool get liquidGlassNativeAvailable => liquidGlassPlatformSupported;

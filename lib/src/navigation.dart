@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:native_liquid_glass/native_liquid_glass.dart' as native;
 
 import 'controls.dart';
 import 'actions.dart';
@@ -8,6 +7,7 @@ import 'fallback_pressable.dart';
 import 'fallback_selection_track.dart';
 import 'feedback.dart';
 import 'native_navigation_bar.dart';
+import 'native_tab_bar.dart';
 import 'native_tab_item.dart';
 import 'surface.dart';
 import 'theme.dart';
@@ -54,7 +54,7 @@ class LiquidGlassTabBar extends StatelessWidget {
     if (glassTheme.resolveTabBar(nativeAvailable: liquidGlassNativeAvailable) ==
         LiquidGlassMode.native) {
       final tabBar = NativeVisibility(
-        child: native.LiquidGlassTabBar(
+        child: NativeTabBar(
           items: [
             for (final item in items)
               nativeTabItem(
@@ -67,14 +67,14 @@ class LiquidGlassTabBar extends StatelessWidget {
           ],
           // Debug builds assert the range; keep the native bar valid in release.
           currentIndex: selectedIndex.clamp(0, items.length - 1),
-          iosActionButton: trailingAction == null
+          action: trailingAction == null
               ? null
               : nativeTabItem(
                   label: trailingAction!.label,
                   icon: trailingAction!.icon ?? Icons.search,
                   sfSymbol: trailingAction!.sfSymbol ?? 'magnifyingglass',
                 ),
-          onActionButtonPressed: trailingAction?.onPressed == null
+          onActionPressed: trailingAction?.onPressed == null
               ? null
               : () {
                   if (!LiquidGlassFeedback.canInteract(context)) return;

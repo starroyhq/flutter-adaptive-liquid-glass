@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:native_liquid_glass/native_liquid_glass.dart' as native;
 
 // Exercise the native branch on a Dart host without pretending that its real
 // operating system has native Liquid Glass support.
@@ -17,10 +16,12 @@ class _NativeTheme extends LiquidGlassThemeData {
   }) => LiquidGlassMode.native;
 }
 
-/// Records the creation parameters of every platform view.
+/// Records the creation parameters of every platform view, whose own channel
+/// answers every call.
 List<Map<Object?, Object?>> _recordPlatformViews(WidgetTester tester) {
   final binding = TestDefaultBinaryMessengerBinding.instance;
   final created = <Map<Object?, Object?>>[];
+  final channels = <MethodChannel>[];
   binding.defaultBinaryMessenger.setMockMethodCallHandler(
     SystemChannels.platform_views,
     (call) async {
@@ -35,16 +36,28 @@ List<Map<Object?, Object?>> _recordPlatformViews(WidgetTester tester) {
                 )
                 as Map<Object?, Object?>,
         });
+        final channel = MethodChannel(
+          '${arguments['viewType']}/${arguments['id']}',
+        );
+        channels.add(channel);
+        binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          (call) async =>
+              call.method == 'intrinsicSize' ? {'width': 48.0} : null,
+        );
       }
       return null;
     },
   );
-  addTearDown(
-    () => binding.defaultBinaryMessenger.setMockMethodCallHandler(
+  addTearDown(() {
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform_views,
       null,
-    ),
-  );
+    );
+    for (final channel in channels) {
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+    }
+  });
   return created;
 }
 
@@ -103,9 +116,9 @@ void main() {
   );
 
   testWidgets(
-    'an icon-only native symbol is sized as a font matching the icon size',
+    'an icon-only native button is a standalone 48-point capsule',
     (tester) async {
-      _recordPlatformViews(tester);
+      final created = _recordPlatformViews(tester);
       await tester.pumpWidget(
         _native(
           Row(
@@ -127,15 +140,19 @@ void main() {
         ),
       );
       await tester.pump();
-      final sizes = [
-        for (final button in tester.widgetList<native.LiquidGlassButton>(
-          find.byType(native.LiquidGlassButton),
-        ))
-          button.iconSize,
-      ];
-      // A 22-point Material icon matches a 16.5-point symbol; a bitmap icon
-      // keeps its 22-point box.
-      expect(sizes, [16.5, 22.0]);
+      // The bitmap button reserves its circle until its glyph is drawn.
+      expect(created, hasLength(1));
+      final params = created.single;
+      expect(params['viewType'], 'flutter_adaptive_liquid_glass/capsule');
+      expect(params['standaloneIcon'], isTrue);
+      final item = (params['items'] as List).single as Map;
+      expect(item['symbol'], 'chevron.left');
+      expect(item['title'], isNull);
+      expect(item['id'], 'button');
+      expect(item['label'], 'Back');
+      for (final button in find.byType(LiquidGlassButton).evaluate()) {
+        expect(button.size, const Size(48, 48));
+      }
     },
     variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
@@ -160,14 +177,13 @@ void main() {
         ),
       );
       await tester.pump();
+      final control = find.byType(LiquidGlassSegmentedControl<int>);
+      expect(tester.getSize(control).width, 320);
+      // UIKit draws the control as wide as its platform view.
+      expect(tester.getSize(find.byType(UiKitView)), const Size(320, 48));
       expect(
-        tester.getSize(find.byType(LiquidGlassSegmentedControl<int>)).width,
-        320,
-      );
-      // Upstream insets its picker by 16 points on each side.
-      expect(
-        tester.getSize(find.byType(native.LiquidGlassSegmentedControl)).width,
-        352,
+        find.descendant(of: control, matching: find.byType(OverflowBox)),
+        findsNothing,
       );
       expect(tester.takeException(), isNull);
     },

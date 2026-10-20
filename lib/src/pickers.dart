@@ -480,6 +480,9 @@ class LiquidGlassColorPicker extends StatefulWidget {
     this.title,
     this.supportsAlpha = true,
     this.semanticLabel,
+    this.hexLabelText,
+    this.hexErrorText,
+    this.channelSemanticFormatterCallback,
   });
 
   final Color selectedColor;
@@ -491,8 +494,23 @@ class LiquidGlassColorPicker extends StatefulWidget {
   final bool supportsAlpha;
 
   /// Accessibility label for the color well, independent of the picker title.
-  /// Omitting it retains the native system label on the native path.
+  /// Omitting it retains the native system label on the native path; the
+  /// Flutter fallback then uses [title], or `Color` without one.
   final String? semanticLabel;
+
+  /// Label of the Flutter fallback's HEX field, replacing `HEX (RRGGBBAA)`, or
+  /// `HEX (RRGGBB)` without [supportsAlpha].
+  final String? hexLabelText;
+
+  /// Error shown by the Flutter fallback for text that is not a HEX color,
+  /// replacing `Use RRGGBB or RRGGBBAA`.
+  final String? hexErrorText;
+
+  /// The value a screen reader announces for a channel slider of the Flutter
+  /// fallback. The `channel` is `R`, `G`, `B` or `A`, which also stay the
+  /// visible slider labels; by default the red slider announces `R 128`.
+  final String Function(String channel, int value)?
+  channelSemanticFormatterCallback;
 
   @override
   State<LiquidGlassColorPicker> createState() => _LiquidGlassColorPickerState();
@@ -540,6 +558,10 @@ class _LiquidGlassColorPickerState extends State<LiquidGlassColorPicker> {
                   enabled: widget.onChanged != null,
                   supportsAlpha: widget.supportsAlpha,
                   title: widget.title,
+                  hexLabelText: widget.hexLabelText,
+                  hexErrorText: widget.hexErrorText,
+                  channelSemanticFormatterCallback:
+                      widget.channelSemanticFormatterCallback,
                   onChanged: _changed,
                   currentColor: () => _color,
                 )
@@ -635,6 +657,9 @@ class _ColorEditor extends StatefulWidget {
     required this.onChanged,
     required this.currentColor,
     this.title,
+    this.hexLabelText,
+    this.hexErrorText,
+    this.channelSemanticFormatterCallback,
   });
   final Color color;
   final bool enabled;
@@ -642,6 +667,10 @@ class _ColorEditor extends StatefulWidget {
   final ValueChanged<Color> onChanged;
   final Color Function() currentColor;
   final String? title;
+  final String? hexLabelText;
+  final String? hexErrorText;
+  final String Function(String channel, int value)?
+  channelSemanticFormatterCallback;
 
   @override
   State<_ColorEditor> createState() => _ColorEditorState();
@@ -652,7 +681,7 @@ class _ColorEditorState extends State<_ColorEditor> {
   late final _hexController = TextEditingController(
     text: _hex(_color, widget.supportsAlpha),
   );
-  String? _hexError;
+  bool _hexInvalid = false;
 
   @override
   void didUpdateWidget(_ColorEditor oldWidget) {
@@ -661,7 +690,7 @@ class _ColorEditorState extends State<_ColorEditor> {
         oldWidget.supportsAlpha != widget.supportsAlpha) {
       _color = widget.color;
       _hexController.text = _hex(_color, widget.supportsAlpha);
-      _hexError = null;
+      _hexInvalid = false;
     }
   }
 
@@ -671,7 +700,7 @@ class _ColorEditorState extends State<_ColorEditor> {
     final changed = color.toARGB32() != _color.toARGB32();
     setState(() {
       _color = color;
-      _hexError = null;
+      _hexInvalid = false;
       if (updateText) _hexController.text = _hex(color, widget.supportsAlpha);
     });
     if (changed) widget.onChanged(color);
@@ -690,7 +719,7 @@ class _ColorEditorState extends State<_ColorEditor> {
   void _parseHex(String text) {
     final raw = text.trim().replaceFirst(RegExp(r'^#'), '');
     if (!RegExp(r'^[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$').hasMatch(raw)) {
-      setState(() => _hexError = 'Use RRGGBB or RRGGBBAA');
+      setState(() => _hexInvalid = true);
       return;
     }
     final rgb = int.parse(raw.substring(0, 6), radix: 16);
@@ -748,6 +777,10 @@ class _ColorEditorState extends State<_ColorEditor> {
                     divisions: 255,
                     continuousFeedback: false,
                     semanticFormatterCallback: (value) =>
+                        widget.channelSemanticFormatterCallback?.call(
+                          channels[i].$1,
+                          value.round(),
+                        ) ??
                         '${channels[i].$1} ${value.round()}',
                     onChanged: widget.enabled
                         ? (value) {
@@ -790,10 +823,12 @@ class _ColorEditorState extends State<_ColorEditor> {
             cursorColor: palette.accent ?? scheme.primary,
             textDirection: TextDirection.ltr,
             decoration: InputDecoration(
-              labelText: widget.supportsAlpha
-                  ? 'HEX (RRGGBBAA)'
-                  : 'HEX (RRGGBB)',
-              errorText: _hexError,
+              labelText:
+                  widget.hexLabelText ??
+                  (widget.supportsAlpha ? 'HEX (RRGGBBAA)' : 'HEX (RRGGBB)'),
+              errorText: _hexInvalid
+                  ? widget.hexErrorText ?? 'Use RRGGBB or RRGGBBAA'
+                  : null,
             ),
             onChanged: _parseHex,
           ),

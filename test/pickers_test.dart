@@ -462,6 +462,52 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('localized apps can replace the fallback editor text', (
+    tester,
+  ) async {
+    Future<void> open({bool localized = false}) async {
+      await tester.pumpWidget(
+        _app(
+          LiquidGlassColorPicker(
+            selectedColor: const Color(0xff112233),
+            onChanged: (_) {},
+            hexLabelText: localized ? '十六进制' : null,
+            hexErrorText: localized ? '请输入 RRGGBB 或 RRGGBBAA' : null,
+            channelSemanticFormatterCallback: localized
+                ? (channel, value) => '通道 $channel：$value'
+                : null,
+          ),
+        ),
+      );
+      await tester.tap(find.byType(LiquidGlassColorPicker));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '#12XX');
+      await tester.pumpAndSettle();
+    }
+
+    String red(double value) => tester
+        .widget<FallbackGlassSlider>(
+          find.byKey(const ValueKey('liquid-glass-color-R')),
+        )
+        .semanticFormatterCallback!(value);
+
+    await open();
+    expect(find.text('HEX (RRGGBBAA)'), findsOneWidget);
+    expect(find.text('Use RRGGBB or RRGGBBAA'), findsOneWidget);
+    expect(red(17), 'R 17');
+    tester.testTextInput.hide();
+    Navigator.of(tester.element(find.byType(TextField))).pop();
+    await tester.pumpAndSettle();
+    await open(localized: true);
+    expect(find.text('十六进制'), findsOneWidget);
+    expect(find.text('请输入 RRGGBB 或 RRGGBBAA'), findsOneWidget);
+    expect(find.text('Use RRGGBB or RRGGBBAA'), findsNothing);
+    // The channel letters stay the visible labels.
+    expect(find.text('R'), findsOneWidget);
+    expect(red(17), '通道 R：17');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('color well label, title and current value remain independent', (
     tester,
   ) async {

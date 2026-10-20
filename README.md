@@ -82,8 +82,12 @@ dependencies:
 Requires Flutter 3.41.2 or later and Dart 3.11 or later. Supported platforms are
 Android and iOS 16+. Native system glass is available on iOS 26+; older iOS and
 Android use the Flutter fallback. Build native iOS glass with Xcode 26 or later.
-Development and CI retain Flutter **3.41.9** / Dart **3.11.5**. The production
-dependency `native_liquid_glass` remains pinned to **0.3.1**; this release adds no
+On iOS the plugin supports both Swift Package Manager and CocoaPods. Flutter uses
+Swift Package Manager when it is enabled, the default from Flutter 3.44, and
+CocoaPods otherwise; `native_liquid_glass` 0.3.1 ships a Swift package too.
+Development uses Flutter **3.41.9** / Dart **3.11.5**; CI checks that pinned
+version and the current stable channel. The production dependency
+`native_liquid_glass` remains pinned to **0.3.1**; this release adds no
 production dependency and does not require a global toolchain upgrade.
 
 ### Upgrading from 0.5.x
@@ -787,14 +791,22 @@ preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 ## Continuous integration
 
 The `Component checks` workflow is configured for pushes, pull requests and manual dispatch.
-It pins Flutter 3.41.9, enforces the root/example lockfiles, formats and analyzes
-both, and runs both test suites. After quality passes, separate jobs build the
+Its main jobs pin Flutter 3.41.9, enforce the root/example lockfiles, format and
+analyze both, and run both test suites. After quality passes, separate jobs build the
 example Debug APK (Java 17) and an arm64 iOS simulator application (macOS 26).
 The iOS job generates Flutter configuration, enforces `Podfile.lock`, then invokes
-`xcodebuild` directly to avoid the toolchain's combined-architecture parsing issue.
+`xcodebuild` directly to avoid the toolchain's combined-architecture parsing issue;
+it builds the plugin through CocoaPods.
 An additional arm64 job boots its own iOS 26 simulator and runs the
 `NativeSliderAcceptance` XCTest scheme using normal-duration system input. It
 requires an installed iOS 26 runtime rather than substituting a newer version.
+Two more jobs follow the current stable channel. `quality-stable` analyzes and
+tests both packages; it resolves dependencies without `--enforce-lockfile`
+because the SDK packages that `flutter_test` pins change with every Flutter
+release. `ios-simulator-stable` then builds the same arm64 simulator application
+with Swift Package Manager, the default from Flutter 3.44, and fails unless the
+plugin and its privacy manifest come from the Swift package. These jobs upload
+no artifacts and, like the others, must pass for a release run.
 The APK, archived simulator `.app` and native XCTest result bundle are retained
 for 14 days. Build success does not establish native animation, IME,
 accessibility or GPU performance. The separate Flutter integration scenarios

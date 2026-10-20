@@ -7,9 +7,11 @@ demonstrates the **0.5.2** component catalog. Applications can use the hosted
 its local path so it tests the same source checkout. See the
 [upgrade notes](../README.md#upgrading-from-02x) when moving from 0.2.x.
 
-Development and CI use Flutter 3.41.9 / Dart 3.11.5 with
-`native_liquid_glass` pinned to 0.3.1. Use the committed lockfiles; no production
-dependency or global toolchain upgrade is introduced by the new fallbacks.
+Development and the pinned CI jobs use Flutter 3.41.9 / Dart 3.11.5 with
+`native_liquid_glass` pinned to 0.3.1; CI also builds this example on the current
+stable channel with Swift Package Manager. Use the committed lockfiles with the
+pinned toolchain; no production dependency or global toolchain upgrade is
+introduced by the new fallbacks.
 
 From the package root:
 

@@ -279,6 +279,41 @@ void main() {
     variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
 
+  testWidgets(
+    'a bitmap icon is redrawn when its button stops being standalone',
+    (tester) async {
+      Object? png() => ((params[id]!['items'] as List).single as Map)['png'];
+      await tester.pumpWidget(iconButton(icon: Icons.close));
+      for (
+        var i = 0;
+        i < 50 && find.byType(UiKitView).evaluate().isEmpty;
+        ++i
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+      expect(ByteData.sublistView(png() as Uint8List).getUint32(16), 192);
+      // A long press turns it into a capsule icon, which fits the whole bitmap
+      // into the icon size.
+      await tester.pumpWidget(iconButton(icon: Icons.close, hold: true));
+      for (var i = 0; i < 50 && png() == null; ++i) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+      expect(params[id]!['standaloneIcon'], isFalse);
+      // The glyph's own bounds, not the padded square that would halve it.
+      expect(
+        ByteData.sublistView(png() as Uint8List).getUint32(16),
+        lessThan(192),
+      );
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
   testWidgets('backgrounding cancels native action epoch before resuming', (
     tester,
   ) async {

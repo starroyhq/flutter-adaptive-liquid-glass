@@ -141,7 +141,12 @@ class _NativeCapsuleState extends State<NativeCapsule>
         (item) => Object.hash(item.icon, item.sfSymbol, item.iconSize),
       ),
     );
-    if (old != _iconSignature) _prepareIcons();
+    // A standalone bitmap is a padded square, a capsule bitmap the glyph's own
+    // bounds, so switching modes redraws the bitmap too.
+    if (old != _iconSignature ||
+        oldWidget.standaloneIcon != widget.standaloneIcon) {
+      _prepareIcons();
+    }
   }
 
   Future<void> _prepareIcons() async {

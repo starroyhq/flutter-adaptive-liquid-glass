@@ -158,6 +158,44 @@ void main() {
   );
 
   testWidgets(
+    'a native text button reserves the width of a right-to-left title',
+    (tester) async {
+      final created = _recordPlatformViews(tester);
+      // Titles are measured in the ambient direction; only icon glyphs are
+      // drawn left to right.
+      for (final title in ['إعدادات الحساب', 'הגדרות החשבון']) {
+        await tester.pumpWidget(
+          _native(
+            Directionality(
+              textDirection: TextDirection.rtl,
+              child: LiquidGlassButton(label: title, onPressed: () {}),
+            ),
+          ),
+        );
+        await tester.pump();
+        final text = TextPainter(
+          text: TextSpan(
+            text: title,
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+          ),
+          textDirection: TextDirection.rtl,
+          maxLines: 1,
+        )..layout();
+        // The capsule adds 16-point insets on each side of its title.
+        expect(
+          tester.getSize(find.byType(UiKitView)).width,
+          greaterThanOrEqualTo(text.width + 32),
+        );
+        text.dispose();
+        final item = (created.last['items'] as List).single as Map;
+        expect(item['title'], title);
+      }
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
+  testWidgets(
     'the native segmented control spans the width it is given',
     (tester) async {
       _recordPlatformViews(tester);

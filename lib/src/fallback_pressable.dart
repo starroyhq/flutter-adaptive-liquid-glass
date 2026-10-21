@@ -192,8 +192,6 @@ class _FallbackPressableState extends State<FallbackPressable>
             if (_pressed != pressed) setState(() => _pressed = pressed);
           },
           splashFactory: NoSplash.splashFactory,
-          // InkWell's adaptive default shows the click cursor only on the web.
-          mouseCursor: WidgetStateMouseCursor.clickable,
           // A hovering pointer gets a lighter highlight than a press or focus.
           overlayColor: WidgetStateProperty.resolveWith((states) {
             final active =

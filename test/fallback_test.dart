@@ -155,7 +155,7 @@ void main() {
     expect(taps, 2);
   });
 
-  testWidgets('a mouse gets a click cursor and a lighter hover highlight', (
+  testWidgets('a mouse gets the default cursor and a lighter hover highlight', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -169,6 +169,15 @@ void main() {
         ),
       ),
     );
+    final ink = tester.widget<InkWell>(
+      find.descendant(
+        of: find.widgetWithText(LiquidGlassButton, 'Enabled'),
+        matching: find.byType(InkWell),
+      ),
+    );
+    // InkWell's own default: the click cursor on the web, the arrow elsewhere,
+    // as on this test host.
+    expect(ink.mouseCursor, isNull);
     final mouse = await tester.createGesture(
       kind: PointerDeviceKind.mouse,
       pointer: 1,
@@ -178,7 +187,7 @@ void main() {
     await tester.pump();
     expect(
       tester.binding.mouseTracker.debugDeviceActiveCursor(1),
-      SystemMouseCursors.click,
+      SystemMouseCursors.basic,
     );
     await mouse.moveTo(tester.getCenter(find.text('Disabled')));
     await tester.pump();
@@ -186,14 +195,7 @@ void main() {
       tester.binding.mouseTracker.debugDeviceActiveCursor(1),
       SystemMouseCursors.basic,
     );
-    final overlay = tester
-        .widget<InkWell>(
-          find.descendant(
-            of: find.widgetWithText(LiquidGlassButton, 'Enabled'),
-            matching: find.byType(InkWell),
-          ),
-        )
-        .overlayColor!;
+    final overlay = ink.overlayColor!;
     final hovered = overlay.resolve({WidgetState.hovered})!;
     expect(hovered.a, greaterThan(0));
     expect(hovered.a, lessThan(overlay.resolve({WidgetState.pressed})!.a));

@@ -45,8 +45,10 @@ class NativeCapsuleItem {
 
 /// One platform view owns one glass effect and all its plain UIKit buttons.
 ///
-/// A capsule outside a group keeps its view when its enabled state, emphasis
-/// or colors change: they reach the live view through its `update` method.
+/// A capsule keeps its view when an action's enabled state, or the capsule's
+/// emphasis or colors, change: they reach the live view through its `update`
+/// method, item by item in order. Adding, removing or reordering actions, or
+/// changing what an action shows, creates a new view.
 class NativeCapsule extends StatefulWidget {
   const NativeCapsule({
     super.key,
@@ -80,7 +82,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
   double? _measuredWidth;
   int? _measurementSignature;
 
-  /// The enabled state and colors of a lone capsule: as its view was created
+  /// The enabled state and colors of the actions: as the view was created
   /// with them, as last sent, and the enabled part of what was last sent.
   List<Object?>? _createdDynamic, _dynamicSent, _enabledSent;
   Map<String, Object?>? _latestDynamic;
@@ -88,8 +90,6 @@ class _NativeCapsuleState extends State<NativeCapsule>
   /// The view generation whose channel is [_channel].
   int _channelGeneration = -1;
 
-  /// A capsule outside a group updates its enabled state and colors in place.
-  bool get _inPlace => !widget.grouped && widget.items.length == 1;
   int get _iconSignature => Object.hashAll(
     widget.items.map(
       (item) => Object.hash(item.icon, item.sfSymbol, item.iconSize),
@@ -252,7 +252,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
     });
     _syncInteraction(force: true);
     // Catch up with changes made while the view was being created.
-    if (_inPlace && !listEquals(_createdDynamic, _dynamicSent)) {
+    if (!listEquals(_createdDynamic, _dynamicSent)) {
       _createdDynamic = _dynamicSent;
       _sendUpdate();
     }
@@ -350,10 +350,9 @@ class _NativeCapsuleState extends State<NativeCapsule>
           },
       ],
     };
-    // A lone capsule's enabled state, emphasis and colors are left out of its
-    // signature and reach the live view in place. A long press stays
-    // structural: it adds a native recognizer.
-    final inPlace = _inPlace;
+    // The enabled state of each action, emphasis and colors do not affect
+    // layout: they are left out of the signature and reach the live view in
+    // place. A long press stays structural: it adds a native recognizer.
     final enabledState = [
       for (final item in widget.items) ...[
         item.onPressed != null,
@@ -384,10 +383,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
       rtl,
       fontSize,
       widget.grouped,
-      inPlace ? null : widget.prominent,
       widget.standaloneIcon,
-      inPlace ? null : params['foreground'],
-      inPlace ? null : params['tint'],
       Object.hashAll(
         widget.items.map(
           (item) => Object.hash(
@@ -397,10 +393,8 @@ class _NativeCapsuleState extends State<NativeCapsule>
             item.label,
             item.icon,
             item.sfSymbol,
-            inPlace ? null : item.iconColor,
             item.iconSize,
             item.menuIndicator,
-            inPlace ? null : item.onPressed != null,
             item.onLongPress != null,
             item.longPressSemanticLabel,
           ),
@@ -415,7 +409,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
       // A new view is created with the state of this build.
       _createdDynamic = _dynamicSent = dynamicState;
       _enabledSent = enabledState;
-    } else if (inPlace && !listEquals(_dynamicSent, dynamicState)) {
+    } else if (!listEquals(_dynamicSent, dynamicState)) {
       if (!listEquals(_enabledSent, enabledState)) {
         // A press UIKit reported before this change must not reach the new
         // callbacks, as when a disabled button is enabled again.

@@ -1,10 +1,21 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_adaptive_liquid_glass/src/actions.dart';
+import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart';
 import 'package:flutter_adaptive_liquid_glass/src/native_navigation_bar.dart';
 import 'package:flutter_adaptive_liquid_glass/src/native_visibility.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+class _NativeTheme extends LiquidGlassThemeData {
+  const _NativeTheme();
+
+  @override
+  LiquidGlassMode resolve({
+    required bool nativeAvailable,
+    bool highContrast = false,
+    bool disableAnimations = false,
+  }) => LiquidGlassMode.native;
+}
 
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
@@ -340,5 +351,47 @@ void main() {
       await event('theme', sequence: 4);
       expect(presses, 1);
     },
+  );
+
+  testWidgets(
+    'disabling a navigation bar action keeps the native bar and its view',
+    (tester) async {
+      var presses = 0;
+      Widget bar({VoidCallback? onPressed}) => MaterialApp(
+        home: LiquidGlassTheme(
+          data: const _NativeTheme(),
+          child: Scaffold(
+            appBar: LiquidGlassNavigationBar(
+              title: 'Components',
+              actions: [
+                LiquidGlassAction(
+                  id: 'theme',
+                  label: 'Toggle theme',
+                  sfSymbol: 'circle.lefthalf.filled',
+                  onPressed: onPressed,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(bar(onPressed: () => presses++));
+      await tester.pumpAndSettle();
+      final view = id, oldEpoch = config()['epoch'] as int;
+      await tester.pumpWidget(bar());
+      await tester.pumpAndSettle();
+      expect(find.byType(NativeNavigationBar), findsOneWidget);
+      expect(id, view);
+      expect(creation.keys, [view]);
+      expect(((config()['actions'] as List).single as Map)['enabled'], false);
+      await tester.pumpWidget(bar(onPressed: () => presses++));
+      await tester.pumpAndSettle();
+      expect(id, view);
+      await event('theme', epoch: oldEpoch);
+      expect(presses, 0);
+      await event('theme', sequence: 2);
+      expect(presses, 1);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
 }

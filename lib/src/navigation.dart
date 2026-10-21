@@ -287,10 +287,10 @@ class LiquidGlassNavigationBar extends StatelessWidget
     final glassColors = LiquidGlassTheme.of(context).colors;
     final all = [...leading, ...actions];
     // Keep the existing native layout limits; grouped/long-press actions use
-    // the Flutter title layout with our native capsule buttons below.
+    // the Flutter title layout with our native capsule buttons below. A
+    // disabled action stays in the native bar, which updates it in place.
     final nativeActions = all.every(
       (action) =>
-          action.onPressed != null &&
           action.onLongPress == null &&
           (action.icon == null || action.sfSymbol != null),
     );

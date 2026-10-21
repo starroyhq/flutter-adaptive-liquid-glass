@@ -501,6 +501,130 @@ void main() {
     variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
 
+  Widget group({
+    VoidCallback? onSecond,
+    List<String> ids = const ['first', 'second', 'third'],
+    String secondLabel = 'Second',
+    bool showLabel = false,
+  }) => MaterialApp(
+    home: LiquidGlassTheme(
+      data: const _NativeTheme(),
+      child: Scaffold(
+        body: Center(
+          child: LiquidGlassButtonGroup(
+            actions: [
+              for (final actionId in ids)
+                LiquidGlassAction(
+                  id: actionId,
+                  label: actionId == 'second' ? secondLabel : actionId,
+                  icon: Icons.add,
+                  sfSymbol: 'plus',
+                  showLabel: showLabel,
+                  onPressed: actionId == 'second' ? onSecond : () {},
+                ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+  List<bool> tapEnabled(Map update) => [
+    for (final item in update['items'] as List) (item as Map)['tapEnabled'],
+  ];
+
+  testWidgets(
+    'a button group keeps its native view when one action is enabled or '
+    'disabled',
+    (tester) async {
+      void press() {}
+      await tester.pumpWidget(group(onSecond: press));
+      await tester.pumpAndSettle();
+      final view = id;
+      expect(params[view]!['grouped'], isTrue);
+      expect(updates(view), isEmpty);
+
+      await tester.pumpWidget(group());
+      await tester.pumpAndSettle();
+      expect(id, view);
+      expect(tapEnabled(updates(view).last), [true, false, true]);
+      expect(
+        [
+          for (final item in updates(view).last['items'] as List)
+            (item as Map)['enabled'],
+        ],
+        [true, false, true],
+      );
+
+      await tester.pumpWidget(group(onSecond: press));
+      await tester.pumpAndSettle();
+      expect(id, view);
+      expect(tapEnabled(updates(view).last), [true, true, true]);
+      expect(updates(view), hasLength(2));
+      expect(params.keys, [view]);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
+  testWidgets(
+    'a press on a group action sent before it was disabled is rejected',
+    (tester) async {
+      var presses = 0;
+      void press() => presses++;
+      await tester.pumpWidget(group(onSecond: press));
+      await tester.pumpAndSettle();
+      final view = id, enabledEpoch = epoch(id);
+      await tester.pumpWidget(group());
+      await tester.pumpAndSettle();
+      final disabledEpoch = epoch(view);
+      expect(disabledEpoch, greaterThan(enabledEpoch));
+      await event('pressed', 'second', eventEpoch: enabledEpoch);
+      await event('pressed', 'second', sequence: 2);
+      expect(presses, 0);
+      await tester.pumpWidget(group(onSecond: press));
+      await tester.pumpAndSettle();
+      expect(id, view);
+      expect(epoch(view), greaterThan(disabledEpoch));
+      await event('pressed', 'second', eventEpoch: disabledEpoch, sequence: 3);
+      expect(presses, 0);
+      await event('pressed', 'second', sequence: 4);
+      expect(presses, 1);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
+  testWidgets(
+    'adding, reordering or relabelling group actions creates a new view',
+    (tester) async {
+      await tester.pumpWidget(group(onSecond: () {}));
+      await tester.pumpAndSettle();
+      var view = id;
+      for (final next in [
+        group(onSecond: () {}, ids: const ['first', 'second']),
+        group(onSecond: () {}, ids: const ['second', 'first']),
+        group(onSecond: () {}, ids: const ['second', 'first'], showLabel: true),
+        group(
+          onSecond: () {},
+          ids: const ['second', 'first'],
+          showLabel: true,
+          secondLabel: 'Later',
+        ),
+      ]) {
+        await tester.pumpWidget(next);
+        await tester.pumpAndSettle();
+        expect(id, isNot(view));
+        view = id;
+      }
+      expect(
+        [
+          for (final item in params[view]!['items'] as List)
+            (item as Map)['title'],
+        ],
+        ['Later', 'first'],
+      );
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
   testWidgets('a capsule takes the ambient text direction', (tester) async {
     Widget directed(TextDirection direction) => MaterialApp(
       home: Directionality(

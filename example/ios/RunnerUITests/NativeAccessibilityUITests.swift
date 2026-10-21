@@ -455,16 +455,21 @@ final class NativeAccessibilityUITests: XCTestCase {
     expectTappable(beneath)
     attachScreen("r2-popup-4-alert-closed")
 
-    // Native buttons inside the sheet stay visible and take taps.
+    // Native buttons inside the sheet stay visible and take taps. XCUITest
+    // does not report these platform views as hittable inside the sheet, so
+    // they are tapped where they are, and the press count shows the tap.
     app.buttons["layout-sheet"].tap()
     let sheetAction = app.buttons["layout-sheet-action"]
-    XCTAssertTrue(waitUntilHittable(sheetAction))
+    let sheetClose = app.buttons["layout-sheet-close"]
+    XCTAssertTrue(sheetAction.waitForExistence(timeout: 10))
+    XCTAssertTrue(sheetClose.waitForExistence(timeout: 10))
     expectHidden(beneath)
     Thread.sleep(forTimeInterval: 1)
+    attachFrames("r2-sheet-frames", ["layout-sheet-action": sheetAction, "layout-sheet-close": sheetClose])
     attachScreen("r2-popup-5-sheet-open")
-    sheetAction.tap()
-    expectText("Sheet presses: 1")
-    app.buttons["layout-sheet-close"].tap()
+    tapCenter(of: sheetAction)
+    expectLabel(containing: "Sheet presses: 1")
+    tapCenter(of: sheetClose)
     expectText("Popup result: sheet closed")
     expectTappable(beneath)
     attachScreen("r2-popup-6-sheet-closed")
@@ -478,11 +483,11 @@ final class NativeAccessibilityUITests: XCTestCase {
     let hold = app.buttons["layout-plus-hold"]
     XCTAssertTrue(waitUntilHittable(hold))
     hold.press(forDuration: 1.2)
-    expectText("Icon holds: 1")
-    expectText("Icon taps: 0")
+    expectLabel(containing: "Icon holds: 1")
+    expectLabel(containing: "Icon taps: 0")
     hold.tap()
-    expectText("Icon taps: 1")
-    expectText("Icon holds: 1")
+    expectLabel(containing: "Icon taps: 1")
+    expectLabel(containing: "Icon holds: 1")
 
     // The control: a long press on a text capsule, which is not standalone.
     button(labelled: "Menu").press(forDuration: 1.2)
@@ -532,7 +537,8 @@ final class NativeAccessibilityUITests: XCTestCase {
     }
   }
 
-  /// Taps where a disabled element is, which an element tap may refuse.
+  /// Taps where an element is: a disabled one, which an element tap may
+  /// refuse, or one that XCUITest does not report as hittable.
   private func tapCenter(of element: XCUIElement) {
     element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
   }
@@ -629,6 +635,13 @@ final class NativeAccessibilityUITests: XCTestCase {
 
   private func expectText(_ text: String, file: StaticString = #filePath, line: UInt = #line) {
     XCTAssertTrue(app.staticTexts[text].waitForExistence(timeout: 15), text, file: file, line: line)
+  }
+
+  /// Flutter reports adjacent texts without semantics of their own as one
+  /// label, such as the layout probe's two counters on one line.
+  private func expectLabel(containing text: String, file: StaticString = #filePath, line: UInt = #line) {
+    let match = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
+    XCTAssertTrue(match.waitForExistence(timeout: 15), text, file: file, line: line)
   }
 
   private func attachHierarchy(_ name: String) {

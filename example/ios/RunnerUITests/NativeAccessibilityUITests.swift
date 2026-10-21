@@ -350,6 +350,212 @@ final class NativeAccessibilityUITests: XCTestCase {
     XCTAssertTrue(openProbe.waitForExistence(timeout: 10))
   }
 
+  func testCapsuleButtonsUpdateInPlace() throws {
+    openCatalogSearchEntry("Open native controls probe")
+    expectText("Tab: 2")
+    // A standalone icon, a prominent standalone icon and a prominent text
+    // button, whose enabled state the probe's toggles change.
+    let delete = app.buttons["probe-disabled"]
+    let up = app.buttons["probe-up"]
+    let send = app.buttons["probe-send"]
+    XCTAssertTrue(send.waitForExistence(timeout: 10))
+    XCTAssertFalse(delete.isEnabled)
+    XCTAssertTrue(up.isEnabled)
+    XCTAssertTrue(send.isEnabled)
+    let buttons = ["probe-disabled": delete, "probe-up": up, "probe-send": send]
+    attachFrames("r2-update-frames", buttons)
+    attachScreen("r2-update-0-initial")
+
+    app.buttons["Toggle Delete"].tap()
+    app.buttons["Toggle Move up"].tap()
+    expectText("Delete enabled: true")
+    expectText("Move up enabled: false")
+    // The same native buttons, updated rather than replaced.
+    XCTAssertTrue(delete.exists && up.exists && send.exists)
+    XCTAssertTrue(waitUntil(delete, "enabled == true"))
+    XCTAssertTrue(waitUntil(up, "enabled == false"))
+    XCTAssertTrue(waitUntil(send, "enabled == false"))
+    Thread.sleep(forTimeInterval: 1.5)
+    attachScreen("r2-update-1-toggled")
+
+    delete.tap()
+    expectText("Icon presses: 1")
+    tapCenter(of: up)
+    XCTAssertFalse(app.staticTexts["Icon presses: 2"].waitForExistence(timeout: 2))
+    tapCenter(of: send)
+    XCTAssertFalse(app.staticTexts["Send presses: 1"].waitForExistence(timeout: 2))
+
+    app.buttons["Toggle Delete"].tap()
+    app.buttons["Toggle Move up"].tap()
+    expectText("Delete enabled: false")
+    expectText("Move up enabled: true")
+    XCTAssertTrue(waitUntil(delete, "enabled == false"))
+    XCTAssertTrue(waitUntil(up, "enabled == true"))
+    XCTAssertTrue(waitUntil(send, "enabled == true"))
+    Thread.sleep(forTimeInterval: 1.5)
+    attachScreen("r2-update-2-restored")
+
+    up.tap()
+    expectText("Icon presses: 2")
+    send.tap()
+    expectText("Send presses: 1")
+    tapCenter(of: delete)
+    XCTAssertFalse(app.staticTexts["Icon presses: 3"].waitForExistence(timeout: 2))
+  }
+
+  func testSegmentedControlRestoresRefusedChoice() throws {
+    openCatalogSearchEntry("Open native controls probe")
+    expectText("Tab: 2")
+    let publicSegment = app.buttons["Public"]
+    let locked = app.buttons["Locked"]
+    XCTAssertTrue(publicSegment.waitForExistence(timeout: 10))
+    XCTAssertTrue(publicSegment.isSelected)
+    // The probe refuses Locked without rebuilding the control.
+    locked.tap()
+    expectText("Locked attempts: 1")
+    XCTAssertTrue(waitUntil(publicSegment, "selected == true", timeout: 5))
+    XCTAssertTrue(waitUntil(locked, "selected == false", timeout: 5))
+    expectText("Access: public")
+    attachScreen("r2-segment-refused")
+  }
+
+  func testPopupsHideNativeControlsBeneathThem() throws {
+    openCatalogSearchEntry("Open native layout probe")
+    expectText("Popup result: none")
+    // A tab, a segment, a text capsule and a standalone icon on the page.
+    let beneath = [
+      "Saved": app.buttons["Saved"],
+      "Grid": app.buttons["Grid"],
+      "layout-alert": app.buttons["layout-alert"],
+      "layout-plus-tap": app.buttons["layout-plus-tap"],
+    ]
+    expectTappable(beneath)
+    attachFrames("r2-popups-frames", beneath)
+    attachScreen("r2-popup-0-initial")
+
+    button(labelled: "Menu").tap()
+    let first = app.buttons["First choice"]
+    XCTAssertTrue(first.waitForExistence(timeout: 10))
+    expectHidden(beneath)
+    Thread.sleep(forTimeInterval: 1)
+    attachScreen("r2-popup-1-menu-open")
+    first.tap()
+    expectText("Popup result: menu first")
+    expectTappable(beneath)
+    attachScreen("r2-popup-2-menu-closed")
+
+    app.buttons["layout-alert"].tap()
+    let ok = app.buttons["OK"]
+    XCTAssertTrue(ok.waitForExistence(timeout: 10))
+    expectHidden(beneath)
+    Thread.sleep(forTimeInterval: 1)
+    attachScreen("r2-popup-3-alert-open")
+    ok.tap()
+    expectText("Popup result: alert ok")
+    expectTappable(beneath)
+    attachScreen("r2-popup-4-alert-closed")
+
+    // Native buttons inside the sheet stay visible and take taps.
+    app.buttons["layout-sheet"].tap()
+    let sheetAction = app.buttons["layout-sheet-action"]
+    XCTAssertTrue(waitUntilHittable(sheetAction))
+    expectHidden(beneath)
+    Thread.sleep(forTimeInterval: 1)
+    attachScreen("r2-popup-5-sheet-open")
+    sheetAction.tap()
+    expectText("Sheet presses: 1")
+    app.buttons["layout-sheet-close"].tap()
+    expectText("Popup result: sheet closed")
+    expectTappable(beneath)
+    attachScreen("r2-popup-6-sheet-closed")
+  }
+
+  func testStandaloneIconLongPressStillFires() throws {
+    // Both halves run, so a failure shows whether only the standalone icon or
+    // also the capsule control lost its long press.
+    continueAfterFailure = true
+    openCatalogSearchEntry("Open native layout probe")
+    let hold = app.buttons["layout-plus-hold"]
+    XCTAssertTrue(waitUntilHittable(hold))
+    hold.press(forDuration: 1.2)
+    expectText("Icon holds: 1")
+    expectText("Icon taps: 0")
+    hold.tap()
+    expectText("Icon taps: 1")
+    expectText("Icon holds: 1")
+
+    // The control: a long press on a text capsule, which is not standalone.
+    button(labelled: "Menu").press(forDuration: 1.2)
+    let second = app.buttons["Second choice"]
+    XCTAssertTrue(second.waitForExistence(timeout: 10))
+    second.tap()
+    expectText("Popup result: menu second")
+    attachScreen("r2-hold")
+  }
+
+  /// Leaves the accessibility probe and opens an entry of the catalog's
+  /// Search page.
+  private func openCatalogSearchEntry(_ title: String) {
+    app.buttons["back"].tap()
+    let searchTab = app.buttons["Search"]
+    XCTAssertTrue(searchTab.waitForExistence(timeout: 10))
+    searchTab.tap()
+    let entry = app.buttons[title]
+    XCTAssertTrue(entry.waitForExistence(timeout: 10))
+    entry.tap()
+  }
+
+  /// A button found by its label, for native buttons whose identifier is the
+  /// default `button`.
+  private func button(labelled label: String) -> XCUIElement {
+    app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
+  }
+
+  private func waitUntil(_ element: XCUIElement, _ format: String, timeout: TimeInterval = 10) -> Bool {
+    let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: format), object: element)
+    return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+  }
+
+  private func waitUntilNotHittable(_ element: XCUIElement, timeout: TimeInterval = 10) -> Bool {
+    waitUntil(element, "exists == false OR hittable == false", timeout: timeout)
+  }
+
+  private func expectHidden(_ elements: [String: XCUIElement], file: StaticString = #filePath, line: UInt = #line) {
+    for (name, element) in elements.sorted(by: { $0.key < $1.key }) {
+      XCTAssertTrue(waitUntilNotHittable(element), "\(name) must not take taps beneath a popup", file: file, line: line)
+    }
+  }
+
+  private func expectTappable(_ elements: [String: XCUIElement], file: StaticString = #filePath, line: UInt = #line) {
+    for (name, element) in elements.sorted(by: { $0.key < $1.key }) {
+      XCTAssertTrue(waitUntilHittable(element), "\(name) must take taps", file: file, line: line)
+    }
+  }
+
+  /// Taps where a disabled element is, which an element tap may refuse.
+  private func tapCenter(of element: XCUIElement) {
+    element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+  }
+
+  private func attachScreen(_ name: String) {
+    let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    screenshot.name = name
+    screenshot.lifetime = .keepAlways
+    add(screenshot)
+  }
+
+  /// Element frames in points, one `name x,y,width,height` line each.
+  private func attachFrames(_ name: String, _ elements: [String: XCUIElement]) {
+    let lines = elements.sorted(by: { $0.key < $1.key }).map { id, element in
+      let frame = element.frame
+      return "\(id) \(frame.minX),\(frame.minY),\(frame.width),\(frame.height)"
+    }
+    let frames = XCTAttachment(string: lines.joined(separator: "\n"))
+    frames.name = name
+    frames.lifetime = .keepAlways
+    add(frames)
+  }
+
   private func waitUntilHittable(_ element: XCUIElement, timeout: TimeInterval = 10) -> Bool {
     let hittable = XCTNSPredicateExpectation(
       predicate: NSPredicate(format: "exists == true AND hittable == true"), object: element)

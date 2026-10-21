@@ -12,8 +12,8 @@ import 'native_visibility.dart';
 /// as wide as the space it is given.
 ///
 /// Changes reach the live view one property at a time. Only a user's choice
-/// is reported; a choice the parent does not adopt stays shown until the
-/// selection is next updated.
+/// is reported; a choice the parent does not adopt is reverted on the next
+/// frame, as the tab bar does.
 class NativeSegmentedControl extends StatefulWidget {
   const NativeSegmentedControl({
     super.key,
@@ -101,6 +101,21 @@ class _NativeSegmentedControlState extends State<NativeSegmentedControl> {
     if (index is! int) return;
     _lastSelectedIndex = index;
     widget.onValueChanged(index);
+    // Revert the native selection when the parent did not adopt it. A parent
+    // that rebuilt without adopting it has already reverted it.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          widget.selectedIndex == index ||
+          _lastSelectedIndex != index) {
+        return;
+      }
+      _lastSelectedIndex = widget.selectedIndex;
+      _invoke('setSelectedIndex', {
+        'index': widget.selectedIndex,
+        'animated': true,
+      });
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _created(int id) {

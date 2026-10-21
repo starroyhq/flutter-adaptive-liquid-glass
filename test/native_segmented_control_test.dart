@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart';
+import 'package:flutter_adaptive_liquid_glass/src/fallback_selection_track.dart';
 import 'package:flutter_adaptive_liquid_glass/src/native_segmented_control.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -76,6 +77,11 @@ void main() {
         ),
         (_) {},
       );
+
+  List<Object?> sent(int id, String method) => [
+    for (final call in calls[id]!)
+      if (call.method == method) call.arguments,
+  ];
 
   Widget control({
     int selected = 0,
@@ -156,6 +162,112 @@ void main() {
     expect(calls[id]!.last.arguments, {'enabled': false});
     expect(last, id);
   }, variant: _ios);
+
+  testWidgets('reverts a choice the parent does not adopt', (tester) async {
+    final values = <int>[];
+    await tester.pumpWidget(host(control(onChanged: values.add)));
+    final id = last;
+    calls[id]!.clear();
+    await send('valueChanged', 2);
+    expect(values, [2]);
+    expect(sent(id, 'setSelectedIndex'), isEmpty);
+    await tester.pump();
+    expect(sent(id, 'setSelectedIndex'), [
+      {'index': 0, 'animated': true},
+    ]);
+    await tester.pump();
+    expect(sent(id, 'setSelectedIndex'), hasLength(1));
+    expect(last, id);
+  }, variant: _ios);
+
+  testWidgets('does not send back an adopted choice', (tester) async {
+    var selected = 0;
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) => host(
+          control(
+            selected: selected,
+            onChanged: (value) => setState(() => selected = value),
+          ),
+        ),
+      ),
+    );
+    final id = last;
+    calls[id]!.clear();
+    await send('valueChanged', 2);
+    await tester.pump();
+    await tester.pump();
+    expect(selected, 2);
+    expect(sent(id, 'setSelectedIndex'), isEmpty);
+    expect(last, id);
+  }, variant: _ios);
+
+  testWidgets('reverts a late choice on a disabled control', (tester) async {
+    await tester.pumpWidget(host(control()));
+    final id = last;
+    calls[id]!.clear();
+    await send('valueChanged', 1);
+    await tester.pump();
+    expect(sent(id, 'setSelectedIndex'), [
+      {'index': 0, 'animated': true},
+    ]);
+  }, variant: _ios);
+
+  testWidgets('a parent that rebuilds without adopting reverts once', (
+    tester,
+  ) async {
+    var refusals = 0;
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) =>
+            host(control(onChanged: (_) => setState(() => refusals++))),
+      ),
+    );
+    final id = last;
+    calls[id]!.clear();
+    await send('valueChanged', 1);
+    await tester.pump();
+    await tester.pump();
+    expect(refusals, 1);
+    expect(sent(id, 'setSelectedIndex'), [
+      {'index': 0, 'animated': true},
+    ]);
+  }, variant: _ios);
+
+  testWidgets('the fallback keeps its selection when a choice is not adopted', (
+    tester,
+  ) async {
+    final values = <int>[];
+    await tester.pumpWidget(
+      host(
+        LiquidGlassTheme(
+          data: const LiquidGlassThemeData(mode: LiquidGlassMode.fallback),
+          child: SizedBox(
+            width: 300,
+            child: LiquidGlassSegmentedControl<int>(
+              segments: const [
+                LiquidGlassSegment(value: 0, label: 'One'),
+                LiquidGlassSegment(value: 1, label: 'Two'),
+                LiquidGlassSegment(value: 2, label: 'Three'),
+              ],
+              selected: 0,
+              onChanged: values.add,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Three'));
+    await tester.pumpAndSettle();
+    expect(values, [2]);
+    expect(find.byType(UiKitView), findsNothing);
+    expect(
+      tester
+          .widget<FallbackSelectionTrack>(find.byType(FallbackSelectionTrack))
+          .selectedIndex,
+      0,
+    );
+  });
 
   testWidgets('a control in a popup belongs to that popup', (tester) async {
     await tester.pumpWidget(

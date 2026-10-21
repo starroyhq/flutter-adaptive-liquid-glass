@@ -477,6 +477,94 @@ void main() {
     variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
 
+  testWidgets('a capsule takes the ambient text direction', (tester) async {
+    Widget directed(TextDirection direction) => MaterialApp(
+      home: Directionality(
+        textDirection: direction,
+        child: Scaffold(
+          body: Center(
+            child: NativeCapsule(
+              grouped: true,
+              items: [
+                NativeCapsuleItem(
+                  id: 'one',
+                  label: 'One',
+                  title: 'One',
+                  onPressed: () {},
+                ),
+                NativeCapsuleItem(
+                  id: 'two',
+                  label: 'Two',
+                  title: 'Two',
+                  onPressed: () {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpWidget(directed(TextDirection.rtl));
+    await tester.pumpAndSettle();
+    final rightToLeft = id;
+    expect(params[rightToLeft]!['rtl'], isTrue);
+    // UIKit cannot change a view's direction; a new one is created.
+    await tester.pumpWidget(directed(TextDirection.ltr));
+    await tester.pumpAndSettle();
+    expect(id, isNot(rightToLeft));
+    expect(params[id]!['rtl'], isFalse);
+  });
+
+  testWidgets(
+    'a bitmap glyph that matches text direction is mirrored right to left',
+    (tester) async {
+      Future<Map> created(IconData icon, TextDirection direction) async {
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Directionality(
+              textDirection: direction,
+              child: LiquidGlassTheme(
+                data: const _NativeTheme(),
+                child: Scaffold(
+                  body: Center(
+                    child: LiquidGlassButton.icon(
+                      icon: icon,
+                      semanticLabel: 'Icon',
+                      onPressed: () {},
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        for (
+          var i = 0;
+          i < 50 && find.byType(UiKitView).evaluate().isEmpty;
+          ++i
+        ) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)),
+          );
+          await tester.pump();
+        }
+        expect(find.byType(UiKitView), findsOneWidget);
+        expect(params[id]!['rtl'], direction == TextDirection.rtl);
+        return (params[id]!['items'] as List).single as Map;
+      }
+
+      final back = await created(Icons.arrow_back, TextDirection.rtl);
+      expect(back['png'], isNotNull);
+      expect(back['mirror'], isTrue);
+      final close = await created(Icons.close, TextDirection.rtl);
+      expect(close['mirror'], isFalse);
+      final ltr = await created(Icons.arrow_back, TextDirection.ltr);
+      expect(ltr['mirror'], isFalse);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
   testWidgets('backgrounding cancels native action epoch before resuming', (
     tester,
   ) async {

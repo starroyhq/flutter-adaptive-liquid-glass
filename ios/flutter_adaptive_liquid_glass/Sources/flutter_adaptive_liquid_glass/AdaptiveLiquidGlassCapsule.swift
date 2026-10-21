@@ -29,6 +29,9 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   /// bitmap, constant colors in every state, the window's appearance, and a
   /// fade instead of hiding.
   private let standalone: Bool
+  /// Flutter's text direction, which orders the buttons and places each
+  /// image beside its title, independently of the device language.
+  private let rightToLeft: Bool
   private let fontSize: CGFloat
   /// The colors as Dart last sent them; an update redraws a button only when
   /// they change.
@@ -49,6 +52,7 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   init(frame: CGRect, identifier: Int64, arguments: [String: Any], messenger: FlutterBinaryMessenger, suppression: AdaptiveLiquidGlassSuppression) {
     grouped = arguments["grouped"] as? Bool ?? false
     standalone = arguments["standaloneIcon"] as? Bool ?? false
+    rightToLeft = arguments["rtl"] as? Bool == true
     fontSize = CGFloat((arguments["fontSize"] as? NSNumber)?.doubleValue ?? 17)
     foregroundValue = arguments["foreground"] as? NSNumber
     tintValue = arguments["tint"] as? NSNumber
@@ -88,6 +92,10 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     }
     suppressionObserver = suppression.observe { [weak self] in self?.updateVisibility() }
     updateVisibility()
+    let direction: UISemanticContentAttribute = rightToLeft ? .forceRightToLeft : .forceLeftToRight
+    container.semanticContentAttribute = direction
+    container.contentView.semanticContentAttribute = direction
+    stack.semanticContentAttribute = direction
     stack.axis = .horizontal
     stack.alignment = .fill
     stack.distribution = .fill
@@ -121,6 +129,7 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       }
       contents.append(content)
       iconColorValues.append(iconColorValue)
+      button.semanticContentAttribute = direction
       button.actionId = id
       button.tapEnabled = item["tapEnabled"] as? Bool ?? (item["enabled"] as? Bool ?? false)
       button.longPressEnabled = item["longPressEnabled"] as? Bool ?? false
@@ -217,7 +226,8 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
         // UIKit centres a symbol's typographic box, which leaves the ink of
         // a glyph such as a trash can off centre; the SwiftUI button this
         // replaces centred the ink.
-        image = Self.centringInk(of: symbolImage, in: 48).withRenderingMode(.alwaysTemplate)
+        image = Self.centringInk(of: symbolImage, in: 48, rightToLeft: rightToLeft)
+          .withRenderingMode(.alwaysTemplate)
       }
     } else if standalone, let png = item["png"] as? FlutterStandardTypedData,
               let bitmap = UIImage(data: png.data) {
@@ -231,6 +241,11 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       image = UIGraphicsImageRenderer(size: size).image { _ in
         bitmap.draw(in: CGRect(origin: .zero, size: size))
       }
+    }
+    if symbolConfiguration == nil, item["mirror"] as? Bool == true, let drawn = image {
+      // Flutter draws every glyph left to right; one that follows the text
+      // direction, such as a back arrow, is mirrored here.
+      image = Self.mirrored(drawn)
     }
     return AdaptiveGlassCapsuleContent(
       title: title, detail: item["detail"] as? String,
@@ -404,9 +419,22 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     }
   }
 
+  /// Draws [image] mirrored left to right, at its own size and scale.
+  private static func mirrored(_ image: UIImage) -> UIImage {
+    let renderer = UIGraphicsImageRenderer(size: image.size, format: image.imageRendererFormat)
+    return renderer.image { context in
+      context.cgContext.translateBy(x: image.size.width, y: 0)
+      context.cgContext.scaleBy(x: -1, y: 1)
+      image.draw(in: CGRect(origin: .zero, size: image.size))
+    }
+  }
+
   /// Draws a symbol into a square of [side] points with its ink centred, on
-  /// whole device pixels and rounding half a pixel right and down.
-  private static func centringInk(of symbol: UIImage, in side: CGFloat) -> UIImage {
+  /// whole device pixels and rounding half a pixel right and down. A symbol
+  /// that flips for right-to-left layouts is mirrored when [rightToLeft]; the
+  /// bitmap no longer flips with the device language.
+  private static func centringInk(of symbol: UIImage, in side: CGFloat,
+                                  rightToLeft: Bool) -> UIImage {
     let format = UIGraphicsImageRendererFormat.preferred()
     // An 8-bit bitmap, so that its alpha can be read; only alpha is used.
     format.preferredRange = .standard
@@ -425,8 +453,7 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     let centred = renderer.image { _ in
       symbol.draw(at: CGPoint(x: origin.x + dx / scale, y: origin.y + dy / scale))
     }
-    return symbol.flipsForRightToLeftLayoutDirection
-      ? centred.imageFlippedForRightToLeftLayoutDirection() : centred
+    return rightToLeft && symbol.flipsForRightToLeftLayoutDirection ? mirrored(centred) : centred
   }
 
   /// The pixel rectangle of a bitmap whose alpha is at least [threshold].

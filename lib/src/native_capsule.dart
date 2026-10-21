@@ -305,8 +305,12 @@ class _NativeCapsuleState extends State<NativeCapsule>
         fontSize = MediaQuery.textScalerOf(context).scale(17);
     final colors = theme.colorScheme;
     final glassColors = LiquidGlassTheme.of(context).colors;
+    // UIKit lays out the actions, and each icon beside its title, in this
+    // direction rather than the device language's.
+    final rtl = Directionality.of(context) == TextDirection.rtl;
     final params = <String, Object?>{
       'dark': theme.brightness == Brightness.dark,
+      'rtl': rtl,
       'grouped': widget.grouped,
       'standaloneIcon': widget.standaloneIcon,
       'foreground':
@@ -333,6 +337,9 @@ class _NativeCapsuleState extends State<NativeCapsule>
             'iconSize': widget.items[i].iconSize,
             'menuIndicator': widget.items[i].menuIndicator,
             'png': _icons[i],
+            // Flutter draws the glyph left to right; the native view mirrors it.
+            'mirror':
+                rtl && (widget.items[i].icon?.matchTextDirection ?? false),
             'enabled':
                 widget.items[i].onPressed != null ||
                 widget.items[i].onLongPress != null,
@@ -374,6 +381,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
     };
     final signature = Object.hash(
       theme.brightness,
+      rtl,
       fontSize,
       widget.grouped,
       inPlace ? null : widget.prominent,

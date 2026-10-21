@@ -11,18 +11,53 @@
   as the space it is given without the previous 32-point widening.
 - A native icon-only `LiquidGlassButton(...)` without a long press now applies
   its `iconColor`, `iconSize` and `menuIndicator`, as the fallback already did.
-- Like a text button, a native icon-only button without a long press now gets a
-  new native view when it is enabled or disabled, or when its emphasis or
-  colors change; 0.5.2 updated that view in place.
+- A native button outside a button group updates its native view in place when
+  it is enabled or disabled or its emphasis or colors change, as an icon-only
+  button without a long press did in 0.5.2. Text buttons and icon-only buttons
+  with a long press got a new native view for these changes before. A new
+  title, icon, size, long-press action or text direction still creates a new
+  view.
+- An icon-only native button with a long press now looks like one without: a
+  semibold symbol centred on its ink, or the trimmed Material glyph, in colors
+  that do not change when pressed or disabled. Before, a long press gave it the
+  capsule's regular-weight symbol. This includes the default trigger of an
+  icon-only `LiquidGlassMenuButton`, which opens on a long press by default.
 - Apps that also depend on `native_liquid_glass` no longer share its platform
   views or its `liquid-glass-lifecycle` channel with this package, so neither
   hides the other's native views.
 - A native icon-only button without a long press now uses its `id` as the
   native accessibility identifier (`button` by default) and its `semanticLabel`
   as the native accessibility label.
-- An enabled fallback control shows the click cursor and a light highlight
-  under a mouse pointer. Before, it showed the click cursor only on the web and
-  no hover highlight.
+- A fallback control shows a light highlight under a hovering mouse pointer.
+  Its mouse cursor stays Flutter's default: the click cursor on the web and the
+  basic arrow elsewhere.
+- The native `LiquidGlassSegmentedControl` returns to its selected segment on
+  the next frame when the parent does not adopt a choice, as the tab bar
+  already did; so does a disabled one that still reports a choice. Before, a
+  refused choice could stay shown.
+- On iOS 26 a tab icon without an `sfSymbol` is drawn at the screen's pixel
+  ratio and at about the size of the bar's symbols. Before, its bitmap was
+  shown at a scale of 1 and covered the selected tab's capsule.
+- Native buttons, button groups, toolbars, action bars and the navigation
+  bar's capsules follow Flutter's `Directionality` instead of the device
+  language. Right to left, a button's icon is to the right of its title, a
+  group's first action is on the right, and an `IconData` with
+  `matchTextDirection` is mirrored, as is a standalone icon's SF Symbol that
+  flips for right-to-left layouts.
+- On iOS 26 the native tab bar's `UITabBarController` becomes a child of the
+  view controller that shows the bar, found through the responder chain once
+  the bar is in a window. Before, the plugin used the view controller its
+  registrar returned at registration, which can still be nil when an implicit
+  engine registers plugins under the UIScene life cycle; the tab bar controller
+  then had no parent.
+- With `native_liquid_glass` removed, the iOS home indicator follows the
+  system default, so it can now appear where it stayed hidden before. This
+  package does not control the home indicator. An app that wants iOS to hide
+  it automatically can call
+  `SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: [SystemUiOverlay.top])`:
+  in Flutter 3.41 this makes `FlutterViewController` prefer an auto-hidden home
+  indicator and keeps the status bar. On Android the same call also hides the
+  navigation bar.
 - `LiquidGlassTheme.maybeOf` returns null when there is no `LiquidGlassTheme`
   above the context.
 - `showLiquidGlassPopover` accepts a `barrierColor`; the default scrim stays 8%

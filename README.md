@@ -219,11 +219,14 @@ and native title measurement own their layout, replacing the earlier SwiftUI
 path that compressed Chinese titles even with an explicit platform-view width.
 The Flutter estimate prevents first-frame collapse; UIKit's intrinsic content
 width can enlarge it, never shrink it. Icon-only buttons use the same capsule
-bridge. One without a long-press action keeps its standalone look: a semibold
+bridge in a standalone look, with or without a long-press action: a semibold
 symbol, or the Material glyph trimmed to the icon size, in colors that do not
-change when pressed or disabled. Its `id` is the native accessibility identifier
-and its `semanticLabel` the native label. Every path retains native materials
-and app appearance.
+change when pressed or disabled. Their `id` is the native accessibility
+identifier and their `semanticLabel` the native label. A button outside a group
+keeps its native view when it is enabled or disabled or its emphasis or colors
+change; a new title, icon or long-press action creates a new one. Native
+capsules follow the ambient `Directionality`, not the device language. Every
+path retains native materials and app appearance.
 
 ## Component catalog
 
@@ -813,11 +816,9 @@ controls in profile mode on a device.
   sliders, switches and steppers stay native at every text size.
 - iPad, landscape and Split View have not been validated. The tab bar has no
   sidebar form, and sheets are at most 640 points wide.
-- On iOS 26 a tab icon without an `sfSymbol` is drawn from its `IconData` as a
-  bitmap and looks larger than a symbol, and the tab bar is empty for its first
-  frame while icons are prepared. The native segmented control keeps showing a
-  choice the parent does not adopt until its selection next changes; the tab bar
-  reverts it.
+- On iOS 26 the tab bar is empty for its first frame while its icons are
+  prepared. The native tab bar and segmented control follow the device
+  language's direction rather than Flutter's `Directionality`.
 - `liquidGlassNativeAvailable` reads only the iOS major version and ignores
   `UIDesignRequiresCompatibility`. Custom `OverlayEntry` presentations do not
   hide native views (see [Native rendering and overlays](#native-rendering-and-overlays)).

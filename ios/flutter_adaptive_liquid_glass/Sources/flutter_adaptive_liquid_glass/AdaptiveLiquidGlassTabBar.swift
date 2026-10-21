@@ -4,14 +4,12 @@ import UIKit
 
 final class AdaptiveLiquidGlassTabBarFactory: NSObject, FlutterPlatformViewFactory {
   private let messenger: FlutterBinaryMessenger
-  private weak var hostViewController: UIViewController?
   private let suppression = AdaptiveLiquidGlassSuppression()
 
-  /// The system tab bar controller becomes a child of the Flutter view
-  /// controller that the plugin registrar reported at registration.
-  init(messenger: FlutterBinaryMessenger, hostViewController: UIViewController?) {
+  /// The system tab bar controller becomes a child of the view controller
+  /// that shows the bar, found once the bar is in a window.
+  init(messenger: FlutterBinaryMessenger) {
     self.messenger = messenger
-    self.hostViewController = hostViewController
   }
 
   func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol {
@@ -22,7 +20,7 @@ final class AdaptiveLiquidGlassTabBarFactory: NSObject, FlutterPlatformViewFacto
               arguments args: Any?) -> FlutterPlatformView {
     AdaptiveLiquidGlassTabBar(frame: frame, id: viewId,
       arguments: args as? [String: Any] ?? [:], messenger: messenger,
-      hostViewController: hostViewController, suppression: suppression)
+      suppression: suppression)
   }
 }
 
@@ -38,7 +36,7 @@ private final class AdaptiveLiquidGlassTabBar: NSObject, FlutterPlatformView {
   private var fade: AdaptiveLiquidGlassFade?
 
   init(frame: CGRect, id: Int64, arguments: [String: Any], messenger: FlutterBinaryMessenger,
-       hostViewController: UIViewController?, suppression: AdaptiveLiquidGlassSuppression) {
+       suppression: AdaptiveLiquidGlassSuppression) {
     container = UIView(frame: frame)
     channel = FlutterMethodChannel(
       name: "flutter_adaptive_liquid_glass/tab-bar/\(id)", binaryMessenger: messenger)
@@ -58,7 +56,6 @@ private final class AdaptiveLiquidGlassTabBar: NSObject, FlutterPlatformView {
           self?.channel.invokeMethod("actionPressed", arguments: nil)
         })
       nativeView.translatesAutoresizingMaskIntoConstraints = false
-      nativeView.attach(to: hostViewController)
       container.addSubview(nativeView)
       // The top band stays empty so the glass can extend into it, unclipped,
       // without leaving the frame Flutter composites.
@@ -107,7 +104,14 @@ private final class AdaptiveLiquidGlassTabBar: NSObject, FlutterPlatformView {
 
   func view() -> UIView { container }
 
-  deinit { channel.setMethodCallHandler(nil) }
+  deinit {
+    channel.setMethodCallHandler(nil)
+    // Flutter disposed the platform view: the tab bar controller leaves its
+    // parent now rather than when its view is released.
+    if #available(iOS 26.0, *) {
+      (controllerView as? AdaptiveTabBarControllerView)?.detachFromHost()
+    }
+  }
 }
 
 /// A tab or the trailing action, as sent by Dart.
@@ -229,15 +233,36 @@ private final class AdaptiveTabBarControllerView: UIView, UITabBarControllerDele
     overrideUserInterfaceStyle = configuration.userInterfaceStyle
   }
 
+  override func willMove(toWindow newWindow: UIWindow?) {
+    super.willMove(toWindow: newWindow)
+    // Join the host before appearing when the responder chain already
+    // reaches it; otherwise didMoveToWindow does.
+    if newWindow != nil { attach(to: hostViewController()) }
+  }
+
   override func didMoveToWindow() {
     super.didMoveToWindow()
     guard window != nil else { return }
+    attach(to: hostViewController())
     // A reattached bar can fall back to the appearance's baked-in colors.
     applyUserInterfaceStyle()
     applySelectedTintColor()
   }
 
-  /// UIKit requires controller containment for an embedded controller.
+  /// The view controller whose view shows the bar: the Flutter view
+  /// controller, found through the responder chain under the app delegate
+  /// and the scene life cycle alike, whenever the plugin was registered.
+  private func hostViewController() -> UIViewController? {
+    var responder = next
+    while let current = responder {
+      if let controller = current as? UIViewController { return controller }
+      responder = current.next
+    }
+    return nil
+  }
+
+  /// UIKit requires controller containment for an embedded controller. The
+  /// bar keeps its parent while it is out of a window, as under a popup.
   func attach(to parent: UIViewController?) {
     guard let parent, tabBarController.parent !== parent else { return }
     if tabBarController.parent != nil {
@@ -250,12 +275,14 @@ private final class AdaptiveTabBarControllerView: UIView, UITabBarControllerDele
     applySelectedTintColor()
   }
 
-  deinit {
-    if tabBarController.parent != nil {
-      tabBarController.willMove(toParent: nil)
-      tabBarController.removeFromParent()
-    }
+  /// Ends the containment, when the platform view is disposed.
+  func detachFromHost() {
+    guard tabBarController.parent != nil else { return }
+    tabBarController.willMove(toParent: nil)
+    tabBarController.removeFromParent()
   }
+
+  deinit { detachFromHost() }
 
   private func configureTabBarController() {
     tabBarController.view.backgroundColor = .clear

@@ -38,10 +38,10 @@ public final class FlutterAdaptiveLiquidGlassPlugin: NSObject, FlutterPlugin {
     registrar.register(AdaptiveLiquidGlassValueControlFactory(messenger: registrar.messenger()), withId: "flutter_adaptive_liquid_glass/value-control")
     registrar.register(AdaptiveLiquidGlassPickerFactory(messenger: registrar.messenger(), kind: .date), withId: "flutter_adaptive_liquid_glass/date_picker")
     registrar.register(AdaptiveLiquidGlassPickerFactory(messenger: registrar.messenger(), kind: .color), withId: "flutter_adaptive_liquid_glass/color_picker")
-    // The tab bar's controller is a child of the view controller known now.
+    // The tab bar finds the view controller that shows it once it is in a
+    // window; an implicit engine registers plugins before it has one.
     registrar.register(
-      AdaptiveLiquidGlassTabBarFactory(
-        messenger: registrar.messenger(), hostViewController: registrar.viewController),
+      AdaptiveLiquidGlassTabBarFactory(messenger: registrar.messenger()),
       withId: "flutter_adaptive_liquid_glass/tab-bar")
     registrar.register(AdaptiveLiquidGlassSegmentedControlFactory(messenger: registrar.messenger()), withId: "flutter_adaptive_liquid_glass/segmented-control")
   }

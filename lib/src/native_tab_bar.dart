@@ -14,8 +14,11 @@ import 'native_visibility.dart';
 ///
 /// The view appears once the bitmaps of [NativeTabItem.icon] tabs are drawn.
 /// Badge and selection changes reach the live view; changes to the tabs, the
-/// selected color or the brightness recreate it. Only user selection is
-/// reported, and a selection the parent does not adopt is reverted.
+/// selected color, the brightness or the text direction recreate it. The
+/// tabs follow Flutter's text direction rather than the device language: in
+/// a right-to-left context the first tab is at the right. Only user
+/// selection is reported, and a selection the parent does not adopt is
+/// reverted.
 class NativeTabBar extends StatefulWidget {
   const NativeTabBar({
     super.key,
@@ -228,6 +231,7 @@ class _NativeTabBarState extends State<NativeTabBar> {
       return const SizedBox();
     }
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final rtl = Directionality.of(context) == TextDirection.rtl;
     return SizedBox(
       width: constraints.hasBoundedWidth
           ? constraints.maxWidth
@@ -235,7 +239,7 @@ class _NativeTabBarState extends State<NativeTabBar> {
       height: NativeTabBar.height + NativeTabBar.glassOverflow,
       child: UiKitView(
         key: ValueKey(
-          Object.hash(_payloadVersion, widget.selectedItemColor, dark),
+          Object.hash(_payloadVersion, widget.selectedItemColor, dark, rtl),
         ),
         viewType: NativeTabBar.viewType,
         creationParams: {
@@ -251,6 +255,7 @@ class _NativeTabBarState extends State<NativeTabBar> {
           'currentIndex': widget.currentIndex,
           'selectedItemColor': widget.selectedItemColor.toARGB32(),
           'brightness': dark ? 'dark' : 'light',
+          'rtl': rtl,
           'glassOverflow': NativeTabBar.glassOverflow,
           'suppressed': route.suppressed,
           'popupOwner': route.popupOwner,

@@ -288,4 +288,24 @@ void main() {
     expect(views[last]!['popupOwner'], isTrue);
     expect(views[last]!['suppressed'], isFalse);
   }, variant: _ios);
+  testWidgets('the control follows the ambient text direction', (tester) async {
+    Widget directed(TextDirection direction, int selected) => host(
+      Directionality(
+        textDirection: direction,
+        child: control(selected: selected, onChanged: (_) {}),
+      ),
+    );
+    await tester.pumpWidget(directed(TextDirection.ltr, 0));
+    final ltr = last;
+    expect(views[ltr]!['rtl'], isFalse);
+    // A new direction recreates the control with the current selection.
+    await tester.pumpWidget(directed(TextDirection.rtl, 2));
+    expect(last, isNot(ltr));
+    expect(views[last]!['rtl'], isTrue);
+    expect(views[last]!['selectedIndex'], 2);
+    await tester.pumpWidget(directed(TextDirection.rtl, 1));
+    expect(sent(last, 'setSelectedIndex'), [
+      {'index': 1, 'animated': true},
+    ]);
+  }, variant: _ios);
 }

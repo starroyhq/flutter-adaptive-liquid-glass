@@ -95,6 +95,11 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     let direction: UISemanticContentAttribute = rightToLeft ? .forceRightToLeft : .forceLeftToRight
     container.semanticContentAttribute = direction
     container.contentView.semanticContentAttribute = direction
+    if #available(iOS 17.0, *) {
+      // Buttons resolve a symbol with a right-to-left variant, such as
+      // arrow.backward, in this direction too.
+      container.traitOverrides.layoutDirection = rightToLeft ? .rightToLeft : .leftToRight
+    }
     stack.semanticContentAttribute = direction
     stack.axis = .horizontal
     stack.alignment = .fill
@@ -184,7 +189,8 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
         self.updateVisibility()
         result(nil)
       case "update":
-        // A lone button's enabled state and colors, applied to this view.
+        // Each action's enabled state and the colors, applied to this view
+        // item by item; the actions themselves are unchanged.
         let state = call.arguments as? [String: Any] ?? [:]
         let epoch = state["epoch"] as? Int ?? self.interactionEpoch
         if epoch != self.interactionEpoch { self.cancelInteractions() }
@@ -221,7 +227,14 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
         : UIImage.SymbolConfiguration(
             pointSize: iconSize * Self.symbolScale, weight: .regular, scale: .medium)
       symbolConfiguration = configuration
-      image = UIImage(systemName: symbol, withConfiguration: configuration)
+      // A semantic symbol such as arrow.backward or chevron.forward has a
+      // variant for each layout direction, chosen by this trait rather than
+      // by the semantic content attribute. Explicit and symmetric symbols,
+      // such as arrow.left or star, are the same in both.
+      let layoutDirection = UITraitCollection(
+        layoutDirection: rightToLeft ? .rightToLeft : .leftToRight)
+      image = UIImage(systemName: symbol,
+                      withConfiguration: configuration.withTraitCollection(layoutDirection))
       if standalone, let symbolImage = image {
         // UIKit centres a symbol's typographic box, which leaves the ink of
         // a glyph such as a trash can off centre; the SwiftUI button this

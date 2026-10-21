@@ -11,9 +11,11 @@ import 'native_visibility.dart';
 /// The system segmented control on iOS 26+: a `UISegmentedControl` exactly
 /// as wide as the space it is given.
 ///
-/// Changes reach the live view one property at a time. Only a user's choice
-/// is reported; a choice the parent does not adopt is reverted on the next
-/// frame, as the tab bar does.
+/// Changes reach the live view one property at a time; a new text direction
+/// recreates it. The segments follow Flutter's text direction rather than the
+/// device language: in a right-to-left context the first is at the right.
+/// Only a user's choice is reported; a choice the parent does not adopt is
+/// reverted on the next frame, as the tab bar does.
 class NativeSegmentedControl extends StatefulWidget {
   const NativeSegmentedControl({
     super.key,
@@ -47,9 +49,11 @@ class _NativeSegmentedControlState extends State<NativeSegmentedControl> {
   int? _lastColor;
   ({bool suppressed, bool popupOwner})? _routeState;
 
-  /// What the platform view was created with, from its first build.
+  /// What the platform view was created with, from its first build in its
+  /// text direction.
   ({List<String> labels, int selectedIndex, bool enabled, int? color})?
   _creation;
+  bool? _rtl;
 
   @override
   void didUpdateWidget(NativeSegmentedControl oldWidget) {
@@ -159,6 +163,12 @@ class _NativeSegmentedControlState extends State<NativeSegmentedControl> {
       _syncRoute();
       final route = _routeState!;
       final color = widget.color?.toARGB32();
+      final rtl = Directionality.of(context) == TextDirection.rtl;
+      if (_rtl != rtl) {
+        // A new view is created in the new direction, with today's state.
+        _rtl = rtl;
+        _creation = null;
+      }
       _creation ??= (
         labels: widget.labels,
         selectedIndex: widget.selectedIndex,
@@ -168,12 +178,14 @@ class _NativeSegmentedControlState extends State<NativeSegmentedControl> {
       return SizedBox(
         height: NativeSegmentedControl.height,
         child: UiKitView(
+          key: ValueKey(rtl),
           viewType: NativeSegmentedControl.viewType,
           creationParams: {
             'labels': widget.labels,
             'selectedIndex': widget.selectedIndex,
             'enabled': widget.enabled,
             'color': color,
+            'rtl': rtl,
             'suppressed': route.suppressed,
             'popupOwner': route.popupOwner,
           },

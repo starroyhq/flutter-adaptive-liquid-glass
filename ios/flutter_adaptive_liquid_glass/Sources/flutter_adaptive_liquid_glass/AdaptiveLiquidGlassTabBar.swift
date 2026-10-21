@@ -152,6 +152,8 @@ private struct AdaptiveTabBarConfiguration {
   let selectedItemColor: UIColor?
   /// Mirrors the Flutter theme's brightness, independent of the device.
   let userInterfaceStyle: UIUserInterfaceStyle
+  /// Flutter's text direction, independent of the device language.
+  let rightToLeft: Bool
   let glassOverflow: CGFloat
 
   init(_ arguments: [String: Any]) {
@@ -167,6 +169,7 @@ private struct AdaptiveTabBarConfiguration {
     default: userInterfaceStyle = .unspecified
     }
     glassOverflow = max(0, CGFloat((arguments["glassOverflow"] as? NSNumber)?.doubleValue ?? 0))
+    rightToLeft = arguments["rtl"] as? Bool == true
   }
 
   private static func color(_ value: Any?) -> UIColor? {
@@ -211,6 +214,7 @@ private final class AdaptiveTabBarControllerView: UIView, UITabBarControllerDele
     layer.isOpaque = false
     configureTabBarController()
     applyUserInterfaceStyle()
+    applyLayoutDirection()
     registerForTraitChanges(Self.refreshingTraits) { (view: AdaptiveTabBarControllerView, _: UITraitCollection) in
       view.refreshTabBarVisuals()
     }
@@ -231,6 +235,19 @@ private final class AdaptiveTabBarControllerView: UIView, UITabBarControllerDele
   private func applyUserInterfaceStyle() {
     tabBarController.overrideUserInterfaceStyle = configuration.userInterfaceStyle
     overrideUserInterfaceStyle = configuration.userInterfaceStyle
+  }
+
+  /// Orders the tabs in Flutter's text direction: the first tab is at the
+  /// right in right to left, and the action at the left. Symbols with a
+  /// right-to-left variant resolve against the same direction.
+  private func applyLayoutDirection() {
+    let attribute: UISemanticContentAttribute =
+      configuration.rightToLeft ? .forceRightToLeft : .forceLeftToRight
+    semanticContentAttribute = attribute
+    tabBarController.view.semanticContentAttribute = attribute
+    tabBarController.tabBar.semanticContentAttribute = attribute
+    tabBarController.traitOverrides.layoutDirection =
+      configuration.rightToLeft ? .rightToLeft : .leftToRight
   }
 
   override func willMove(toWindow newWindow: UIWindow?) {

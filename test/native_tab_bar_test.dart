@@ -99,16 +99,20 @@ void main() {
     ValueChanged<int>? onSelected,
     List<LiquidGlassTabItem> items = _items,
     LiquidGlassAction? action,
+    TextDirection direction = TextDirection.ltr,
   }) => MaterialApp(
     home: LiquidGlassTheme(
       data: const _NativeTheme(),
       child: Scaffold(
         body: const SizedBox.expand(),
-        bottomNavigationBar: LiquidGlassTabBar(
-          items: items,
-          selectedIndex: selected,
-          onSelected: onSelected ?? (_) {},
-          trailingAction: action,
+        bottomNavigationBar: Directionality(
+          textDirection: direction,
+          child: LiquidGlassTabBar(
+            items: items,
+            selectedIndex: selected,
+            onSelected: onSelected ?? (_) {},
+            trailingAction: action,
+          ),
         ),
       ),
     ),
@@ -299,5 +303,19 @@ void main() {
     // A symbol tab needs neither.
     final symbolTab = (views[last]!['tabs'] as List)[0] as Map;
     expect(symbolTab.containsKey('scale'), isFalse);
+  }, variant: _ios);
+  testWidgets('the bar follows the ambient text direction', (tester) async {
+    Widget directed(TextDirection direction) =>
+        host(selected: 1, direction: direction);
+    await tester.pumpWidget(directed(TextDirection.ltr));
+    await tester.pump();
+    final ltr = last;
+    expect(views[ltr]!['rtl'], isFalse);
+    // A new direction recreates the bar, still selecting by logical index.
+    await tester.pumpWidget(directed(TextDirection.rtl));
+    await tester.pump();
+    expect(last, isNot(ltr));
+    expect(views[last]!['rtl'], isTrue);
+    expect(views[last]!['currentIndex'], 1);
   }, variant: _ios);
 }

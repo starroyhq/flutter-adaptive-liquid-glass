@@ -44,6 +44,13 @@ private final class AdaptiveLiquidGlassSegmentedControl: NSObject, FlutterPlatfo
     // whatever UIKit derives from it.
     control.tintColor = Self.color(arguments["color"])
     control.addTarget(self, action: #selector(valueChanged), for: .valueChanged)
+    // Flutter's text direction orders the segments, independently of the
+    // device language: the first segment is at the right in right to left.
+    let rightToLeft = arguments["rtl"] as? Bool == true
+    control.semanticContentAttribute = rightToLeft ? .forceRightToLeft : .forceLeftToRight
+    if #available(iOS 17.0, *) {
+      container.traitOverrides.layoutDirection = rightToLeft ? .rightToLeft : .leftToRight
+    }
     container.addSubview(control)
     NSLayoutConstraint.activate([
       control.leadingAnchor.constraint(equalTo: container.leadingAnchor),

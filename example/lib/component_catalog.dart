@@ -5,6 +5,7 @@ import 'catalog_popups.dart';
 import 'native_accessibility_example.dart';
 import 'native_controls_probe.dart';
 import 'native_layout_probe.dart';
+import 'native_rtl_probe.dart';
 
 /// Independent synthetic data only. No account, network or application services.
 class ComponentCatalogApp extends StatefulWidget {
@@ -149,6 +150,14 @@ class _ComponentCatalogAppState extends State<ComponentCatalogApp> {
                 ),
               ),
               child: const Text('Open native layout probe'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const NativeRtlProbePage(),
+                ),
+              ),
+              child: const Text('Open native RTL probe'),
             ),
           ],
           const SizedBox(height: 32),

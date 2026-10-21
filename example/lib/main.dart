@@ -5,6 +5,7 @@ import 'native_modal_example.dart';
 import 'component_catalog.dart';
 import 'native_controls_probe.dart';
 import 'native_layout_probe.dart';
+import 'native_rtl_probe.dart';
 import 'new_controls_example.dart';
 
 void main() => runApp(
@@ -12,6 +13,8 @@ void main() => runApp(
       ? const NativeControlsProbeApp()
       : const bool.fromEnvironment('GLASS_NATIVE_LAYOUT_PROBE')
       ? const NativeLayoutProbeApp()
+      : const bool.fromEnvironment('GLASS_NATIVE_RTL_PROBE')
+      ? const NativeRtlProbeApp()
       : const bool.fromEnvironment('GLASS_NEW_CONTROLS')
       ? const NewControlsExample()
       : const bool.fromEnvironment('GLASS_MODAL_PROBE')

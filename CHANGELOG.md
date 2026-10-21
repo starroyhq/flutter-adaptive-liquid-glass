@@ -1,4 +1,4 @@
-## Unreleased
+## 0.6.0
 
 - The package no longer depends on `native_liquid_glass`, and so no longer
   brings its pods and packages (SVGKit, CocoaLumberjack, `flutter_svg`,

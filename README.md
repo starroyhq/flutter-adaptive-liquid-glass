@@ -9,6 +9,15 @@ imports use `flutter_adaptive_liquid_glass`, following Dart's
 [package naming rules](https://dart.dev/tools/pub/pubspec#name); hyphens are not
 valid in a pubspec package name.
 
+Version **0.6.0** drops the `native_liquid_glass` dependency, so the Flutter SDK
+is the only production dependency, and supports Swift Package Manager as well as
+CocoaPods. The native tab bar, segmented control and icon-only buttons are now
+package-owned UIKit bridges; native controls update in place, follow Flutter's
+`Directionality` and fix several look and behaviour issues. It adds
+`LiquidGlassTheme.maybeOf`, a popover `barrierColor` and replaceable color-sheet
+text. See the [0.6.0 release notes](doc/release-0.6.0.md) and the
+[upgrade notes](#upgrading-from-05x).
+
 The **0.5.2** patch sizes native SF Symbols like the fallback's Material
 icons, keeps a covered sheet's material under an alert, lets the native
 segmented control span its width and draws fallback thumbs white. See the
@@ -57,7 +66,7 @@ Fallback color wells also expose semantic activation. See its
 **Known validation limit:** some hosted iOS 26.5 runs fail to display the system
 color palette after its first real tap. A standalone UIKit app reproduces the
 failure both with and without a Simulator window. The cause is unresolved;
-0.5.2 does not claim to fix that first-use failure or prove hardware is unaffected.
+0.6.0 does not claim to fix that first-use failure or prove hardware is unaffected.
 The 0.3.0 selected native run passed 9/10 cases and reproduced this failure;
 publication explicitly accepts that known limitation. See the
 [0.3.0 release decision](doc/release-0.3.0.md#validation-and-accepted-release-limitation).
@@ -76,7 +85,7 @@ Or add the version to your app's `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_adaptive_liquid_glass: ^0.5.2
+  flutter_adaptive_liquid_glass: ^0.6.0
 ```
 
 Requires Flutter 3.41.2 or later and Dart 3.11 or later. Supported platforms are
@@ -95,25 +104,40 @@ bridge. It does not require a global toolchain upgrade.
 
 ### Upgrading from 0.5.x
 
-`^0.5.0` already allows 0.5.2: run `flutter pub upgrade
-flutter_adaptive_liquid_glass` and rebuild the native app. Raise the constraint to
-`^0.5.1` when the app uses `showLabel`. 0.5.2 changes no API; on iOS 26 native
-symbols become smaller and the segmented control wider, and in the fallback the
-slider and switch thumbs are white in a dark theme. Pass `iconSize` where a
-symbol must keep a particular size.
+Change the constraint to `^0.6.0`; in a 0.x version `^0.5.x` does not select
+0.6.0 automatically. Run `flutter pub get`, then perform a full native rebuild so
+the removed `native_liquid_glass` pods and packages leave the app. With Swift
+Package Manager, set the app's iOS Deployment Target to 16.0 or later. The
+existing APIs remain available. Visible changes that need no code:
+
+- A tab icon given only as `IconData` is drawn at the bar's symbol size and the
+  screen's pixel ratio instead of covering the selected tab.
+- An icon-only native button with a long press, including the default trigger
+  of an icon-only `LiquidGlassMenuButton`, looks like one without.
+- Native buttons, groups, the tab bar and the segmented control follow Flutter's
+  `Directionality` instead of the device language.
+- A navigation bar with a disabled action keeps the system navigation bar.
+- The iOS home indicator follows the system default and can appear where it
+  stayed hidden before; see the [0.6.0 release notes](doc/release-0.6.0.md).
+
+The `disableAnimations` argument of `LiquidGlassThemeData.resolve` is deprecated;
+it never affected the result. From 0.5.0 or 0.5.1, note also that 0.5.2 made
+native symbols smaller and the segmented control wider, and fallback slider and
+switch thumbs white in a dark theme; pass `iconSize` where a symbol must keep a
+particular size.
 
 ### Upgrading from 0.4.x
 
-Change the constraint to `^0.5.2`, run `flutter pub get`, and rebuild the native
-app. The existing APIs remain available and every new parameter is optional. Two
+Change the constraint to `^0.6.0`, run `flutter pub get`, and rebuild the native
+app, reading the 0.5.x notes above as well. The existing APIs remain available and every new parameter is optional. Two
 visible changes need no code: a native capsule title that does not fit ends with
 an ellipsis instead of being clipped, and in a dark theme alerts and sheets dim
 the page with 48% black instead of 20%; pass `barrierColor` to keep the old scrim.
 
 ### Upgrading from 0.3.x
 
-Change the constraint to `^0.5.2`, run `flutter pub get`, and rebuild the native
-app, reading the 0.4.x notes above as well. The existing APIs remain available; sheet `fitContent`, `LiquidGlassActionBar`
+Change the constraint to `^0.6.0`, run `flutter pub get`, and rebuild the native
+app, reading the 0.5.x and 0.4.x notes above as well. The existing APIs remain available; sheet `fitContent`, `LiquidGlassActionBar`
 and `LiquidGlassButton.id` are new and optional. Two visible changes need no code:
 the native `LiquidGlassSurface` material is now a package-owned UIKit view with
 the same radius, tint and fill, and a disabled `prominent` button is drawn like
@@ -122,8 +146,8 @@ the accessibility identifier `button` unless an `id` is given.
 
 ### Upgrading from 0.2.x
 
-Change the constraint to `^0.5.2`, run `flutter pub get`, and rebuild the native
-app, reading the 0.4.x and 0.3.x notes above as well. The existing APIs and defaults remain
+Change the constraint to `^0.6.0`, run `flutter pub get`, and rebuild the native
+app, reading the 0.5.x, 0.4.x and 0.3.x notes above as well. The existing APIs and defaults remain
 available; `fitContent` is opt-in.
 Two-action alerts now use a horizontal row when text size permits, and action
 sheets keep cancel actions in a separate group. Native action sheets retain
@@ -131,7 +155,7 @@ fading and subtle scaling without sliding; Flutter fallbacks continue to slide.
 
 ### Upgrading from 0.1.1
 
-Change `^0.1.1` to `^0.5.2`, run `flutter pub get`, then perform a full native
+Change `^0.1.1` to `^0.6.0`, run `flutter pub get`, then perform a full native
 rebuild. Dart's `^0.1.1` constraint does not select later minor versions automatically.
 Keep the existing `LiquidGlassAppearance` and `LiquidGlassNavigatorObserver`
 installation. Existing surfaces, buttons, shared capsules, tabs, segments,
@@ -821,6 +845,10 @@ controls in profile mode on a device.
   sliders, switches and steppers stay native at every text size.
 - iPad, landscape and Split View have not been validated. The tab bar has no
   sidebar form, and sheets are at most 640 points wide.
+- In simulator UI tests a slow drag on the native slider can end about 20 points
+  behind the finger: the movement before Flutter's drag gesture passes its touch
+  slop does not reach UIKit. Not yet confirmed on a device; a later release is
+  planned to fix it.
 - On iOS 26 the tab bar is empty for its first frame while its icons are
   prepared.
 - `liquidGlassNativeAvailable` reads only the iOS major version and ignores

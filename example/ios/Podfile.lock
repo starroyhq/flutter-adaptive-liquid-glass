@@ -1,6 +1,6 @@
 PODS:
   - Flutter (1.0.0)
-  - flutter_adaptive_liquid_glass (0.5.2):
+  - flutter_adaptive_liquid_glass (0.6.0):
     - Flutter
   - integration_test (0.0.1):
     - Flutter
@@ -20,7 +20,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  flutter_adaptive_liquid_glass: 65a4c3b1bae37cef4346f9657e4569ea699c83d7
+  flutter_adaptive_liquid_glass: af6714be1743f356fa714d73b79188d5dff48acf
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
 
 PODFILE CHECKSUM: 28f0aba287ea05a0ec01b979758552c5fa8799fb

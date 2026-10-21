@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name = 'flutter_adaptive_liquid_glass'
-  s.version = '0.5.2'
+  s.version = '0.6.0'
   s.summary = 'Adaptive Flutter controls with native iOS Liquid Glass.'
   s.description = 'Native UIKit controls and appearance synchronization through public platform APIs.'
   s.homepage = 'https://github.com/starroyhq/flutter-adaptive-liquid-glass'

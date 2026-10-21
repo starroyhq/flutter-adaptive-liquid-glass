@@ -172,6 +172,30 @@ presses. The title bar is a Flutter `AppBar` and nothing animates, so two
 renderings differ only in these native controls. This flag takes precedence over
 the other probe flags.
 
+At the bottom of the page, below the compared controls, are a prominent
+`probe-send` text button and two toggles: **Toggle Delete** enables
+`probe-disabled`, and **Toggle Move up** disables both `probe-up` and
+`probe-send`, so UI tests can change enabled states in place. A **Public** /
+**Locked** segmented control follows; the page refuses **Locked** without
+rebuilding, and counts the attempts.
+
+## Native layout probe
+
+```sh
+flutter run -d <device-id> --dart-define=GLASS_NATIVE_LAYOUT_PROBE=true
+```
+
+This starts `NativeLayoutProbeApp`; the catalog's Search page opens the same
+page with **Open native layout probe**. Its first row is laid out and themed
+like the native controls probe's first row: a plus and a trash icon button, each
+without and then with a long press (`layout-plus-tap`, `layout-plus-hold`,
+`layout-trash-tap`, `layout-trash-hold`), with tap and hold counters. Below are
+a segmented control, triggers for a menu, an alert and a sheet with native
+buttons (`layout-alert`, `layout-sheet`), the last popup's result, a
+right-to-left region with a titled icon button, a mirrored Material glyph, an
+SF Symbol arrow and a three-action button group, and a native tab bar. Only
+`GLASS_NATIVE_CONTROLS_PROBE` takes precedence over this flag.
+
 ## Original mixed native/Flutter modal probe
 
 ```sh

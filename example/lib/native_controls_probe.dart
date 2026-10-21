@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart';
 
 /// A fixed page with the package's system tab bar, segmented controls and
-/// standalone icon buttons, for screenshot comparison and UI tests.
+/// standalone icon buttons, for screenshot comparison and UI tests. Below
+/// them, toggles change two buttons' enabled state in place, and a segmented
+/// control refuses one of its choices.
 ///
 /// It has no animated content, and its title bar is a Flutter [AppBar], so
 /// only these native controls differ between two renderings of the page.
@@ -44,9 +46,20 @@ class NativeControlsProbePage extends StatefulWidget {
 }
 
 class _NativeControlsProbePageState extends State<NativeControlsProbePage> {
-  int _iconPresses = 0, _segment = 0, _tab = 2, _finds = 0;
+  int _iconPresses = 0, _segment = 0, _tab = 2, _finds = 0, _sends = 0;
+  bool _deleteEnabled = false, _moveUpEnabled = true;
+  String _access = 'public';
+
+  /// Counted without a rebuild, so the refused segment is not reset by one.
+  final _lockedAttempts = ValueNotifier<int>(0);
 
   void _press() => setState(() => _iconPresses++);
+
+  @override
+  void dispose() {
+    _lockedAttempts.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -78,13 +91,15 @@ class _NativeControlsProbePageState extends State<NativeControlsProbePage> {
               sfSymbol: 'arrow.up',
               semanticLabel: 'Move up',
               prominent: true,
-              onPressed: _press,
+              onPressed: _moveUpEnabled ? _press : null,
             ),
-            const LiquidGlassButton.icon(
+            // Disabled until Toggle Delete enables it.
+            LiquidGlassButton.icon(
               id: 'probe-disabled',
               icon: Icons.delete_outline,
               sfSymbol: 'trash',
               semanticLabel: 'Delete',
+              onPressed: _deleteEnabled ? _press : null,
             ),
           ],
         ),
@@ -114,6 +129,56 @@ class _NativeControlsProbePageState extends State<NativeControlsProbePage> {
         const SizedBox(height: 24),
         Text('Tab: $_tab'),
         Text('Find presses: $_finds'),
+        // Below the compared controls: buttons whose enabled state changes in
+        // place, and a choice the page refuses.
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            LiquidGlassButton(
+              id: 'probe-send',
+              label: 'Send',
+              prominent: true,
+              onPressed: _moveUpEnabled ? () => setState(() => _sends++) : null,
+            ),
+            TextButton(
+              onPressed: () => setState(() => _deleteEnabled = !_deleteEnabled),
+              child: const Text('Toggle Delete'),
+            ),
+            // Move up and Send share this state.
+            TextButton(
+              onPressed: () => setState(() => _moveUpEnabled = !_moveUpEnabled),
+              child: const Text('Toggle Move up'),
+            ),
+          ],
+        ),
+        Text('Delete enabled: $_deleteEnabled'),
+        Text('Move up enabled: $_moveUpEnabled'),
+        Text('Send presses: $_sends'),
+        const SizedBox(height: 16),
+        LiquidGlassSegmentedControl<String>(
+          segments: const [
+            LiquidGlassSegment(value: 'public', label: 'Public'),
+            LiquidGlassSegment(value: 'locked', label: 'Locked'),
+          ],
+          selected: _access,
+          // Locked is refused without a rebuild: only the control itself can
+          // return to Public.
+          onChanged: (value) {
+            if (value == 'locked') {
+              _lockedAttempts.value++;
+            } else {
+              setState(() => _access = value);
+            }
+          },
+        ),
+        Text('Access: $_access'),
+        ValueListenableBuilder<int>(
+          valueListenable: _lockedAttempts,
+          builder: (context, attempts, _) => Text('Locked attempts: $attempts'),
+        ),
       ],
     ),
     bottomNavigationBar: LiquidGlassTabBar(

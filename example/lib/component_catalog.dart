@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'catalog_popups.dart';
 import 'native_accessibility_example.dart';
 import 'native_controls_probe.dart';
+import 'native_layout_probe.dart';
 
 /// Independent synthetic data only. No account, network or application services.
 class ComponentCatalogApp extends StatefulWidget {
@@ -140,6 +141,14 @@ class _ComponentCatalogAppState extends State<ComponentCatalogApp> {
                 ),
               ),
               child: const Text('Open native controls probe'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const NativeLayoutProbePage(),
+                ),
+              ),
+              child: const Text('Open native layout probe'),
             ),
           ],
           const SizedBox(height: 32),

@@ -109,9 +109,10 @@ class LiquidGlassButton extends StatelessWidget {
         !loading &&
         MediaQuery.textScalerOf(context).scale(14) <= 20;
     if (useNative) {
-      // An icon-only button without a long press keeps its standalone look.
+      // An icon-only button keeps its standalone look, with or without a
+      // long press.
       return NativeCapsule(
-        standaloneIcon: label == null && longCallback == null,
+        standaloneIcon: label == null,
         prominent: emphasized,
         items: [
           NativeCapsuleItem(

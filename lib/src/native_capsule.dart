@@ -58,10 +58,10 @@ class NativeCapsule extends StatefulWidget {
   final List<NativeCapsuleItem> items;
   final bool grouped, prominent;
 
-  /// A single icon-only button without a long press, drawn as the standalone
-  /// glass icon button: a semibold symbol, or a glyph bitmap trimmed to the
-  /// icon size, in colors that do not change when pressed or disabled. A
-  /// bitmap icon reserves its space until the bitmap is drawn.
+  /// A single icon-only button, with or without a long press, drawn as the
+  /// standalone glass icon button: a semibold symbol, or a glyph bitmap
+  /// trimmed to the icon size, in colors that do not change when pressed or
+  /// disabled. A bitmap icon reserves its space until the bitmap is drawn.
   final bool standaloneIcon;
   @override
   State<NativeCapsule> createState() => _NativeCapsuleState();

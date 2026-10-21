@@ -221,25 +221,35 @@ void main() {
     IconData icon = Icons.add,
     String? symbol,
     bool hold = false,
+    String? label,
   }) => MaterialApp(
     home: LiquidGlassTheme(
       data: const _NativeTheme(),
       child: Scaffold(
         body: Center(
-          child: LiquidGlassButton.icon(
-            icon: icon,
-            sfSymbol: symbol,
-            semanticLabel: 'Add',
-            onPressed: () {},
-            onLongPress: hold ? () {} : null,
-          ),
+          child: label == null
+              ? LiquidGlassButton.icon(
+                  icon: icon,
+                  sfSymbol: symbol,
+                  semanticLabel: 'Add',
+                  onPressed: () {},
+                  onLongPress: hold ? () {} : null,
+                )
+              : LiquidGlassButton(
+                  icon: icon,
+                  sfSymbol: symbol,
+                  label: label,
+                  semanticLabel: 'Add',
+                  onPressed: () {},
+                  onLongPress: hold ? () {} : null,
+                ),
         ),
       ),
     ),
   );
 
   testWidgets(
-    'only an icon-only button without a long press is standalone',
+    'an icon-only button is standalone with or without a long press',
     (tester) async {
       await tester.pumpWidget(iconButton(symbol: 'plus'));
       await tester.pumpAndSettle();
@@ -249,9 +259,16 @@ void main() {
       expect(item['label'], 'Add');
       expect(item['symbol'], 'plus');
       expect(item['title'], isNull);
+      final tapOnly = id;
       await tester.pumpWidget(iconButton(symbol: 'plus', hold: true));
       await tester.pumpAndSettle();
-      expect(params[id]!['standaloneIcon'], isFalse);
+      // The long press needs a native recognizer, so the view is new; it
+      // keeps the same look.
+      expect(id, isNot(tapOnly));
+      expect(params[id]!['standaloneIcon'], isTrue);
+      final held = (params[id]!['items'] as List).single as Map;
+      expect(held['longPressEnabled'], isTrue);
+      expect(held['symbol'], 'plus');
     },
     variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
@@ -304,9 +321,16 @@ void main() {
         await tester.pump();
       }
       expect(ByteData.sublistView(png() as Uint8List).getUint32(16), 192);
-      // A long press turns it into a capsule icon, which fits the whole bitmap
-      // into the icon size.
+      // A long press keeps the standalone look and its padded bitmap.
       await tester.pumpWidget(iconButton(icon: Icons.close, hold: true));
+      await tester.pumpAndSettle();
+      expect(params[id]!['standaloneIcon'], isTrue);
+      expect(ByteData.sublistView(png() as Uint8List).getUint32(16), 192);
+      // A title turns it into a capsule icon, which fits the whole bitmap
+      // into the icon size.
+      await tester.pumpWidget(
+        iconButton(icon: Icons.close, hold: true, label: 'Close'),
+      );
       for (var i = 0; i < 50 && png() == null; ++i) {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 20)),

@@ -24,10 +24,10 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   /// What each button shows apart from its colors, prepared once.
   private var contents: [AdaptiveGlassCapsuleContent] = []
   private let grouped: Bool
-  /// A lone icon-only button without a long press. It keeps the look of the
-  /// SwiftUI glass button that drew it before: a semibold symbol or a trimmed
-  /// bitmap, constant colors in every state, the window's appearance, and a
-  /// fade instead of hiding.
+  /// A lone icon-only button, with or without a long press. It has the look
+  /// of the SwiftUI glass button that drew such a button without a long press
+  /// before: a semibold symbol or a trimmed bitmap, constant colors in every
+  /// state, the window's appearance, and a fade instead of hiding.
   private let standalone: Bool
   /// Flutter's text direction, which orders the buttons and places each
   /// image beside its title, independently of the device language.

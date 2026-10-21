@@ -67,12 +67,21 @@ void main() {
     binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
   });
 
+  // Both messages carry the epoch that the view's events must use.
   int epoch(int viewId) =>
       (calls[viewId]!
-                  .lastWhere((call) => call.method == 'setSuppressed')
+                  .lastWhere(
+                    (call) =>
+                        call.method == 'setSuppressed' ||
+                        call.method == 'update',
+                  )
                   .arguments
               as Map)['epoch']
           as int;
+  List<Map> updates(int viewId) => [
+    for (final call in calls[viewId]!)
+      if (call.method == 'update') call.arguments as Map,
+  ];
   Future<void> event(
     String method,
     String action, {
@@ -310,6 +319,160 @@ void main() {
         ByteData.sublistView(png() as Uint8List).getUint32(16),
         lessThan(192),
       );
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
+  Widget lone({
+    VoidCallback? onPressed,
+    VoidCallback? onLongPress,
+    bool prominent = false,
+    Color? iconColor,
+    String? label,
+  }) => MaterialApp(
+    home: LiquidGlassTheme(
+      data: const _NativeTheme(),
+      child: Scaffold(
+        body: Center(
+          child: LiquidGlassButton(
+            icon: Icons.add,
+            sfSymbol: 'plus',
+            semanticLabel: 'Add',
+            label: label,
+            prominent: prominent,
+            iconColor: iconColor,
+            onPressed: onPressed,
+            onLongPress: onLongPress,
+          ),
+        ),
+      ),
+    ),
+  );
+  Map updatedItem(Map update) => (update['items'] as List).single as Map;
+  ColorScheme scheme(WidgetTester tester) =>
+      Theme.of(tester.element(find.byType(Scaffold))).colorScheme;
+
+  testWidgets(
+    'a lone icon button keeps its native view when enabled state, emphasis '
+    'or icon color changes',
+    (tester) async {
+      void press() {}
+      await tester.pumpWidget(lone(onPressed: press));
+      await tester.pumpAndSettle();
+      final view = id;
+      expect(params[view]!['standaloneIcon'], isTrue);
+      expect(updates(view), isEmpty);
+      final colors = scheme(tester);
+
+      await tester.pumpWidget(lone());
+      await tester.pumpAndSettle();
+      expect(id, view);
+      expect(updatedItem(updates(view).last)['enabled'], isFalse);
+      expect(updatedItem(updates(view).last)['tapEnabled'], isFalse);
+
+      await tester.pumpWidget(lone(onPressed: press, prominent: true));
+      await tester.pumpAndSettle();
+      expect(id, view);
+      expect(updates(view).last['tint'], colors.primary.toARGB32());
+      expect(updates(view).last['foreground'], colors.onPrimary.toARGB32());
+      expect(updatedItem(updates(view).last)['tapEnabled'], isTrue);
+
+      // A disabled prominent button gives up its fill.
+      await tester.pumpWidget(lone(prominent: true));
+      await tester.pumpAndSettle();
+      expect(id, view);
+      expect(updates(view).last['tint'], isNull);
+      expect(updates(view).last['foreground'], colors.onSurface.toARGB32());
+      expect(updatedItem(updates(view).last)['tapEnabled'], isFalse);
+
+      await tester.pumpWidget(
+        lone(onPressed: press, iconColor: const Color(0xff16a34a)),
+      );
+      await tester.pumpAndSettle();
+      expect(id, view);
+      expect(updatedItem(updates(view).last)['iconColor'], 0xff16a34a);
+      expect(updatedItem(updates(view).last)['tapEnabled'], isTrue);
+      expect(updates(view), hasLength(4));
+      expect(params.keys, [view]);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
+  testWidgets(
+    'a lone text button updates its enabled state and emphasis in place',
+    (tester) async {
+      void send() {}
+      await tester.pumpWidget(
+        lone(label: 'Send', prominent: true, onPressed: send),
+      );
+      await tester.pumpAndSettle();
+      final view = id;
+      final colors = scheme(tester);
+      expect(params[view]!['standaloneIcon'], isFalse);
+      expect(params[view]!['tint'], colors.primary.toARGB32());
+
+      await tester.pumpWidget(lone(label: 'Send', prominent: true));
+      await tester.pumpAndSettle();
+      expect(id, view);
+      expect(updates(view).last['tint'], isNull);
+      expect(updates(view).last['foreground'], colors.onSurface.toARGB32());
+      expect(updatedItem(updates(view).last)['tapEnabled'], isFalse);
+
+      await tester.pumpWidget(
+        lone(label: 'Send', prominent: true, onPressed: send),
+      );
+      await tester.pumpAndSettle();
+      expect(id, view);
+      expect(updates(view).last['tint'], colors.primary.toARGB32());
+      expect(updates(view).last['foreground'], colors.onPrimary.toARGB32());
+      expect(updatedItem(updates(view).last)['tapEnabled'], isTrue);
+      expect(params.keys, [view]);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
+  testWidgets(
+    'a press sent before the button was disabled is rejected',
+    (tester) async {
+      var presses = 0;
+      void press() => presses++;
+      await tester.pumpWidget(lone(onPressed: press));
+      await tester.pumpAndSettle();
+      final view = id, enabledEpoch = epoch(id);
+      await tester.pumpWidget(lone());
+      await tester.pumpAndSettle();
+      final disabledEpoch = epoch(view);
+      await tester.pumpWidget(lone(onPressed: press));
+      await tester.pumpAndSettle();
+      expect(id, view);
+      final enabledAgainEpoch = epoch(view);
+      expect(
+        [for (final update in updates(view)) update['epoch']],
+        [disabledEpoch, enabledAgainEpoch],
+      );
+      expect(disabledEpoch, greaterThan(enabledEpoch));
+      expect(enabledAgainEpoch, greaterThan(disabledEpoch));
+      // UIKit reported these before the button was disabled, or meanwhile.
+      await event('pressed', 'button', eventEpoch: enabledEpoch);
+      await event('pressed', 'button', eventEpoch: disabledEpoch, sequence: 2);
+      expect(presses, 0);
+      await event('pressed', 'button', sequence: 3);
+      expect(presses, 1);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
+  testWidgets(
+    'adding a long press still creates a new native view',
+    (tester) async {
+      await tester.pumpWidget(lone(onPressed: () {}));
+      await tester.pumpAndSettle();
+      final view = id;
+      await tester.pumpWidget(lone(onPressed: () {}, onLongPress: () {}));
+      await tester.pumpAndSettle();
+      expect(id, isNot(view));
+      final item = (params[id]!['items'] as List).single as Map;
+      expect(item['longPressEnabled'], isTrue);
     },
     variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );

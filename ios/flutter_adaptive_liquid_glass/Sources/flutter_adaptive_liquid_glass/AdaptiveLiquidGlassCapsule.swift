@@ -21,12 +21,20 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   private let stack = UIStackView()
   private let channel: FlutterMethodChannel
   private var buttons: [AdaptiveGlassCapsuleButton] = []
+  /// What each button shows apart from its colors, prepared once.
+  private var contents: [AdaptiveGlassCapsuleContent] = []
   private let grouped: Bool
   /// A lone icon-only button without a long press. It keeps the look of the
   /// SwiftUI glass button that drew it before: a semibold symbol or a trimmed
   /// bitmap, constant colors in every state, the window's appearance, and a
   /// fade instead of hiding.
   private let standalone: Bool
+  private let fontSize: CGFloat
+  /// The colors as Dart last sent them; an update redraws a button only when
+  /// they change.
+  private var foregroundValue: NSNumber?
+  private var tintValue: NSNumber?
+  private var iconColorValues: [NSNumber?] = []
   private var fade: AdaptiveLiquidGlassFade?
   private let suppression: AdaptiveLiquidGlassSuppression
   private let popupOwner: Bool
@@ -41,6 +49,9 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   init(frame: CGRect, identifier: Int64, arguments: [String: Any], messenger: FlutterBinaryMessenger, suppression: AdaptiveLiquidGlassSuppression) {
     grouped = arguments["grouped"] as? Bool ?? false
     standalone = arguments["standaloneIcon"] as? Bool ?? false
+    fontSize = CGFloat((arguments["fontSize"] as? NSNumber)?.doubleValue ?? 17)
+    foregroundValue = arguments["foreground"] as? NSNumber
+    tintValue = arguments["tint"] as? NSNumber
     self.suppression = suppression
     popupOwner = arguments["popupOwner"] as? Bool ?? false
     routeSuppressed = arguments["suppressed"] as? Bool ?? false
@@ -91,91 +102,25 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       stack.bottomAnchor.constraint(equalTo: container.contentView.bottomAnchor),
     ])
 
-    let fontSize = (arguments["fontSize"] as? NSNumber)?.doubleValue ?? 17
     let foreground = Self.color(arguments["foreground"]) ?? .label
     for item in arguments["items"] as? [[String: Any]] ?? [] {
       guard let id = item["id"] as? String else { continue }
-      let title = item["title"] as? String
-      var config = UIButton.Configuration.plain()
-      config.baseForegroundColor = foreground
-      config.background.backgroundColor = .clear
-      config.imagePadding = 8
-      config.imagePlacement = .leading
-      // A capsule narrower than its title ends it with an ellipsis instead of
-      // cutting glyphs; the accessibility label keeps the whole text.
-      config.titleLineBreakMode = .byTruncatingTail
-      config.contentInsets = title == nil
-        ? .zero : NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
-      if let title {
-        var attributes = AttributeContainer()
-        attributes.font = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
-        var text = AttributedString(title, attributes: attributes)
-        if let detail = item["detail"] as? String {
-          // A quieter run on the same line, such as a state or current choice.
-          var quiet = AttributeContainer()
-          quiet.font = UIFont.systemFont(ofSize: fontSize, weight: .regular)
-          quiet.foregroundColor = foreground.withAlphaComponent(foreground.cgColor.alpha * 0.6)
-          text += AttributedString(" " + detail, attributes: quiet)
-        }
-        config.attributedTitle = text
-      }
-      let requestedIconSize = (item["iconSize"] as? NSNumber).map { CGFloat($0.doubleValue) }
-      let iconSize = requestedIconSize ?? 22
-      let iconColor = Self.color(item["iconColor"])
-      if let symbol = item["symbol"] as? String {
-        // A symbol's point size is a font size, so a 22-point symbol is far
-        // larger than a 22-point Material icon. Beside a title the symbol takes
-        // the title's font, as UIKit's own buttons do; alone, or at a requested
-        // size, it takes the font size whose glyph matches that icon size. A
-        // standalone icon keeps the semibold weight it was drawn with before.
-        let symbolConfiguration = standalone
-          ? UIImage.SymbolConfiguration(
-              pointSize: iconSize * Self.symbolScale, weight: .semibold, scale: .medium)
-          : requestedIconSize == nil && title != nil
-          ? UIImage.SymbolConfiguration(
-              font: UIFont.systemFont(ofSize: fontSize, weight: .semibold), scale: .medium)
-          : UIImage.SymbolConfiguration(
-              pointSize: iconSize * Self.symbolScale, weight: .regular, scale: .medium)
-        var image = UIImage(systemName: symbol, withConfiguration: symbolConfiguration)
-        config.preferredSymbolConfigurationForImage = symbolConfiguration
-        if standalone, let symbolImage = image {
-          // UIKit centres a symbol's typographic box, which leaves the ink of
-          // a glyph such as a trash can off centre; the SwiftUI button this
-          // replaces centred the ink.
-          image = Self.centringInk(of: symbolImage, in: 48).withRenderingMode(.alwaysTemplate)
-        }
-        config.image = iconColor.flatMap { image?.withTintColor($0, renderingMode: .alwaysOriginal) } ?? image
-      } else if standalone, let png = item["png"] as? FlutterStandardTypedData,
-                let image = UIImage(data: png.data) {
-        // The glyph arrives centred in a padded square: trim the padding and
-        // fit the glyph into an icon-sized square.
-        let drawn = Self.fit(Self.trimmingTransparentEdges(of: image), in: iconSize)
-        config.image = iconColor.map { drawn.withTintColor($0, renderingMode: .alwaysOriginal) }
-          ?? drawn.withRenderingMode(.alwaysTemplate)
-      } else if let png = item["png"] as? FlutterStandardTypedData,
-                let image = UIImage(data: png.data) {
-        let ratio = min(iconSize / image.size.width, iconSize / image.size.height)
-        let size = CGSize(width: image.size.width * ratio, height: image.size.height * ratio)
-        let drawn = UIGraphicsImageRenderer(size: size).image { _ in
-          image.draw(in: CGRect(origin: .zero, size: size))
-        }
-        config.image = iconColor.map { drawn.withTintColor($0, renderingMode: .alwaysOriginal) }
-          ?? drawn.withRenderingMode(.alwaysTemplate)
-      }
-      if item["menuIndicator"] as? Bool == true {
-        // The platform's own pop-up affordance for a button that opens a menu.
-        config.indicator = .popup
-      }
-      if standalone {
-        config.imageColorTransformer = UIConfigurationColorTransformer { _ in foreground }
-      }
+      let content = makeContent(item)
+      let iconColorValue = item["iconColor"] as? NSNumber
+      let config = makeConfiguration(content, foreground: foreground, iconColor: Self.color(iconColorValue))
       let button = AdaptiveGlassCapsuleButton(configuration: config)
       if standalone {
         // Highlighted and disabled states keep the configuration as it is,
         // as the SwiftUI button style that returned its label unchanged did.
-        let fixed = config
-        button.configurationUpdateHandler = { button in button.configuration = fixed }
+        button.fixedConfiguration = config
+        button.configurationUpdateHandler = { button in
+          guard let button = button as? AdaptiveGlassCapsuleButton,
+                let fixed = button.fixedConfiguration else { return }
+          button.configuration = fixed
+        }
       }
+      contents.append(content)
+      iconColorValues.append(iconColorValue)
       button.actionId = id
       button.tapEnabled = item["tapEnabled"] as? Bool ?? (item["enabled"] as? Bool ?? false)
       button.longPressEnabled = item["longPressEnabled"] as? Bool ?? false
@@ -229,12 +174,147 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
         self.interactionEnabled = state["interactionEnabled"] as? Bool ?? true
         self.updateVisibility()
         result(nil)
+      case "update":
+        // A lone button's enabled state and colors, applied to this view.
+        let state = call.arguments as? [String: Any] ?? [:]
+        let epoch = state["epoch"] as? Int ?? self.interactionEpoch
+        if epoch != self.interactionEpoch { self.cancelInteractions() }
+        self.interactionEpoch = epoch
+        self.applyUpdate(state)
+        result(nil)
       default: result(FlutterMethodNotImplemented)
       }
     }
   }
 
   func view() -> UIView { container }
+
+  /// What an item shows apart from its colors: its title, and its symbol or
+  /// glyph bitmap drawn at the icon size.
+  private func makeContent(_ item: [String: Any]) -> AdaptiveGlassCapsuleContent {
+    let title = item["title"] as? String
+    let requestedIconSize = (item["iconSize"] as? NSNumber).map { CGFloat($0.doubleValue) }
+    let iconSize = requestedIconSize ?? 22
+    var symbolConfiguration: UIImage.SymbolConfiguration?
+    var image: UIImage?
+    if let symbol = item["symbol"] as? String {
+      // A symbol's point size is a font size, so a 22-point symbol is far
+      // larger than a 22-point Material icon. Beside a title the symbol takes
+      // the title's font, as UIKit's own buttons do; alone, or at a requested
+      // size, it takes the font size whose glyph matches that icon size. A
+      // standalone icon keeps the semibold weight it was drawn with before.
+      let configuration = standalone
+        ? UIImage.SymbolConfiguration(
+            pointSize: iconSize * Self.symbolScale, weight: .semibold, scale: .medium)
+        : requestedIconSize == nil && title != nil
+        ? UIImage.SymbolConfiguration(
+            font: UIFont.systemFont(ofSize: fontSize, weight: .semibold), scale: .medium)
+        : UIImage.SymbolConfiguration(
+            pointSize: iconSize * Self.symbolScale, weight: .regular, scale: .medium)
+      symbolConfiguration = configuration
+      image = UIImage(systemName: symbol, withConfiguration: configuration)
+      if standalone, let symbolImage = image {
+        // UIKit centres a symbol's typographic box, which leaves the ink of
+        // a glyph such as a trash can off centre; the SwiftUI button this
+        // replaces centred the ink.
+        image = Self.centringInk(of: symbolImage, in: 48).withRenderingMode(.alwaysTemplate)
+      }
+    } else if standalone, let png = item["png"] as? FlutterStandardTypedData,
+              let bitmap = UIImage(data: png.data) {
+      // The glyph arrives centred in a padded square: trim the padding and
+      // fit the glyph into an icon-sized square.
+      image = Self.fit(Self.trimmingTransparentEdges(of: bitmap), in: iconSize)
+    } else if let png = item["png"] as? FlutterStandardTypedData,
+              let bitmap = UIImage(data: png.data) {
+      let ratio = min(iconSize / bitmap.size.width, iconSize / bitmap.size.height)
+      let size = CGSize(width: bitmap.size.width * ratio, height: bitmap.size.height * ratio)
+      image = UIGraphicsImageRenderer(size: size).image { _ in
+        bitmap.draw(in: CGRect(origin: .zero, size: size))
+      }
+    }
+    return AdaptiveGlassCapsuleContent(
+      title: title, detail: item["detail"] as? String,
+      symbolConfiguration: symbolConfiguration, image: image,
+      menuIndicator: item["menuIndicator"] as? Bool == true)
+  }
+
+  /// A button's configuration for [content] in the given colors.
+  private func makeConfiguration(_ content: AdaptiveGlassCapsuleContent, foreground: UIColor,
+                                 iconColor: UIColor?) -> UIButton.Configuration {
+    var config = UIButton.Configuration.plain()
+    config.baseForegroundColor = foreground
+    config.background.backgroundColor = .clear
+    config.imagePadding = 8
+    config.imagePlacement = .leading
+    // A capsule narrower than its title ends it with an ellipsis instead of
+    // cutting glyphs; the accessibility label keeps the whole text.
+    config.titleLineBreakMode = .byTruncatingTail
+    config.contentInsets = content.title == nil
+      ? .zero : NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16)
+    if let title = content.title {
+      var attributes = AttributeContainer()
+      attributes.font = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
+      var text = AttributedString(title, attributes: attributes)
+      if let detail = content.detail {
+        // A quieter run on the same line, such as a state or current choice.
+        var quiet = AttributeContainer()
+        quiet.font = UIFont.systemFont(ofSize: fontSize, weight: .regular)
+        quiet.foregroundColor = foreground.withAlphaComponent(foreground.cgColor.alpha * 0.6)
+        text += AttributedString(" " + detail, attributes: quiet)
+      }
+      config.attributedTitle = text
+    }
+    if let symbolConfiguration = content.symbolConfiguration {
+      let image = content.image
+      config.preferredSymbolConfigurationForImage = symbolConfiguration
+      config.image = iconColor.flatMap { image?.withTintColor($0, renderingMode: .alwaysOriginal) } ?? image
+    } else if let drawn = content.image {
+      config.image = iconColor.map { drawn.withTintColor($0, renderingMode: .alwaysOriginal) }
+        ?? drawn.withRenderingMode(.alwaysTemplate)
+    }
+    if content.menuIndicator {
+      // The platform's own pop-up affordance for a button that opens a menu.
+      config.indicator = .popup
+    }
+    if standalone {
+      config.imageColorTransformer = UIConfigurationColorTransformer { _ in foreground }
+    }
+    return config
+  }
+
+  /// Applies an enabled state, emphasis and colors without a new view. The
+  /// glass is replaced only for a new tint, and a button's configuration
+  /// only for a new foreground or icon color; images are never redrawn.
+  private func applyUpdate(_ state: [String: Any]) {
+    let tintValue = state["tint"] as? NSNumber
+    if tintValue != self.tintValue {
+      self.tintValue = tintValue
+      if #available(iOS 26.0, *) {
+        let glass = UIGlassEffect(style: .regular)
+        glass.isInteractive = true
+        glass.tintColor = Self.color(tintValue)
+        container.effect = glass
+      }
+    }
+    let foregroundValue = state["foreground"] as? NSNumber
+    let foregroundChanged = foregroundValue != self.foregroundValue
+    self.foregroundValue = foregroundValue
+    let foreground = Self.color(foregroundValue) ?? .label
+    let items = state["items"] as? [[String: Any]] ?? []
+    for (index, button) in buttons.enumerated() where index < items.count {
+      let item = items[index]
+      // A long press is structural: its recognizer exists from creation.
+      button.tapEnabled = item["tapEnabled"] as? Bool ?? button.tapEnabled
+      let iconColorValue = item["iconColor"] as? NSNumber
+      guard foregroundChanged || iconColorValue != iconColorValues[index] else { continue }
+      iconColorValues[index] = iconColorValue
+      let config = makeConfiguration(contents[index], foreground: foreground,
+                                     iconColor: Self.color(iconColorValue))
+      if standalone { button.fixedConfiguration = config }
+      button.configuration = config
+    }
+    updateVisibility()
+  }
 
   @objc private func touchDown(_ button: AdaptiveGlassCapsuleButton) {
     button.longPressConsumed = false
@@ -398,6 +478,17 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   }
 }
 
+/// What a capsule button shows apart from its colors.
+private struct AdaptiveGlassCapsuleContent {
+  let title: String?
+  let detail: String?
+  /// Set for an SF Symbol item, whose image is nil for an unknown name.
+  let symbolConfiguration: UIImage.SymbolConfiguration?
+  /// The symbol, or the glyph bitmap drawn at the icon size, uncoloured.
+  let image: UIImage?
+  let menuIndicator: Bool
+}
+
 private final class AdaptiveGlassCapsuleContainer: UIVisualEffectView {
   var onWindowChanged: (() -> Void)?
   override func didMoveToWindow() {
@@ -414,6 +505,8 @@ private final class AdaptiveGlassCapsuleButton: UIButton {
   var pressCancelled = false
   var longPressRecognizer: UILongPressGestureRecognizer?
   var onAccessibilityActivate: ((Bool) -> Bool)?
+  /// A standalone button's configuration in every state.
+  var fixedConfiguration: UIButton.Configuration?
 
   override func accessibilityActivate() -> Bool {
     onAccessibilityActivate?(!tapEnabled && longPressEnabled) ?? false

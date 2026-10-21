@@ -44,6 +44,9 @@ class NativeCapsuleItem {
 }
 
 /// One platform view owns one glass effect and all its plain UIKit buttons.
+///
+/// A capsule outside a group keeps its view when its enabled state, emphasis
+/// or colors change: they reach the live view through its `update` method.
 class NativeCapsule extends StatefulWidget {
   const NativeCapsule({
     super.key,
@@ -76,6 +79,17 @@ class _NativeCapsuleState extends State<NativeCapsule>
   int _generation = 0;
   double? _measuredWidth;
   int? _measurementSignature;
+
+  /// The enabled state and colors of a lone capsule: as its view was created
+  /// with them, as last sent, and the enabled part of what was last sent.
+  List<Object?>? _createdDynamic, _dynamicSent, _enabledSent;
+  Map<String, Object?>? _latestDynamic;
+
+  /// The view generation whose channel is [_channel].
+  int _channelGeneration = -1;
+
+  /// A capsule outside a group updates its enabled state and colors in place.
+  bool get _inPlace => !widget.grouped && widget.items.length == 1;
   int get _iconSignature => Object.hashAll(
     widget.items.map(
       (item) => Object.hash(item.icon, item.sfSymbol, item.iconSize),
@@ -203,6 +217,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
     _channel?.setMethodCallHandler(null);
     final channel = MethodChannel('flutter_adaptive_liquid_glass/capsule/$id');
     _channel = channel;
+    _channelGeneration = generation;
     _lastEvent = 0;
     channel.setMethodCallHandler((call) async {
       if (!mounted ||
@@ -236,6 +251,11 @@ class _NativeCapsuleState extends State<NativeCapsule>
       return null;
     });
     _syncInteraction(force: true);
+    // Catch up with changes made while the view was being created.
+    if (_inPlace && !listEquals(_createdDynamic, _dynamicSent)) {
+      _createdDynamic = _dynamicSent;
+      _sendUpdate();
+    }
     final size = await channel.invokeMapMethod<String, Object?>(
       'intrinsicSize',
     );
@@ -246,6 +266,18 @@ class _NativeCapsuleState extends State<NativeCapsule>
     if (width is num && width.isFinite && width > 0) {
       setState(() => _measuredWidth = width.toDouble());
     }
+  }
+
+  /// Sends the latest enabled state and colors to the live view, with the
+  /// interaction epoch that its events must carry from now on.
+  void _sendUpdate() {
+    final channel = _channel, state = _latestDynamic;
+    if (channel == null || state == null) return;
+    unawaited(
+      channel
+          .invokeMethod<void>('update', {...state, 'epoch': _interactionEpoch})
+          .catchError((Object _) {}),
+    );
   }
 
   @override
@@ -311,14 +343,43 @@ class _NativeCapsuleState extends State<NativeCapsule>
           },
       ],
     };
+    // A lone capsule's enabled state, emphasis and colors are left out of its
+    // signature and reach the live view in place. A long press stays
+    // structural: it adds a native recognizer.
+    final inPlace = _inPlace;
+    final enabledState = [
+      for (final item in widget.items) ...[
+        item.onPressed != null,
+        item.onLongPress != null,
+      ],
+    ];
+    final dynamicState = [
+      params['foreground'],
+      params['tint'],
+      for (final item in widget.items) item.iconColor?.toARGB32(),
+      ...enabledState,
+    ];
+    _latestDynamic = {
+      'foreground': params['foreground'],
+      'tint': params['tint'],
+      'items': [
+        for (final item in widget.items)
+          {
+            'iconColor': item.iconColor?.toARGB32(),
+            'enabled': item.onPressed != null || item.onLongPress != null,
+            'tapEnabled': item.onPressed != null,
+            'longPressEnabled': item.onLongPress != null,
+          },
+      ],
+    };
     final signature = Object.hash(
       theme.brightness,
       fontSize,
       widget.grouped,
-      widget.prominent,
+      inPlace ? null : widget.prominent,
       widget.standaloneIcon,
-      params['foreground'],
-      params['tint'],
+      inPlace ? null : params['foreground'],
+      inPlace ? null : params['tint'],
       Object.hashAll(
         widget.items.map(
           (item) => Object.hash(
@@ -328,10 +389,10 @@ class _NativeCapsuleState extends State<NativeCapsule>
             item.label,
             item.icon,
             item.sfSymbol,
-            item.iconColor,
+            inPlace ? null : item.iconColor,
             item.iconSize,
             item.menuIndicator,
-            item.onPressed != null,
+            inPlace ? null : item.onPressed != null,
             item.onLongPress != null,
             item.longPressSemanticLabel,
           ),
@@ -343,6 +404,19 @@ class _NativeCapsuleState extends State<NativeCapsule>
       ++_viewGeneration;
       _measurementSignature = signature;
       _measuredWidth = null;
+      // A new view is created with the state of this build.
+      _createdDynamic = _dynamicSent = dynamicState;
+      _enabledSent = enabledState;
+    } else if (inPlace && !listEquals(_dynamicSent, dynamicState)) {
+      if (!listEquals(_enabledSent, enabledState)) {
+        // A press UIKit reported before this change must not reach the new
+        // callbacks, as when a disabled button is enabled again.
+        ++_interactionEpoch;
+        _enabledSent = enabledState;
+      }
+      _dynamicSent = dynamicState;
+      // A view still being created catches up once its channel exists.
+      if (_channelGeneration == _viewGeneration) _sendUpdate();
     }
     final generation = _viewGeneration;
     final estimate = widget.items.fold<double>(

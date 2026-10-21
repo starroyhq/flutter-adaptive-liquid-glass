@@ -288,11 +288,16 @@ void main() {
     }
     final tab = (views[last]!['tabs'] as List)[1] as Map;
     expect(tab['symbol'], isNull);
-    // Both states are a 64-point square at the test view's pixel ratio of 3.
-    // The test fonts draw every glyph alike, so their pixels are not compared.
+    // Both states are a square of the bar's 30-point icon size at the test
+    // view's pixel ratio of 3, which UIKit decodes at that scale. The test
+    // fonts draw every glyph alike, so their pixels are not compared.
+    expect(tab['scale'], 3.0);
     for (final png in [tab['png'], tab['selectedPng']]) {
-      expect(ByteData.sublistView(png as Uint8List).getUint32(16), 192);
-      expect(ByteData.sublistView(png).getUint32(20), 192);
+      expect(ByteData.sublistView(png as Uint8List).getUint32(16), 90);
+      expect(ByteData.sublistView(png).getUint32(20), 90);
     }
+    // A symbol tab needs neither.
+    final symbolTab = (views[last]!['tabs'] as List)[0] as Map;
+    expect(symbolTab.containsKey('scale'), isFalse);
   }, variant: _ios);
 }

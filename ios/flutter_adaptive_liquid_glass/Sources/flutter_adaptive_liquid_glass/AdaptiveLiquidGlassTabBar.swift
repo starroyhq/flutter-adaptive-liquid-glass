@@ -126,16 +126,18 @@ private struct AdaptiveTabItem {
       image = UIImage(systemName: symbol)
       selectedImage = UIImage(systemName: props["selectedSymbol"] as? String ?? symbol)
     } else {
-      let bitmap = Self.bitmap(props["png"])
+      let scale = CGFloat((props["scale"] as? NSNumber)?.doubleValue ?? 1)
+      let bitmap = Self.bitmap(props["png"], scale: scale)
       image = bitmap ?? UIImage(systemName: "circle")
-      selectedImage = Self.bitmap(props["selectedPng"]) ?? image
+      selectedImage = Self.bitmap(props["selectedPng"], scale: scale) ?? image
     }
   }
 
-  /// A glyph Flutter drew, decoded at a scale of 1 and drawn in the tint.
-  private static func bitmap(_ value: Any?) -> UIImage? {
+  /// A glyph Flutter drew at the bar's icon size, decoded at the pixel ratio
+  /// it was drawn at and drawn in the tab's tint, selected or not.
+  private static func bitmap(_ value: Any?, scale: CGFloat) -> UIImage? {
     guard let data = value as? FlutterStandardTypedData else { return nil }
-    return UIImage(data: data.data)?.withRenderingMode(.alwaysTemplate)
+    return UIImage(data: data.data, scale: max(scale, 1))?.withRenderingMode(.alwaysTemplate)
   }
 }
 

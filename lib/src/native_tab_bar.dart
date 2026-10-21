@@ -44,6 +44,11 @@ class NativeTabBar extends StatefulWidget {
   static const height = 72.0;
   static const glassOverflow = 20.0;
 
+  /// The side of a tab's bitmap, in points, with the glyph filling it. A
+  /// Material glyph's ink is about 0.8 of its size, so its ink is about as
+  /// tall as the bar's symbols, whose ink is about 24 points.
+  static const iconSize = 30.0;
+
   @override
   State<NativeTabBar> createState() => _NativeTabBarState();
 }
@@ -127,10 +132,17 @@ class _NativeTabBarState extends State<NativeTabBar> {
           'selectedSymbol': symbol,
         };
       }
+      const size = NativeTabBar.iconSize;
       return {
         'label': item.label,
-        'png': await nativeIconPng(icon),
-        'selectedPng': await nativeIconPng(item.selectedIcon ?? icon),
+        'png': await nativeIconPng(icon, canvasSize: size, glyphSize: size),
+        'selectedPng': await nativeIconPng(
+          item.selectedIcon ?? icon,
+          canvasSize: size,
+          glyphSize: size,
+        ),
+        // UIKit shows the bitmaps at the pixel ratio they were drawn at.
+        'scale': nativeIconPixelRatio(),
       };
     }
 

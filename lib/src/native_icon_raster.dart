@@ -9,21 +9,32 @@ final Map<String, Uint8List?> _pngCache = {};
 /// Forgets the bitmaps drawn by [nativeIconPng], such as on hot reload.
 void clearNativeIconPngCache() => _pngCache.clear();
 
-/// Draws [icon] for a native view: a white 34-point glyph centred in a
-/// 64-point square, at the device pixel ratio, encoded as PNG. Each glyph is
-/// drawn once per pixel ratio; `null` when drawing fails.
-Future<Uint8List?> nativeIconPng(IconData icon) async {
+/// The pixel ratio [nativeIconPng] draws at: the first view's, or 3.
+double nativeIconPixelRatio() {
   final views = ui.PlatformDispatcher.instance.views;
-  final ratio = views.isEmpty ? 3.0 : views.first.devicePixelRatio;
+  return views.isEmpty ? 3.0 : views.first.devicePixelRatio;
+}
+
+/// Draws [icon] for a native view: a white [glyphSize]-point glyph centred in
+/// a [canvasSize]-point square, at [nativeIconPixelRatio], encoded as PNG.
+/// The defaults are the capsule's padded square. Each glyph is drawn once per
+/// size and pixel ratio; `null` when drawing fails.
+Future<Uint8List?> nativeIconPng(
+  IconData icon, {
+  double canvasSize = 64,
+  double glyphSize = 34,
+}) async {
+  final ratio = nativeIconPixelRatio();
   final key = [
     icon.codePoint,
     icon.fontFamily,
     icon.fontPackage,
     icon.matchTextDirection,
     ratio.toStringAsFixed(2),
+    canvasSize,
+    glyphSize,
   ].join('|');
   if (_pngCache.containsKey(key)) return _pngCache[key];
-  const canvasSize = 64.0, glyphSize = 34.0;
   try {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder)..scale(ratio);

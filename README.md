@@ -82,6 +82,9 @@ dependencies:
 Requires Flutter 3.41.2 or later and Dart 3.11 or later. Supported platforms are
 Android and iOS 16+. Native system glass is available on iOS 26+; older iOS and
 Android use the Flutter fallback. Build native iOS glass with Xcode 26 or later.
+With Swift Package Manager, set the app's iOS Deployment Target to 16.0 or later
+(`flutter create` sets 15.0); otherwise Xcode reports a Target Integrity error
+that the package product requires minimum platform version 16.0.
 On iOS the plugin supports both Swift Package Manager and CocoaPods. Flutter uses
 Swift Package Manager when it is enabled, the default from Flutter 3.44, and
 CocoaPods otherwise. Development uses Flutter **3.41.9** / Dart **3.11.5**; CI
@@ -222,11 +225,13 @@ width can enlarge it, never shrink it. Icon-only buttons use the same capsule
 bridge in a standalone look, with or without a long-press action: a semibold
 symbol, or the Material glyph trimmed to the icon size, in colors that do not
 change when pressed or disabled. Their `id` is the native accessibility
-identifier and their `semanticLabel` the native label. A button outside a group
-keeps its native view when it is enabled or disabled or its emphasis or colors
-change; a new title, icon or long-press action creates a new one. Native
-capsules follow the ambient `Directionality`, not the device language. Every
-path retains native materials and app appearance.
+identifier and their `semanticLabel` the native label. A button, and each
+action of a button group, toolbar or action bar, keeps its native view when it
+is enabled or disabled or its emphasis or colors change; a new title, icon or
+long-press action, or added, removed or reordered actions, create a new one.
+Native capsules, tab bars and segmented controls follow the ambient
+`Directionality`, not the device language. Every path retains native materials
+and app appearance.
 
 ## Component catalog
 
@@ -811,14 +816,13 @@ controls in profile mode on a device.
   the slider's percentage value, which `semanticFormatterCallback` replaces.
 - Some native controls switch to Flutter rendering without notice: buttons
   while `loading` and fixed-height controls at large text sizes, and the
-  navigation bar unless it has at most one leading and one trailing action, all
-  enabled, without long presses and with an `sfSymbol` beside every icon. Native
+  navigation bar unless it has at most one leading and one trailing action,
+  without long presses and with an `sfSymbol` beside every icon. Native
   sliders, switches and steppers stay native at every text size.
 - iPad, landscape and Split View have not been validated. The tab bar has no
   sidebar form, and sheets are at most 640 points wide.
 - On iOS 26 the tab bar is empty for its first frame while its icons are
-  prepared. The native tab bar and segmented control follow the device
-  language's direction rather than Flutter's `Directionality`.
+  prepared.
 - `liquidGlassNativeAvailable` reads only the iOS major version and ignores
   `UIDesignRequiresCompatibility`. Custom `OverlayEntry` presentations do not
   hide native views (see [Native rendering and overlays](#native-rendering-and-overlays)).
@@ -839,6 +843,14 @@ cd example
 flutter pub get
 flutter run
 ```
+
+To build the example with Swift Package Manager (the default from Flutter
+3.44), name the checkout directory `flutter_adaptive_liquid_glass`, for example
+`git clone https://github.com/starroyhq/flutter-adaptive-liquid-glass flutter_adaptive_liquid_glass`.
+Flutter adds the plugin's Swift package to the example's Xcode project as a
+local override, and the two package identities must match; CI checks out the
+repository the same way. Apps that use the package from pub.dev or through a
+path dependency are not affected.
 
 The independent example contains iOS/Android host projects and opens
 `ComponentCatalogApp` by default, with Controls, Pickers, Popups and Search pages.

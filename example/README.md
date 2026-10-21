@@ -22,6 +22,13 @@ flutter devices
 flutter run -d <device-id>
 ```
 
+To build the example with Swift Package Manager (the default from Flutter
+3.44), name the checkout directory `flutter_adaptive_liquid_glass`, for example
+`git clone https://github.com/starroyhq/flutter-adaptive-liquid-glass flutter_adaptive_liquid_glass`.
+Flutter adds the plugin's Swift package to this project as a local override,
+and the two package identities must match; CI checks out the repository the
+same way.
+
 ## Component catalog
 
 The default entry point is `ComponentCatalogApp`.
@@ -195,6 +202,24 @@ buttons (`layout-alert`, `layout-sheet`), the last popup's result, a
 right-to-left region with a titled icon button, a mirrored Material glyph, an
 SF Symbol arrow and a three-action button group, and a native tab bar. Only
 `GLASS_NATIVE_CONTROLS_PROBE` takes precedence over this flag.
+
+## Native RTL probe
+
+```sh
+flutter run -d <device-id> --dart-define=GLASS_NATIVE_RTL_PROBE=true
+```
+
+This starts `NativeRtlProbeApp`, a right-to-left page; the catalog's Search page
+opens the same page with **Open native RTL probe**. It holds standalone SF Symbol
+icon buttons (`arrow.backward` and `arrow.forward`, which turn with the
+direction, and `arrow.left` and `star`, which do not), titled buttons with
+`chevron.backward` and `chevron.forward`, a **Day** / **Week** / **Month**
+segmented control, a **Copy** / **Paste** / **Cut** button group whose Paste
+action **Toggle Paste** enables and disables in place, and the native tab bar
+with Alpha, Beta, Gamma (Material glyphs, unselected at first) and a trailing
+**Find** button. The first segment and tab are at the right and Find at the
+left; counters show the selected segment and tab and the presses. The controls
+and layout probe flags take precedence over this flag.
 
 ## Original mixed native/Flutter modal probe
 

@@ -17,6 +17,15 @@
   with a long press got a new native view for these changes before. A new
   title, icon, size, long-press action or text direction still creates a new
   view.
+- So does each action of a native `LiquidGlassButtonGroup`, and so of a
+  `LiquidGlassToolbar`, the leading capsule of a `LiquidGlassActionBar` and a
+  navigation bar's grouped actions: enabling or disabling one updates the
+  shared capsule in place, and a press UIKit reported before the change is
+  still rejected. Adding, removing or reordering actions, or a new label, icon
+  or `showLabel`, still creates a new view.
+- A native `LiquidGlassNavigationBar` keeps the system `UINavigationBar` when
+  one of its actions is disabled, and updates that action in place. Before, a
+  disabled action switched the whole bar to the Flutter title layout.
 - An icon-only native button with a long press now looks like one without: a
   semibold symbol centred on its ink, or the trimmed Material glyph, in colors
   that do not change when pressed or disabled. Before, a long press gave it the
@@ -43,7 +52,15 @@
   language. Right to left, a button's icon is to the right of its title, a
   group's first action is on the right, and an `IconData` with
   `matchTextDirection` is mirrored, as is a standalone icon's SF Symbol that
-  flips for right-to-left layouts.
+  flips for right-to-left layouts. A semantic SF Symbol such as
+  `arrow.backward`, `arrow.forward` or `chevron.backward`, alone or beside a
+  title, takes its right-to-left form; explicit symbols such as `arrow.left`,
+  and symmetric ones, are unchanged.
+- On iOS 26 the native `LiquidGlassTabBar` and `LiquidGlassSegmentedControl`
+  follow Flutter's `Directionality` instead of the device language, and a new
+  direction recreates them. Right to left, the first tab and segment are at the
+  right and the tab bar's `trailingAction` at the left; indexes stay in logical
+  order, as in the fallback.
 - On iOS 26 the native tab bar's `UITabBarController` becomes a child of the
   view controller that shows the bar, found through the responder chain once
   the bar is in a window. Before, the plugin used the view controller its
@@ -58,6 +75,11 @@
   in Flutter 3.41 this makes `FlutterViewController` prefer an auto-hidden home
   indicator and keeps the status bar. On Android the same call also hides the
   navigation bar.
+- The README's Validation section and the example's README note that building
+  the bundled example with Swift Package Manager needs a checkout directory
+  named `flutter_adaptive_liquid_glass`, and the installation section that an
+  app built with Swift Package Manager needs an iOS Deployment Target of 16.0
+  or later.
 - `LiquidGlassTheme.maybeOf` returns null when there is no `LiquidGlassTheme`
   above the context.
 - `showLiquidGlassPopover` accepts a `barrierColor`; the default scrim stays 8%

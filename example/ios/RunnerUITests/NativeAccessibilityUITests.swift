@@ -308,13 +308,8 @@ final class NativeAccessibilityUITests: XCTestCase {
   }
 
   func testNativeControlsReachFlutterCallbacks() throws {
-    app.buttons["back"].tap()
+    let openProbe = openCatalogSearchEntry("Open native controls probe")
     let searchTab = app.buttons["Search"]
-    XCTAssertTrue(searchTab.waitForExistence(timeout: 10))
-    searchTab.tap()
-    let openProbe = app.buttons["Open native controls probe"]
-    XCTAssertTrue(openProbe.waitForExistence(timeout: 10))
-    openProbe.tap()
     expectText("Tab: 2")
 
     // The system tab bar: a tab, then its separate search-style button.
@@ -346,8 +341,7 @@ final class NativeAccessibilityUITests: XCTestCase {
     XCTAssertTrue(waitUntilHittable(searchTab))
     app.buttons["Controls"].tap()
     XCTAssertTrue(openProbe.waitForNonExistence(timeout: 10))
-    searchTab.tap()
-    XCTAssertTrue(openProbe.waitForExistence(timeout: 10))
+    revealCatalogSearchEntry("Open native controls probe")
   }
 
   func testCapsuleButtonsUpdateInPlace() throws {
@@ -432,6 +426,9 @@ final class NativeAccessibilityUITests: XCTestCase {
     expectTappable(beneath)
     attachFrames("r2-popups-frames", beneath)
     attachScreen("r2-popup-0-initial")
+    // The same kind of native button outside a popup, for comparison with
+    // the sheet's below.
+    attachHierarchy("Layout probe hierarchy")
 
     button(labelled: "Menu").tap()
     let first = app.buttons["First choice"]
@@ -456,8 +453,10 @@ final class NativeAccessibilityUITests: XCTestCase {
     attachScreen("r2-popup-4-alert-closed")
 
     // Native buttons inside the sheet stay visible and take taps. XCUITest
-    // does not report these platform views as hittable inside the sheet, so
-    // they are tapped where they are, and the press count shows the tap.
+    // does not report these platform views as hittable inside the sheet,
+    // where Flutter's full-screen "Dismiss" barrier comes after the sheet in
+    // the accessibility tree, so they are tapped where they are, and the
+    // press count shows the tap.
     app.buttons["layout-sheet"].tap()
     let sheetAction = app.buttons["layout-sheet-action"]
     let sheetClose = app.buttons["layout-sheet-close"]
@@ -467,6 +466,7 @@ final class NativeAccessibilityUITests: XCTestCase {
     Thread.sleep(forTimeInterval: 1)
     attachFrames("r2-sheet-frames", ["layout-sheet-action": sheetAction, "layout-sheet-close": sheetClose])
     attachScreen("r2-popup-5-sheet-open")
+    attachHierarchy("Layout sheet hierarchy")
     tapCenter(of: sheetAction)
     expectLabel(containing: "Sheet presses: 1")
     tapCenter(of: sheetClose)
@@ -498,16 +498,120 @@ final class NativeAccessibilityUITests: XCTestCase {
     attachScreen("r2-hold")
   }
 
+  func testButtonGroupActionUpdatesInPlace() throws {
+    openCatalogSearchEntry("Open native RTL probe")
+    expectText("Paste enabled: true")
+    // Three actions of one native capsule; Toggle Paste changes the middle
+    // one's enabled state.
+    let copy = app.buttons["rtl-group-copy"]
+    let paste = app.buttons["rtl-group-paste"]
+    let cut = app.buttons["rtl-group-cut"]
+    XCTAssertTrue(waitUntilHittable(paste))
+    XCTAssertTrue(copy.isEnabled && paste.isEnabled && cut.isEnabled)
+    attachFrames("r3-group-frames", ["rtl-group-copy": copy, "rtl-group-paste": paste, "rtl-group-cut": cut])
+    paste.tap()
+    expectText("Paste presses: 1")
+
+    app.buttons["Toggle Paste"].tap()
+    expectText("Paste enabled: false")
+    // The same native buttons, updated rather than replaced.
+    XCTAssertTrue(copy.exists && paste.exists && cut.exists)
+    XCTAssertTrue(waitUntil(paste, "enabled == false"))
+    XCTAssertTrue(copy.isEnabled && cut.isEnabled)
+    attachScreen("r3-group-1-disabled")
+    tapCenter(of: paste)
+    XCTAssertFalse(app.staticTexts["Paste presses: 2"].waitForExistence(timeout: 2))
+    copy.tap()
+    expectText("Last action: copy")
+
+    app.buttons["Toggle Paste"].tap()
+    expectText("Paste enabled: true")
+    XCTAssertTrue(paste.exists)
+    XCTAssertTrue(waitUntil(paste, "enabled == true"))
+    attachScreen("r3-group-2-enabled")
+    paste.tap()
+    expectText("Paste presses: 2")
+    cut.tap()
+    expectText("Last action: cut")
+  }
+
+  func testTabBarAndSegmentsFollowFlutterDirection() throws {
+    openCatalogSearchEntry("Open native RTL probe")
+    expectText("Tab: 0")
+    let alpha = app.buttons["Alpha"], beta = app.buttons["Beta"], gamma = app.buttons["Gamma"]
+    let find = app.buttons["Find"]
+    let day = app.buttons["Day"], week = app.buttons["Week"], month = app.buttons["Month"]
+    for element in [alpha, beta, gamma, find, day, week, month] {
+      XCTAssertTrue(waitUntilHittable(element), element.description)
+    }
+    attachFrames("r3-rtl-frames", [
+      "Alpha": alpha, "Beta": beta, "Gamma": gamma, "Find": find,
+      "Day": day, "Week": week, "Month": month,
+    ])
+    attachScreen("r3-rtl-initial")
+    // Right to left: the first tab and segment are at the right, and the
+    // trailing action at the left.
+    XCTAssertGreaterThan(alpha.frame.midX, beta.frame.midX)
+    XCTAssertGreaterThan(beta.frame.midX, gamma.frame.midX)
+    XCTAssertGreaterThan(gamma.frame.midX, find.frame.midX)
+    XCTAssertGreaterThan(day.frame.midX, week.frame.midX)
+    XCTAssertGreaterThan(week.frame.midX, month.frame.midX)
+
+    // Indexes stay logical: the leftmost tab is the last, the rightmost the first.
+    gamma.tap()
+    expectText("Tab: 2")
+    let tabs = [alpha, beta, gamma].sorted { $0.frame.midX < $1.frame.midX }
+    tabs.last!.tap()
+    expectText("Tab: 0")
+    find.tap()
+    expectText("Find presses: 1")
+    expectText("Tab: 0")
+
+    month.tap()
+    expectText("Segment: 2")
+    let segments = [day, week, month].sorted { $0.frame.midX < $1.frame.midX }
+    segments.last!.tap()
+    expectText("Segment: 0")
+  }
+
   /// Leaves the accessibility probe and opens an entry of the catalog's
   /// Search page.
-  private func openCatalogSearchEntry(_ title: String) {
+  @discardableResult
+  private func openCatalogSearchEntry(_ title: String, file: StaticString = #filePath,
+                                      line: UInt = #line) -> XCUIElement {
     app.buttons["back"].tap()
+    let entry = revealCatalogSearchEntry(title, file: file, line: line)
+    entry.tap()
+    return entry
+  }
+
+  /// Selects the catalog's Search tab and scrolls its page until an entry
+  /// can be tapped. On hosted CI the entry once did not appear within 10 s:
+  /// the tab may not have switched yet, or the entry may be below the visible
+  /// part of the page. The page hierarchy is attached when it never appears.
+  @discardableResult
+  private func revealCatalogSearchEntry(_ title: String, file: StaticString = #filePath,
+                                        line: UInt = #line) -> XCUIElement {
     let searchTab = app.buttons["Search"]
-    XCTAssertTrue(searchTab.waitForExistence(timeout: 10))
+    XCTAssertTrue(searchTab.waitForExistence(timeout: 10), file: file, line: line)
     searchTab.tap()
     let entry = app.buttons[title]
-    XCTAssertTrue(entry.waitForExistence(timeout: 10))
-    entry.tap()
+    for _ in 0..<3 {
+      if waitUntilHittable(entry, timeout: 10) { return entry }
+      if entry.exists {
+        // Scroll the page above the tab bar.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+          .press(forDuration: 0.05,
+                 thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)),
+                 withVelocity: .slow, thenHoldForDuration: 0.2)
+      } else {
+        searchTab.tap()
+      }
+    }
+    let reachable = entry.exists && entry.isHittable
+    if !reachable { attachHierarchy("Catalog Search page without \(title)") }
+    XCTAssertTrue(reachable, "\(title) must be reachable", file: file, line: line)
+    return entry
   }
 
   /// A button found by its label, for native buttons whose identifier is the

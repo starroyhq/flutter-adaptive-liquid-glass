@@ -259,21 +259,28 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 45
     steps:
+      # The Flutter tool links a path-dependency plugin's Swift package under
+      # the plugin directory's name, and SwiftPM rejects it when that name
+      # differs from the package's own directory. Check out under the package
+      # name instead of the repository name.
       - uses: actions/checkout@v4
+        with:
+          path: flutter_adaptive_liquid_glass
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
       - run: flutter pub get
+        working-directory: flutter_adaptive_liquid_glass
       - run: flutter pub get
-        working-directory: example
+        working-directory: flutter_adaptive_liquid_glass/example
       # With Swift Package Manager enabled this also adds the generated plugin
       # package to the Runner project.
       - run: flutter build ios --simulator --debug --config-only --no-pub
-        working-directory: example
+        working-directory: flutter_adaptive_liquid_glass/example
       - name: Require the Swift Package Manager integration
         run: grep -q FlutterGeneratedPluginSwiftPackage Runner.xcodeproj/project.pbxproj
-        working-directory: example/ios
+        working-directory: flutter_adaptive_liquid_glass/example/ios
       # Same architecture pin as the CocoaPods job above.
       - run: >-
           xcodebuild -workspace Runner.xcworkspace -scheme Runner
@@ -281,7 +288,7 @@ jobs:
           -destination 'generic/platform=iOS Simulator'
           -derivedDataPath ../build/ios-ci-spm
           ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
-        working-directory: example/ios
+        working-directory: flutter_adaptive_liquid_glass/example/ios
       # SwiftPM names a target's resource bundle <package>_<target>.bundle;
       # a CocoaPods build would add flutter_adaptive_liquid_glass_privacy.bundle.
       - name: Require the plugin to come from its Swift package
@@ -289,4 +296,4 @@ jobs:
           app=build/ios-ci-spm/Build/Products/Debug-iphonesimulator/Runner.app
           test -n "$(find "$app" -path '*/flutter_adaptive_liquid_glass_flutter_adaptive_liquid_glass.bundle/PrivacyInfo.xcprivacy')"
           test -z "$(find "$app" -name 'flutter_adaptive_liquid_glass_privacy.bundle')"
-        working-directory: example
+        working-directory: flutter_adaptive_liquid_glass/example

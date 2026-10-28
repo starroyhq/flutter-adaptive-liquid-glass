@@ -173,6 +173,41 @@ The new `LiquidGlassMenuButton` default trigger supports both tap and long press
 Use `trigger: LiquidGlassMenuTrigger.tap` for tap-only menus, or `.longPress`
 for hold-only menus. A custom menu builder continues to own its gestures.
 
+### Apps that use material_ui
+
+From Flutter 3.47 the Material library is also published as the standalone
+[`material_ui`](https://pub.dev/packages/material_ui) package
+([migration guide](https://docs.flutter.dev/release/breaking-changes/material-ui-and-cupertino-ui)).
+This package still imports `package:flutter/material.dart`, so its widgets read
+the framework's `Theme` and `MaterialLocalizations`, not those of
+`material_ui`. An app that has moved to `material_ui` needs the compatibility
+bridge from that package, and `LiquidGlassSearchField` additionally needs a
+framework `Material` ancestor for its text field:
+
+```dart
+// ignore_for_file: deprecated_member_use
+import 'package:flutter/material.dart' as legacy;
+import 'package:material_ui/material_ui.dart';
+
+MaterialApp(
+  builder: (context, child) => MaterialUiCompatibilityBridge(child: child!),
+  home: Scaffold(
+    body: legacy.Material(
+      type: legacy.MaterialType.transparency,
+      child: LiquidGlassSearchField(hintText: 'Search'),
+    ),
+  ),
+);
+```
+
+Verified with a widget test on Flutter 3.47.8 and `material_ui` 1.8.0: with the
+bridge, `showLiquidGlassAlert` and the search field (inside the framework
+`Material`) build and work; without the bridge both fail with "No
+MaterialLocalizations found", and without the framework `Material` the search
+field fails with "No Material widget found". `MaterialUiCompatibilityBridge` is
+itself deprecated as a temporary migration aid. The package plans to move to
+`material_ui` when the framework's Material library is formally deprecated.
+
 ### Local checkout integration
 
 The package lives in the standalone `flutter-adaptive-liquid-glass` directory and its Dart
@@ -790,11 +825,13 @@ Custom `OverlayEntry` presentations are not Navigator routes: stop painting the
 underlying native controls while such an overlay is active. Changing themes does
 not remove the native tab platform view. Verify system materials on iOS hardware.
 
-`NavigationBar` retains its existing Flutter layout conditions when an action
-is disabled or its IconData lacks an SF Symbol. Basic icon-only navigation should
-supply both. The supported native layout uses a package-owned `UINavigationBar`
-bridge and announces each action's business label. UIKit retains the system
-material and bar-button rendering.
+`LiquidGlassNavigationBar` keeps a disabled action in the native bar and updates
+it in place. It uses the Flutter title layout when an icon action lacks an
+`sfSymbol`, an action has a long press, either side has more than one action,
+or the text is large; debug builds print which. Basic icon-only navigation
+should supply an `sfSymbol` with every icon. The supported native layout uses a
+package-owned `UINavigationBar` bridge and announces each action's business
+label. UIKit retains the system material and bar-button rendering.
 
 ## Performance
 

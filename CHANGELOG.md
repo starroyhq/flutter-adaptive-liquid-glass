@@ -11,6 +11,8 @@
   text size, and a navigation bar with more than one leading or trailing
   action, a long press, an icon without an `sfSymbol` or large text. Release
   builds and the fallback and opaque modes print nothing.
+- Documentation: the navigation bar keeps disabled actions native, and apps
+  that use the standalone `material_ui` package need its compatibility bridge.
 
 ## 0.6.0
 

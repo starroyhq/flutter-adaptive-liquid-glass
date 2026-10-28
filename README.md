@@ -838,11 +838,14 @@ controls in profile mode on a device.
 - A few defaults are English: the fallback color sheet's HEX label, HEX error
   and channel values (see [Date and color pickers](#date-and-color-pickers)) and
   the slider's percentage value, which `semanticFormatterCallback` replaces.
-- Some native controls switch to Flutter rendering without notice: buttons
-  while `loading` and fixed-height controls at large text sizes, and the
-  navigation bar unless it has at most one leading and one trailing action,
-  without long presses and with an `sfSymbol` beside every icon. Native
-  sliders, switches and steppers stay native at every text size.
+- Some native controls switch to Flutter rendering: buttons while `loading`
+  and fixed-height controls (buttons, button groups, segmented controls and
+  the navigation bar) at large text sizes, and the navigation bar unless it
+  has at most one leading and one trailing action, without long presses and
+  with an `sfSymbol` beside every icon. Debug builds print each such reason
+  once with `debugPrint`, naming the control and what to change; release
+  builds print nothing. Native sliders, switches and steppers stay native at
+  every text size.
 - iPad, landscape and Split View have not been validated. The tab bar has no
   sidebar form, and sheets are at most 640 points wide.
 - On iOS 26 the tab bar is empty for its first frame while its icons are

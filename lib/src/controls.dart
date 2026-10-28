@@ -7,6 +7,7 @@ import 'feedback.dart';
 import 'theme.dart';
 import 'native_visibility.dart';
 import 'native_capsule.dart';
+import 'native_fallback_report.dart';
 import 'native_segmented_control.dart';
 
 class LiquidGlassButton extends StatelessWidget {
@@ -104,11 +105,23 @@ class LiquidGlassButton extends StatelessWidget {
         ? glassColors.onAccent ?? colors.onPrimary
         : glassColors.foreground ?? colors.onSurface;
     final accent = glassColors.accent ?? colors.primary;
-    final useNative =
-        LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native &&
-        !loading &&
-        MediaQuery.textScalerOf(context).scale(14) <= 20;
-    if (useNative) {
+    final nativeMode =
+        LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native;
+    final largeText = MediaQuery.textScalerOf(context).scale(14) > 20;
+    if (nativeMode && loading) {
+      reportNativeFallback(
+        'LiquidGlassButton',
+        'loading is true',
+        'The native button returns once loading is false.',
+      );
+    } else if (nativeMode && largeText) {
+      reportNativeFallback(
+        'LiquidGlassButton',
+        'the text scale is above the native button\'s fixed height',
+        'The native button returns at a smaller text size.',
+      );
+    }
+    if (nativeMode && !loading && !largeText) {
       // An icon-only button keeps its standalone look, with or without a
       // long press.
       return NativeCapsule(
@@ -243,8 +256,17 @@ class LiquidGlassSegmentedControl<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final glassColors = LiquidGlassTheme.of(context).colors;
-    if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native &&
-        MediaQuery.textScalerOf(context).scale(14) <= 20) {
+    final nativeMode =
+        LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native;
+    final largeText = MediaQuery.textScalerOf(context).scale(14) > 20;
+    if (nativeMode && largeText) {
+      reportNativeFallback(
+        'LiquidGlassSegmentedControl',
+        'the text scale is above the native control\'s fixed height',
+        'The native control returns at a smaller text size.',
+      );
+    }
+    if (nativeMode && !largeText) {
       return NativeVisibility(
         child: NativeSegmentedControl(
           labels: [for (final segment in segments) segment.label],

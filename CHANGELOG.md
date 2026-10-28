@@ -5,6 +5,12 @@
   points) was lost and the thumb ended that far behind the finger. A press on
   the track away from the thumb still behaves as UIKit does. Vertical drags
   that start on a slider in a scrollable still scroll it.
+- In debug builds a control whose mode resolves to native but which draws its
+  Flutter rendering prints the reason once per process with `debugPrint`: a
+  `loading` button, a button, button group or segmented control at a large
+  text size, and a navigation bar with more than one leading or trailing
+  action, a long press, an icon without an `sfSymbol` or large text. Release
+  builds and the fallback and opaque modes print nothing.
 
 ## 0.6.0
 

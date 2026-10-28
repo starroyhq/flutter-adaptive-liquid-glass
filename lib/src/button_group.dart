@@ -5,6 +5,7 @@ import 'fallback_pressable.dart';
 import 'feedback.dart';
 import 'native_button_layout.dart';
 import 'native_capsule.dart';
+import 'native_fallback_report.dart';
 import 'surface.dart';
 import 'theme.dart';
 
@@ -28,8 +29,17 @@ class LiquidGlassButtonGroup extends StatelessWidget {
       action.label,
       style: foreground == null ? null : TextStyle(color: foreground),
     );
-    if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native &&
-        MediaQuery.textScalerOf(context).scale(17) <= 24) {
+    final nativeMode =
+        LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native;
+    final largeText = MediaQuery.textScalerOf(context).scale(17) > 24;
+    if (nativeMode && largeText) {
+      reportNativeFallback(
+        'LiquidGlassButtonGroup',
+        'the text scale is above the native capsule\'s fixed height',
+        'The native capsule returns at a smaller text size.',
+      );
+    }
+    if (nativeMode && !largeText) {
       return NativeCapsule(
         items: [
           for (final action in actions)

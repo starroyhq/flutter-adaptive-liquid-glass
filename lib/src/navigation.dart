@@ -6,6 +6,7 @@ import 'button_group.dart';
 import 'fallback_pressable.dart';
 import 'fallback_selection_track.dart';
 import 'feedback.dart';
+import 'native_fallback_report.dart';
 import 'native_navigation_bar.dart';
 import 'native_tab_bar.dart';
 import 'native_tab_item.dart';
@@ -289,16 +290,41 @@ class LiquidGlassNavigationBar extends StatelessWidget
     // Keep the existing native layout limits; grouped/long-press actions use
     // the Flutter title layout with our native capsule buttons below. A
     // disabled action stays in the native bar, which updates it in place.
-    final nativeActions = all.every(
-      (action) =>
-          action.onLongPress == null &&
-          (action.icon == null || action.sfSymbol != null),
-    );
-    if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native &&
-        nativeActions &&
-        leading.length <= 1 &&
-        actions.length <= 1 &&
-        MediaQuery.textScalerOf(context).scale(17) <= 24) {
+    final nativeMode =
+        LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native;
+    final reasons = <(String, String)>[
+      if (leading.length > 1)
+        (
+          'it has more than one leading action',
+          'Keep at most one leading action for the native bar.',
+        ),
+      if (actions.length > 1)
+        (
+          'it has more than one trailing action',
+          'Keep at most one trailing action for the native bar.',
+        ),
+      if (all.any((action) => action.onLongPress != null))
+        (
+          'an action has onLongPress',
+          'Remove onLongPress from the bar actions for the native bar.',
+        ),
+      if (all.any((action) => action.icon != null && action.sfSymbol == null))
+        (
+          'an action has an icon without an sfSymbol',
+          'Give every icon action an sfSymbol for the native bar.',
+        ),
+      if (MediaQuery.textScalerOf(context).scale(17) > 24)
+        (
+          'the text scale is above the native bar\'s fixed height',
+          'The native bar returns at a smaller text size.',
+        ),
+    ];
+    if (nativeMode) {
+      for (final (reason, fix) in reasons) {
+        reportNativeFallback('LiquidGlassNavigationBar', reason, fix);
+      }
+    }
+    if (nativeMode && reasons.isEmpty) {
       return SafeArea(
         bottom: false,
         child: NativeVisibility(

@@ -753,7 +753,11 @@ including `fallback` and `opaque`. They retain UIKit selection, hit testing and
 system accessibility materials. `opaque` or `reduceTransparency` places a solid
 backdrop behind the native bar; no private accessibility APIs are called. Reduced
 motion, high contrast and large text do not replace native tabs with painted tabs.
-On older iOS and Android, bottom tabs follow the table.
+On older iOS and Android, bottom tabs follow the table. The one exception on
+iOS 26+ is a tab bar that UIKit would put in the vertical bar at the screen
+edge (iOS 27.1 and later, for example on iPhone Duo): there the package draws
+its Flutter tab bar so every tab can be reached; see
+[Known limitations](#known-limitations).
 
 `native` never forces an unsupported UIKit view. For the other controls,
 `reduceTransparency` and `MediaQuery.highContrast` override the rendering preference
@@ -801,8 +805,12 @@ Every native control is a package-owned UIKit bridge; no third-party native
 package is involved. The tab bar is a system `UITabBarController` built with
 `UITab`, with text and dot badges; a `trailingAction` is a `UISearchTab`, which
 UIKit draws as the separate round button and which is the prominent tab on
-iOS 27. The segmented control is a `UISegmentedControl` exactly as wide as the
-control. Icon buttons use the same glass capsule as text buttons. The native
+iOS 27. Where UIKit puts the tab bar in the vertical bar at the screen edge
+(iOS 27.1 and later, for example on iPhone Duo), the system bar would show only
+the selected tab, so the package draws its Flutter tab bar there instead; see
+[Known limitations](#known-limitations). The segmented control is a
+`UISegmentedControl` exactly as wide as the control. Icon buttons use the same
+glass capsule as text buttons. The native
 material behind `LiquidGlassSurface` is a UIKit view too, because a SwiftUI glass
 container does not keep its shape in step with the safe area while a sheet slides
 in. `liquidGlassNativeAvailable` is synchronous and valid on the first frame: it
@@ -858,7 +866,8 @@ LiquidGlassTheme(
 ```
 
 `LiquidGlassMode.opaque` costs less still: its solid surfaces have no blur. The
-tab bar stays native on iOS 26 in every mode (see
+tab bar stays native on iOS 26 and later in every mode, except where UIKit
+would put it in the vertical bar (see
 [Rendering policy](#rendering-policy)). Profile pages that combine many native
 controls in profile mode on a device.
 
@@ -883,8 +892,21 @@ controls in profile mode on a device.
   once with `debugPrint`, naming the control and what to change; release
   builds print nothing. Native sliders, switches and steppers stay native at
   every text size.
-- iPad, landscape and Split View have not been validated. The tab bar has no
-  sidebar form, and sheets are at most 640 points wide.
+- iPad, landscape and Split View have not been validated beyond one simulator
+  check: on an iOS 27.0 iPad Pro 11-inch (M5) in portrait, UIKit draws the
+  native tab bar as the iPad's floating bar of text tabs, with every tab shown,
+  rather than the phone's bottom bar. The tab bar has no sidebar form, and
+  sheets are at most 640 points wide.
+- From iOS 27.1 UIKit can move tab bars into a vertical bar at the screen edge,
+  as in the iPhone Duo simulator, where the system bar shows only the selected
+  tab in the bar's space. The native tab bar detects this from UIKit's
+  `verticalBarEdge` trait, stays hidden and switches every `LiquidGlassTabBar`
+  to the Flutter tab bar for the rest of the process; until the switch the
+  first bar's band is empty. Debug builds print the reason once. An app that
+  prefers the system bar can return `.disabled` from
+  `preferredVerticalBarBehavior` in its root view controller (iOS 27.1 SDK); in
+  a simulator check this restored the horizontal system tab bar and status
+  bar. iPhone Duo has not been checked on a device.
 - On iOS 26 the tab bar is empty for its first frame while its icons are
   prepared.
 - `liquidGlassNativeAvailable` reads only the iOS major version and ignores
@@ -948,17 +970,23 @@ example Debug APK (Java 17) and an arm64 iOS simulator application (macOS 26).
 The iOS job generates Flutter configuration, enforces `Podfile.lock`, then invokes
 `xcodebuild` directly to avoid the toolchain's combined-architecture parsing issue;
 it builds the plugin through CocoaPods.
-An additional arm64 job boots its own iOS 26 simulator and runs the
+An additional arm64 job runs twice, with Xcode 26.6 on an iOS 26 simulator
+(`macos-26` image) and with Xcode 27.1 on an iOS 27 simulator (`xcode-27`
+image). Each boots its own iPhone 17 Pro simulator and runs the
 `NativeSliderAcceptance` XCTest scheme using normal-duration system input. It
-requires an installed iOS 26 runtime rather than substituting a newer version.
+requires an installed runtime of that major version that runs the iPhone 17 Pro
+rather than substituting another version; on the `xcode-27` image that is
+iOS 27.0, because the iOS 27.1 runtime runs only the iPhone Duo.
 Two more jobs follow the current stable channel. `quality-stable` analyzes and
 tests both packages; it resolves dependencies without `--enforce-lockfile`
 because the SDK packages that `flutter_test` pins change with every Flutter
 release. `ios-simulator-stable` then builds the same arm64 simulator application
-with Swift Package Manager, the default from Flutter 3.44, and fails unless the
-plugin and its privacy manifest come from the Swift package. These jobs upload
+with Swift Package Manager, the default from Flutter 3.44, and Xcode 27.1
+(`xcode-27` image), so the native code compiles against both the iOS 26 and the
+iOS 27 SDK. It fails unless the plugin and its privacy manifest come from the
+Swift package. These jobs upload
 no artifacts and, like the others, must pass for a release run.
-The APK, archived simulator `.app` and native XCTest result bundle are retained
+The APK, archived simulator `.app` and native XCTest result bundles are retained
 for 14 days. Build success does not establish native animation, IME,
 accessibility or GPU performance. The separate Flutter integration scenarios
 are runnable locally; CI formats/analyzes those sources but does not run that

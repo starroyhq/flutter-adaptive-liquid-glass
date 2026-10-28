@@ -52,59 +52,81 @@ class LiquidGlassTabBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final glassTheme = LiquidGlassTheme.of(context);
-    if (glassTheme.resolveTabBar(nativeAvailable: liquidGlassNativeAvailable) ==
+    if (glassTheme.resolveTabBar(nativeAvailable: liquidGlassNativeAvailable) !=
         LiquidGlassMode.native) {
-      final tabBar = NativeVisibility(
-        child: NativeTabBar(
-          items: [
-            for (final item in items)
-              nativeTabItem(
-                label: item.label,
-                icon: item.icon,
-                selectedIcon: item.selectedIcon,
-                sfSymbol: item.sfSymbol,
-                badge: item.badge,
-              ),
-          ],
-          // Debug builds assert the range; keep the native bar valid in release.
-          currentIndex: selectedIndex.clamp(0, items.length - 1),
-          action: trailingAction == null
-              ? null
-              : nativeTabItem(
-                  label: trailingAction!.label,
-                  icon: trailingAction!.icon ?? Icons.search,
-                  sfSymbol: trailingAction!.sfSymbol ?? 'magnifyingglass',
-                ),
-          onActionPressed: trailingAction?.onPressed == null
-              ? null
-              : () {
-                  if (!LiquidGlassFeedback.canInteract(context)) return;
-                  LiquidGlassFeedback.tap(context);
-                  trailingAction!.onPressed!();
-                },
-          selectedItemColor:
-              glassTheme.colors.selectedForeground ??
-              glassTheme.colors.accent ??
-              Theme.of(context).colorScheme.primary,
-          onTabSelected: (index) {
-            if (index >= 0 && index < items.length) onSelected(index);
-          },
-        ),
-      );
-      // UIKit keeps its native Liquid Glass shape, selection, hit testing and
-      // system accessibility behavior. An app-specific transparency preference
-      // only removes the content behind it; no private accessibility API is used.
-      return glassTheme.reduceTransparency ||
-              glassTheme.mode == LiquidGlassMode.opaque
-          ? ColoredBox(
-              color:
-                  (glassTheme.colors.surfaceTint ??
-                          Theme.of(context).colorScheme.surface)
-                      .withValues(alpha: 1),
-              child: tabBar,
-            )
-          : tabBar;
+      return _buildFallback(context);
     }
+    return ValueListenableBuilder<bool>(
+      valueListenable: nativeTabBarInVerticalBar,
+      builder: (context, inVerticalBar, _) {
+        if (!inVerticalBar) return _buildNative(context, glassTheme);
+        reportNativeFallback(
+          'LiquidGlassTabBar',
+          'UIKit puts the system tab bar in the vertical bar at the screen '
+              'edge, where only the selected tab shows',
+          'To keep the native bar, return .disabled from '
+              'preferredVerticalBarBehavior in the app\'s root view '
+              'controller (iOS 27.1 SDK).',
+        );
+        return _buildFallback(context);
+      },
+    );
+  }
+
+  Widget _buildNative(BuildContext context, LiquidGlassThemeData glassTheme) {
+    final tabBar = NativeVisibility(
+      child: NativeTabBar(
+        items: [
+          for (final item in items)
+            nativeTabItem(
+              label: item.label,
+              icon: item.icon,
+              selectedIcon: item.selectedIcon,
+              sfSymbol: item.sfSymbol,
+              badge: item.badge,
+            ),
+        ],
+        // Debug builds assert the range; keep the native bar valid in release.
+        currentIndex: selectedIndex.clamp(0, items.length - 1),
+        action: trailingAction == null
+            ? null
+            : nativeTabItem(
+                label: trailingAction!.label,
+                icon: trailingAction!.icon ?? Icons.search,
+                sfSymbol: trailingAction!.sfSymbol ?? 'magnifyingglass',
+              ),
+        onActionPressed: trailingAction?.onPressed == null
+            ? null
+            : () {
+                if (!LiquidGlassFeedback.canInteract(context)) return;
+                LiquidGlassFeedback.tap(context);
+                trailingAction!.onPressed!();
+              },
+        selectedItemColor:
+            glassTheme.colors.selectedForeground ??
+            glassTheme.colors.accent ??
+            Theme.of(context).colorScheme.primary,
+        onTabSelected: (index) {
+          if (index >= 0 && index < items.length) onSelected(index);
+        },
+      ),
+    );
+    // UIKit keeps its native Liquid Glass shape, selection, hit testing and
+    // system accessibility behavior. An app-specific transparency preference
+    // only removes the content behind it; no private accessibility API is used.
+    return glassTheme.reduceTransparency ||
+            glassTheme.mode == LiquidGlassMode.opaque
+        ? ColoredBox(
+            color:
+                (glassTheme.colors.surfaceTint ??
+                        Theme.of(context).colorScheme.surface)
+                    .withValues(alpha: 1),
+            child: tabBar,
+          )
+        : tabBar;
+  }
+
+  Widget _buildFallback(BuildContext context) {
     final tabs = LiquidGlassSurface(
       radius: 32,
       padding: const EdgeInsets.all(6),

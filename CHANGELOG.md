@@ -11,6 +11,13 @@
   text size, and a navigation bar with more than one leading or trailing
   action, a long press, an icon without an `sfSymbol` or large text. Release
   builds and the fallback and opaque modes print nothing.
+- Where UIKit puts the tab bar in the vertical bar at the screen edge (iOS 27.1
+  and later, for example on iPhone Duo), the system bar showed only the
+  selected tab and the other tabs could not be reached. The native tab bar now
+  detects this, stays hidden and switches `LiquidGlassTabBar` to the Flutter
+  tab bar, and debug builds print the reason once. Apps that return `.disabled`
+  from `preferredVerticalBarBehavior` in their root view controller keep the
+  system bar. Elsewhere the tab bar is unchanged.
 - Documentation: the navigation bar keeps disabled actions native, and apps
   that use the standalone `material_ui` package need its compatibility bridge.
 

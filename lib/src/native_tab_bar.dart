@@ -56,6 +56,12 @@ class NativeTabBar extends StatefulWidget {
   State<NativeTabBar> createState() => _NativeTabBarState();
 }
 
+/// Set once a system tab bar reports that UIKit puts its tabs in the vertical
+/// bar at the screen edge (iOS 27.1 and later, as on iPhone Duo), where only
+/// the selected tab shows. Tab bars then draw the Flutter bar for the rest of
+/// the process.
+final nativeTabBarInVerticalBar = ValueNotifier<bool>(false);
+
 class _NativeTabBarState extends State<NativeTabBar> {
   MethodChannel? _channel;
   List<Map<String, Object?>>? _tabs;
@@ -186,6 +192,8 @@ class _NativeTabBarState extends State<NativeTabBar> {
         WidgetsBinding.instance.ensureVisualUpdate();
       case 'actionPressed':
         widget.onActionPressed?.call();
+      case 'verticalBar':
+        nativeTabBarInVerticalBar.value = true;
     }
   }
 

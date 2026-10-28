@@ -54,6 +54,9 @@ private final class AdaptiveLiquidGlassTabBar: NSObject, FlutterPlatformView {
         },
         onActionPressed: { [weak self] in
           self?.channel.invokeMethod("actionPressed", arguments: nil)
+        },
+        onVerticalBar: { [weak self] in
+          self?.channel.invokeMethod("verticalBar", arguments: nil)
         })
       nativeView.translatesAutoresizingMaskIntoConstraints = false
       container.addSubview(nativeView)
@@ -193,6 +196,8 @@ private final class AdaptiveTabBarControllerView: UIView, UITabBarControllerDele
   private let tabBarController = UITabBarController()
   private let onTabSelected: (Int) -> Void
   private let onActionPressed: () -> Void
+  private let onVerticalBar: () -> Void
+  private var reportedVerticalBar = false
   private var defaultTabBarTintColor: UIColor?
   /// Identifiers of the selectable tabs in order, without the action.
   private var tabIdentifiers: [String] = []
@@ -203,10 +208,12 @@ private final class AdaptiveTabBarControllerView: UIView, UITabBarControllerDele
 
   init(configuration: AdaptiveTabBarConfiguration,
        onTabSelected: @escaping (Int) -> Void,
-       onActionPressed: @escaping () -> Void) {
+       onActionPressed: @escaping () -> Void,
+       onVerticalBar: @escaping () -> Void) {
     self.configuration = configuration
     self.onTabSelected = onTabSelected
     self.onActionPressed = onActionPressed
+    self.onVerticalBar = onVerticalBar
     super.init(frame: .zero)
     backgroundColor = .clear
     clipsToBounds = false
@@ -264,6 +271,33 @@ private final class AdaptiveTabBarControllerView: UIView, UITabBarControllerDele
     // A reattached bar can fall back to the appearance's baked-in colors.
     applyUserInterfaceStyle()
     applySelectedTintColor()
+    reportVerticalBarIfNeeded()
+  }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    reportVerticalBarIfNeeded()
+  }
+
+  /// Whether UIKit puts the tabs in the vertical bar at the screen edge, as
+  /// on iPhone Duo with iOS 27.1, where this band shows only the selected
+  /// tab. The host view controller's `preferredVerticalBarBehavior` decides
+  /// this; an embedded controller's own preference is not consulted. The
+  /// trait is read by key so the plugin still compiles with older SDKs.
+  private var systemPlacesVerticalBar: Bool {
+    guard #available(iOS 27.1, *) else { return false }
+    let key = "verticalBarEdge"
+    guard traitCollection.responds(to: NSSelectorFromString(key)) else { return false }
+    return ((traitCollection.value(forKey: key) as? NSNumber)?.intValue ?? 0) != 0
+  }
+
+  /// Hides the bar before it is drawn in the vertical bar and asks Dart for
+  /// the Flutter tab bar instead, once.
+  private func reportVerticalBarIfNeeded() {
+    guard !reportedVerticalBar, window != nil, systemPlacesVerticalBar else { return }
+    reportedVerticalBar = true
+    tabBarController.view.isHidden = true
+    onVerticalBar()
   }
 
   /// The view controller whose view shows the bar: the Flutter view

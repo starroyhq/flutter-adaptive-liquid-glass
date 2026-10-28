@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart';
+import 'package:flutter_adaptive_liquid_glass/src/native_fallback_report.dart';
 import 'package:flutter_adaptive_liquid_glass/src/native_tab_bar.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -68,6 +69,8 @@ void main() {
     );
   });
   tearDown(() {
+    nativeTabBarInVerticalBar.value = false;
+    debugResetNativeFallbackReports();
     binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform_views,
       null,
@@ -317,5 +320,65 @@ void main() {
     expect(last, isNot(ltr));
     expect(views[last]!['rtl'], isTrue);
     expect(views[last]!['currentIndex'], 1);
+  }, variant: _ios);
+
+  testWidgets('a vertical bar report switches to the Flutter tab bar', (
+    tester,
+  ) async {
+    final printed = <String>[];
+    final nativeBar = find.byWidgetPredicate(
+      (widget) =>
+          widget is UiKitView && widget.viewType == NativeTabBar.viewType,
+    );
+    var selected = 0;
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) => host(
+          selected: selected,
+          onSelected: (value) => setState(() => selected = value),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(nativeBar, findsOneWidget);
+    // debugPrint must be restored before the test's invariants are checked.
+    final original = debugPrint;
+    debugPrint = (message, {wrapWidth}) => printed.add(message ?? '');
+    try {
+      await send('verticalBar');
+      await tester.pump();
+    } finally {
+      debugPrint = original;
+    }
+    expect(nativeTabBarInVerticalBar.value, isTrue);
+    expect(nativeBar, findsNothing);
+    // Every tab is reachable in the Flutter bar.
+    await tester.tap(find.text('Gamma'));
+    await tester.pump();
+    expect(selected, 2);
+    expect(printed, hasLength(1));
+    expect(printed.single, contains('LiquidGlassTabBar'));
+    expect(printed.single, contains('preferredVerticalBarBehavior'));
+  }, variant: _ios);
+
+  testWidgets('a tab bar built after the report is Flutter from its first '
+      'frame', (tester) async {
+    nativeTabBarInVerticalBar.value = true;
+    final nativeBar = find.byWidgetPredicate(
+      (widget) =>
+          widget is UiKitView && widget.viewType == NativeTabBar.viewType,
+    );
+    final created = views.length;
+    final original = debugPrint;
+    debugPrint = (message, {wrapWidth}) {};
+    try {
+      await tester.pumpWidget(host());
+      expect(find.text('Alpha'), findsOneWidget);
+      await tester.pump();
+    } finally {
+      debugPrint = original;
+    }
+    expect(nativeBar, findsNothing);
+    expect(views.length, created);
   }, variant: _ios);
 }

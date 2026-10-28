@@ -1,4 +1,4 @@
-## Unreleased
+## 0.6.1
 - A drag on the native slider that starts on the thumb now keeps the point
   where the finger pressed the thumb, so the thumb follows the finger. Before,
   the movement until Flutter's drag gesture passed its touch slop (about 18

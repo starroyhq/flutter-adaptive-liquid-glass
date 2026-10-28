@@ -1,3 +1,11 @@
+## Unreleased
+- A drag on the native slider that starts on the thumb now keeps the point
+  where the finger pressed the thumb, so the thumb follows the finger. Before,
+  the movement until Flutter's drag gesture passed its touch slop (about 18
+  points) was lost and the thumb ended that far behind the finger. A press on
+  the track away from the thumb still behaves as UIKit does. Vertical drags
+  that start on a slider in a scrollable still scroll it.
+
 ## 0.6.0
 
 - The package no longer depends on `native_liquid_glass`, and so no longer

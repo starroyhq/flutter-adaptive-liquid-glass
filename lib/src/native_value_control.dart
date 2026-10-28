@@ -305,8 +305,44 @@ class _NativeValueControlState extends State<NativeValueControl>
     builder: (context, child) => _buildControl(context),
   );
 
+  /// Pointers currently pressed on the slider, so only the first is reported.
+  final Set<int> _pointers = {};
+
+  /// UIKit receives the touch only once Flutter's drag gesture has passed its
+  /// touch slop. The press position lets the native slider keep the finger's
+  /// original grab point on the thumb instead of trailing behind it.
+  void _pointerDown(PointerDownEvent event) {
+    _pointers.add(event.pointer);
+    final channel = _channel;
+    if (_pointers.length != 1 || channel == null) return;
+    final point = {'x': event.localPosition.dx, 'y': event.localPosition.dy};
+    channel.invokeMethod<void>('pointerDown', point).catchError((_) {});
+  }
+
+  void _pointerUp(PointerEvent event) => _pointers.remove(event.pointer);
+
   Widget _buildControl(BuildContext context) {
     _send();
+    final view = UiKitView(
+      key: ValueKey(widget.kind),
+      viewType: 'flutter_adaptive_liquid_glass/value-control',
+      creationParams: {..._configuration, 'revision': _revision},
+      creationParamsCodec: const StandardMessageCodec(),
+      onPlatformViewCreated: _created,
+      gestureRecognizers: {
+        if (widget.kind != 'slider' || widget.enabled) ...{
+          Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
+          if (widget.kind != 'stepper')
+            Factory<HorizontalDragGestureRecognizer>(
+              () => HorizontalDragGestureRecognizer(),
+            ),
+          if (widget.kind == 'stepper')
+            Factory<LongPressGestureRecognizer>(
+              () => LongPressGestureRecognizer(),
+            ),
+        },
+      },
+    );
     return NativeVisibility(
       child: SizedBox(
         height: 48,
@@ -315,25 +351,12 @@ class _NativeValueControlState extends State<NativeValueControl>
           'stepper' => 104,
           _ => null,
         },
-        child: UiKitView(
-          key: ValueKey(widget.kind),
-          viewType: 'flutter_adaptive_liquid_glass/value-control',
-          creationParams: {..._configuration, 'revision': _revision},
-          creationParamsCodec: const StandardMessageCodec(),
-          onPlatformViewCreated: _created,
-          gestureRecognizers: {
-            if (widget.kind != 'slider' || widget.enabled) ...{
-              Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
-              if (widget.kind != 'stepper')
-                Factory<HorizontalDragGestureRecognizer>(
-                  () => HorizontalDragGestureRecognizer(),
-                ),
-              if (widget.kind == 'stepper')
-                Factory<LongPressGestureRecognizer>(
-                  () => LongPressGestureRecognizer(),
-                ),
-            },
-          },
+        // Keep one widget tree shape so the platform view is never recreated.
+        child: Listener(
+          onPointerDown: widget.kind == 'slider' ? _pointerDown : null,
+          onPointerUp: _pointerUp,
+          onPointerCancel: _pointerUp,
+          child: view,
         ),
       ),
     );

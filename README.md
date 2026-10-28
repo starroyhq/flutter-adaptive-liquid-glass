@@ -845,10 +845,6 @@ controls in profile mode on a device.
   sliders, switches and steppers stay native at every text size.
 - iPad, landscape and Split View have not been validated. The tab bar has no
   sidebar form, and sheets are at most 640 points wide.
-- In simulator UI tests a slow drag on the native slider can end about 20 points
-  behind the finger: the movement before Flutter's drag gesture passes its touch
-  slop does not reach UIKit. Not yet confirmed on a device; a later release is
-  planned to fix it.
 - On iOS 26 the tab bar is empty for its first frame while its icons are
   prepared.
 - `liquidGlassNativeAvailable` reads only the iOS major version and ignores

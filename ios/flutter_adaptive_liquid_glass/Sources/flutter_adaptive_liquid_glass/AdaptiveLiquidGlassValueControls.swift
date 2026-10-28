@@ -281,6 +281,14 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
           return
         }
         result(self.configure(config))
+      case "pointerDown":
+        // Flutter's press position in this platform view, in points.
+        if let point = call.arguments as? [String: Any],
+           let x = (point["x"] as? NSNumber)?.doubleValue, let y = (point["y"] as? NSNumber)?.doubleValue,
+           x.isFinite, y.isFinite {
+          self.slider.recordPointerDown(self.slider.convert(CGPoint(x: x, y: y), from: self.container))
+        }
+        result(nil)
       case "setSuppressed":
         self.routeSuppressed = (call.arguments as? [String: Any])?["suppressed"] as? Bool ?? false
         self.updateVisibility()
@@ -325,6 +333,12 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
     self.minimum = minimum
     self.maximum = maximum
     self.divisions = divisions
+    slider.detents = divisions
+    if #available(iOS 26.0, *), let divisions, divisions <= 256 {
+      slider.snapsWhileTracking = true
+    } else {
+      slider.snapsWhileTracking = false
+    }
     enabled = config["enabled"] as? Bool ?? true
     routeSuppressed = config["suppressed"] as? Bool ?? false
     popupOwner = config["popupOwner"] as? Bool ?? false
@@ -400,7 +414,7 @@ private final class AdaptiveLiquidGlassNativeSlider: NSObject, FlutterPlatformVi
   }
 
   @objc private func changed() {
-    guard canInteract, activeGesture != nil, activeTracking == slider.trackingIdentity else { return }
+    guard !slider.suppressesValueEvents, canInteract, activeGesture != nil, activeTracking == slider.trackingIdentity else { return }
     acceptNativeValue()
   }
 
@@ -655,22 +669,104 @@ private final class AdaptiveGlassTrackedSlider: UISlider {
   var onWillCancel: (() -> Void)?
   var onUntrackedEnd: ((Bool) -> Void)?
   var onAccessibilityAdjust: ((Int) -> Void)?
+  /// Snapping applied when a corrected drag ends, matching business detents.
+  var detents: Int?
+  /// Whether the system track shows ticks, so a drag moves between them.
+  var snapsWhileTracking = false
+  /// True while UIKit's own tracking runs under a grab correction. The bridge
+  /// ignores value events then; the corrected value is sent once afterwards.
+  private(set) var suppressesValueEvents = false
   private var nextTrackingIdentity = 0
   private(set) var trackingIdentity: Int?
+  private var pointerDown: (point: CGPoint, time: CFTimeInterval)?
+  private var grab: (x: CGFloat, unit: Float)?
+
+  /// Flutter hands the touch to UIKit only after its drag gesture passes the
+  /// touch slop, and UIKit then reports the touch where it is at that moment.
+  /// Flutter's own pointer-down position (slider coordinates) lets a drag
+  /// that started on the thumb keep its grab point from the real press.
+  func recordPointerDown(_ point: CGPoint) {
+    pointerDown = (point, CACurrentMediaTime())
+  }
+
+  /// Signed horizontal travel of the thumb centre from minimum to maximum, in
+  /// the same coordinates as touches, so a mirrored layout is negative.
+  private func thumbTravel() -> CGFloat {
+    let track = trackRect(forBounds: bounds)
+    let low = thumbRect(forBounds: bounds, trackRect: track, value: minimumValue).midX
+    let high = thumbRect(forBounds: bounds, trackRect: track, value: maximumValue).midX
+    return high - low
+  }
+
+  private func unitAt(_ x: CGFloat, grab: (x: CGFloat, unit: Float)) -> Float {
+    let travel = thumbTravel()
+    guard travel != 0 else { return grab.unit }
+    let delta = Float((x - grab.x) / travel)
+    return min(maximumValue, max(minimumValue, grab.unit + delta * (maximumValue - minimumValue)))
+  }
+
+  private func snapped(_ unit: Float) -> Float {
+    guard let detents, detents > 0 else { return unit }
+    let span = maximumValue - minimumValue
+    let fraction = ((unit - minimumValue) / span * Float(detents)).rounded() / Float(detents)
+    return minimumValue + fraction * span
+  }
+
+  /// Runs UIKit's tracking step, then installs the grab-relative value.
+  private func corrected(_ x: CGFloat?, snap: Bool, _ step: () -> Void) {
+    guard let grab else { step(); return }
+    let before = value
+    suppressesValueEvents = true
+    step()
+    suppressesValueEvents = false
+    guard let x else { return }
+    var target = unitAt(x, grab: grab)
+    if snap || snapsWhileTracking { target = snapped(target) }
+    if value != target { setValue(target, animated: false) }
+    if value != before { sendActions(for: .valueChanged) }
+  }
 
   override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+    let initial = value
+    let down = pointerDown
+    pointerDown = nil
+    grab = nil
     let accepted = shouldBegin?() == true && super.beginTracking(touch, with: event)
     guard accepted else { return false }
+    // Only a press that landed on the thumb keeps its grab point; a press on
+    // the track keeps UIKit's own behaviour. A stale press is ignored.
+    if let down, CACurrentMediaTime() - down.time < 2 {
+      let track = trackRect(forBounds: bounds)
+      let thumb = thumbRect(forBounds: bounds, trackRect: track, value: initial)
+      if abs(down.point.x - thumb.midX) <= thumb.width / 2 + 12 {
+        let start = (x: down.point.x, unit: initial)
+        grab = start
+        var target = unitAt(touch.location(in: self).x, grab: start)
+        if snapsWhileTracking { target = snapped(target) }
+        if value != target { setValue(target, animated: false) }
+      }
+    }
     nextTrackingIdentity += 1
     trackingIdentity = nextTrackingIdentity
     onBegin?(nextTrackingIdentity)
     return trackingIdentity != nil
   }
 
+  override func continueTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+    var result = false
+    corrected(touch.location(in: self).x, snap: false) {
+      result = super.continueTracking(touch, with: event)
+    }
+    return result
+  }
+
   override func endTracking(_ touch: UITouch?, with event: UIEvent?) {
     let identity = trackingIdentity
     if identity == nil { onUntrackedEnd?(false) }
-    super.endTracking(touch, with: event)
+    corrected(touch?.location(in: self).x, snap: true) {
+      super.endTracking(touch, with: event)
+    }
+    grab = nil
     if identity == nil { onUntrackedEnd?(true) }
     guard let identity, trackingIdentity == identity else { return }
     onEnd?(identity)
@@ -683,6 +779,8 @@ private final class AdaptiveGlassTrackedSlider: UISlider {
     // an untracked press before super can dispatch any terminal actions.
     onWillCancel?()
     trackingIdentity = nil
+    grab = nil
+    pointerDown = nil
     super.cancelTracking(with: event)
     if let identity { onCancel?(identity) }
   }

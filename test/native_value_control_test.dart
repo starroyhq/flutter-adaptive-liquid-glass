@@ -107,6 +107,35 @@ void main() {
     }
   });
 
+  testWidgets('a slider press reports its position to UIKit once', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      host(
+        NativeValueControl(
+          kind: 'slider',
+          value: .5,
+          enabled: true,
+          onChanged: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final origin = tester.getTopLeft(find.byType(UiKitView));
+    final first = await tester.startGesture(origin + const Offset(40, 20));
+    final second = await tester.startGesture(
+      origin + const Offset(90, 20),
+      pointer: 7,
+    );
+    await first.up();
+    await second.up();
+    final presses = calls[id]!.where((call) => call.method == 'pointerDown');
+    // A second finger is not a new grab point while the first is down.
+    expect(presses.map((call) => call.arguments), [
+      {'x': 40.0, 'y': 20.0},
+    ]);
+  });
+
   testWidgets(
     'a disabled slider leaves the gesture arena to its scroll parent',
     (tester) async {

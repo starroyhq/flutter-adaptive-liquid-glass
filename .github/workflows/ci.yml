@@ -102,14 +102,32 @@ jobs:
 
   native-interaction:
     needs: quality
-    # The public label for the macos-26-arm64 image is macos-26.
+    # The public label for the macos-26-arm64 image is macos-26; Xcode 27 and
+    # its iOS 27 simulators are on the separate xcode-27 image.
     # https://github.com/actions/runner-images#available-images
-    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ios: '26'
+            runner: macos-26
+            xcode: /Applications/Xcode_26.6.app
+          - ios: '27'
+            runner: xcode-27
+            xcode: /Applications/Xcode_27.1.app
+    name: native-interaction (iOS ${{ matrix.ios }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
+    env:
+      GLASS_IOS_MAJOR: ${{ matrix.ios }}
     steps:
       - uses: actions/checkout@v4
       - name: Require an arm64 runner
         run: test "$(uname -m)" = arm64
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "${{ matrix.xcode }}"
+          xcodebuild -version
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.41.9'
@@ -122,7 +140,7 @@ jobs:
         working-directory: example
       - run: pod install --deployment
         working-directory: example/ios
-      - name: Create and verify a dedicated iOS 26 simulator
+      - name: Create and verify a dedicated iOS ${{ matrix.ios }} simulator
         id: simulator
         run: |
           python3 - <<'PY'
@@ -135,17 +153,21 @@ jobs:
           def simctl(*args):
               return subprocess.check_output(['xcrun', 'simctl', *args], text=True)
 
+          major = os.environ['GLASS_IOS_MAJOR']
+          device_type = 'com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro'
+          # Some point releases support only new device types (iOS 27.1 runs
+          # only the iPhone Duo), so require a runtime that runs iPhone 17 Pro.
           candidates = [
               runtime for runtime in json.loads(simctl('list', 'runtimes', '--json'))['runtimes']
               if runtime.get('isAvailable')
               and runtime['identifier'].startswith('com.apple.CoreSimulator.SimRuntime.iOS-')
-              and runtime['version'].split('.')[0] == '26'
+              and runtime['version'].split('.')[0] == major
+              and any(item['identifier'] == device_type for item in runtime.get('supportedDeviceTypes', []))
           ]
           if not candidates:
-              raise SystemExit('No available iOS 26 runtime is installed; do not substitute iOS 27 or download a runtime.')
+              raise SystemExit(f'No available iOS {major} runtime runs iPhone 17 Pro; do not substitute another version or download a runtime.')
           runtime = max(candidates, key=lambda item: tuple(map(int, item['version'].split('.'))))
           runtime_id = runtime['identifier']
-          device_type = 'com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro'
           name = 'Liquid Glass Native Interaction ' + os.environ['GITHUB_RUN_ID']
           device_id = simctl('create', name, device_type, runtime_id).strip()
           # Save ownership before booting so the always-cleanup step also runs
@@ -157,12 +179,12 @@ jobs:
           devices = json.loads(simctl('list', 'devices', '--json'))['devices']
           device = next((item for item in devices.get(runtime_id, []) if item['udid'] == device_id), None)
           if not device or device['state'] != 'Booted':
-              raise SystemExit('The dedicated device did not boot on the selected iOS 26 runtime.')
+              raise SystemExit(f'The dedicated device did not boot on the selected iOS {major} runtime.')
           system_version = Path(runtime['runtimeRoot']) / 'System/Library/CoreServices/SystemVersion.plist'
           with system_version.open('rb') as source:
               version = plistlib.load(source)['ProductVersion']
-          if version.split('.')[0] != '26':
-              raise SystemExit(f'Runtime verification failed: expected iOS 26, found {version}.')
+          if version.split('.')[0] != major:
+              raise SystemExit(f'Runtime verification failed: expected iOS {major}, found {version}.')
           print(f'Native interaction destination: iPhone 17 Pro, iOS {version}, {device_id}')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write(f'Native interaction: dedicated iPhone 17 Pro simulator, iOS {version}, arm64.\n')
@@ -217,7 +239,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ios-26-native-interaction-xcresult
+          name: ios-${{ matrix.ios }}-native-interaction-xcresult
           path: example/build/native-interaction.xcresult
           if-no-files-found: warn
           retention-days: 14
@@ -254,11 +276,19 @@ jobs:
       - run: flutter test --no-pub
         working-directory: example
 
+  # Builds with Xcode 27 (iOS 27 SDK) while the pinned ios-simulator job keeps
+  # Xcode 26.6, so the native code compiles against both SDKs. Xcode 27 is not
+  # on the macos-26 image; it has its own image, labelled by Xcode version.
+  # https://github.com/actions/runner-images#available-images
   ios-simulator-stable:
     needs: quality-stable
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 45
     steps:
+      - name: Select Xcode 27.1
+        run: |
+          sudo xcode-select -s /Applications/Xcode_27.1.app
+          xcodebuild -version
       # The Flutter tool links a path-dependency plugin's Swift package under
       # the plugin directory's name, and SwiftPM rejects it when that name
       # differs from the package's own directory. Check out under the package

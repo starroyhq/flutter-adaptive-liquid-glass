@@ -1,3 +1,26 @@
+## Unreleased
+- The package's alerts, sheets and popovers, and the menus and picker editors
+  built on them, no longer hide the native glass of the page below them. The
+  page's tab bar, buttons, segmented controls and other native controls stay
+  on screen under the barrier, which still takes taps; VoiceOver does not reach
+  them. Before, every popup removed them for as long as it was open.
+- While a text field, selectable text or `SelectionArea` in one of these
+  popups has focus, or while a new `LiquidGlassOverlayGuard` is mounted (for
+  app content such as a toast in its own `OverlayEntry`), the popup isolates
+  the page as other popups do, so that the selection toolbar or the guarded
+  content is not clipped where the page's native views are. A popup whose
+  content resolves to fallback or opaque glass always isolates.
+- Where a popup isolates the page, which includes Material and Cupertino
+  sheets, dialogs and menus, the page's native controls now draw their Flutter
+  rendering in place, under the barrier, instead of leaving gaps. Ordinary page
+  transitions draw nothing in place of the page below, as before.
+- A native view that returns after a popup or a page above it has gone now
+  appears at once instead of fading in over 0.25 s, with the control's Flutter
+  rendering under it until it is back. A covered native view now starts its
+  0.15 s UIKit fade-out after 0.3 s, by which time Flutter has already taken
+  it out of composition, so a slow frame no longer leaves a gap. It still
+  stops taking touches and leaves the accessibility tree at once.
+
 ## 0.6.1
 - A drag on the native slider that starts on the thumb now keeps the point
   where the finger pressed the thumb, so the thumb follows the finger. Before,

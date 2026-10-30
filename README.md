@@ -613,9 +613,11 @@ points above, below and before the capsule for its shadow.
 takes the content's intrinsic width between 160 and `width` (`LiquidGlassMenuButton`
 accepts the same flag). It scales from the anchor edge it is attached to. The
 popover follows layout changes, flips/clamps within available keyboard-safe
-space and dismisses when its anchor is removed. Nested presentation, replacement
-and removal keep underlying native views hidden until the outgoing route's
-transition finishes. Locally scoped themes are captured when opening; place a
+space and dismisses when its anchor is removed. The package's alerts, sheets
+and popovers leave the native glass of the page below them on screen, dimmed by
+the barrier; other popups and nested combinations isolate the routes below
+them until the outgoing route's transition finishes (see
+[Native rendering and overlays](#native-rendering-and-overlays)). Locally scoped themes are captured when opening; place a
 live application-wide theme above the Navigator for global appearance updates.
 
 ## Interaction feedback and long press
@@ -833,19 +835,50 @@ is true when the target platform is iOS and the iOS major version is 26 or later
 It does not read `UIDesignRequiresCompatibility`.
 
 Install a separate `LiquidGlassNavigatorObserver` on every Navigator that presents
-popup routes. Dispose it when discarding a Navigator. Covered routes retain their
-native widgets' layout and state but exclude them from Flutter painting, hit testing
-and semantics until the popup's exit transition completes. Merely making a UIKit
-view transparent is insufficient: its platform-view rectangle can still participate
-in composition and clip the Flutter content of a mixed native/Flutter popup.
-The observer tracks nested coverage across navigator boundaries and balances
-removal, replacement and disposal. Flutter children of `LiquidGlassSurface` remain
-painted while only its native material is excluded. No plugin cache edits or
-whole-page fallback are required. As an additional occlusion guard, the observer
-also tells the plugin when the first popup appears and the last one leaves, over
-the package's own lifecycle channel, and native views beneath it hide in UIKit.
-Custom `OverlayEntry` presentations are not Navigator routes: stop painting the
-underlying native controls while such an overlay is active. Changing themes does
+popup routes. Dispose it when discarding a Navigator. The observer treats popups
+in two ways:
+
+- The package's own alerts, sheets and popovers (`showLiquidGlassAlert`,
+  `showLiquidGlassSheet`, `showLiquidGlassPopover`, and `LiquidGlassMenu`, the
+  menu buttons and the picker editors built on them) keep the native views of
+  the page below them on screen, under the barrier. Their content is drawn on
+  their own native surface, which Flutter's iOS platform view composition
+  handles. The page's controls stay out of reach: the barrier takes taps and
+  VoiceOver does not reach them.
+- Other popup routes (Material or Cupertino sheets, dialogs and menus, custom
+  `PopupRoute`s) isolate the routes below them. Their native widgets keep their
+  layout and state but leave Flutter painting, hit testing and semantics until
+  the popup's exit transition completes, and each native control paints its
+  Flutter rendering in its place, so the page does not show gaps. Merely making
+  a UIKit view transparent is insufficient: its platform-view rectangle can
+  still participate in composition and clip the Flutter content of a mixed
+  native/Flutter popup.
+
+A package popup also isolates the routes below it while a text field,
+selectable text or `SelectionArea` in it has focus, because the selection
+toolbar, its handles and the magnifier can extend past the popup, where the
+page's native views would clip them. When the focus leaves, the page's native
+views return in the frame after the toolbar has gone. A package popup whose
+content resolves to fallback or opaque glass, for example under a local
+`LiquidGlassTheme`, always isolates. A popup above an isolating popup isolates
+everything below it; a package popup above an isolating one leaves the page
+isolated. The observer tracks coverage across navigator boundaries and balances
+removal, replacement and disposal. Flutter children of `LiquidGlassSurface`
+remain painted while only its native material is excluded. As an additional
+occlusion guard, the observer tells the plugin when the first isolating popup
+appears and the last one leaves, over the package's own lifecycle channel, and
+native views beneath it hide in UIKit. A Navigator without an observer hides
+the native views of every route that is not current, the package's popups
+included, and draws nothing in their place.
+
+Flutter content that an app paints above a package popup in its own
+`OverlayEntry`, such as a toast, is only safe on the popup's surface. Wrap it
+in `LiquidGlassOverlayGuard`: while a guard is mounted, the package's popups
+isolate the page as other popups do, and the guarded content appears from the
+frame in which the page is isolated. A guard changes nothing while no package
+popup is open. Other custom `OverlayEntry` presentations are not Navigator
+routes: stop painting the underlying native controls while such an overlay is
+active. Changing themes does
 not remove the native tab platform view. Verify system materials on iOS hardware.
 
 `LiquidGlassNavigationBar` keeps a disabled action in the native bar and updates
@@ -926,7 +959,13 @@ controls in profile mode on a device.
   prepared.
 - `liquidGlassNativeAvailable` reads only the iOS major version and ignores
   `UIDesignRequiresCompatibility`. Custom `OverlayEntry` presentations do not
-  hide native views (see [Native rendering and overlays](#native-rendering-and-overlays)).
+  hide native views; overlay content above the package's popups needs
+  `LiquidGlassOverlayGuard`, and a package popup's own Flutter overlays other
+  than the text selection toolbar, such as a `Tooltip` or a `MenuAnchor` that
+  extends past it, can be clipped where the page's native glass is (see
+  [Native rendering and overlays](#native-rendering-and-overlays)). This
+  depends on Flutter's iOS platform view composition and is rechecked when the
+  Flutter version changes.
 - Some hosted iOS 26.5 simulator runs do not show the system color palette after
   its first real tap (see the note at the top). Physical haptics and sound, full
   VoiceOver/TalkBack and keyboard/IME acceptance, and hardware rendering and

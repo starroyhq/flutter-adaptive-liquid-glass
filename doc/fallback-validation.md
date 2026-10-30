@@ -72,6 +72,65 @@ route replacement/removal, observer disposal, and retained state/layout without
 paint, hit testing or semantics on covered routes. These tests do not substitute
 for simulator composition observations.
 
+## Native glass under the package's popups
+Checked in the iOS 27.0 simulator with Flutter 3.41.9, on a page shaped like a
+list screen: a standalone "+" icon button, a segmented control, a text
+button, a tab bar with a search tab, and Flutter rows. iOS 26 was not run
+locally; the CI native-interaction matrix covers it.
+
+Composition rule. Flutter's iOS embedder (`flow/view_slicer.cc`, and
+`bringLayersIntoView` in `FlutterPlatformViewsController.mm`) cuts the frame
+into slices, one after each platform view. Slice k gets an overlay layer for
+the bounds of its intersections with platform views 0 to k; the rest of the
+slice goes to the background layer, which is cut by every earlier overlay
+rectangle. A popup's barrier is painted after the page's last platform view
+and covers all of them, so its slice's overlay spans nearly the whole screen.
+Flutter content painted in a later slice that is over no platform view, but
+inside that rectangle, is therefore not drawn. The rule that follows: once the
+page's native views stay, every Flutter pixel painted after the popup's first
+platform view must lie on a platform view.
+
+Observations with the page's native views kept (before the fix, by patching
+out every hiding path in an experiment checkout of 0.6.1):
+
+- The package's popover, alert and fit-content sheet, with only Flutter
+  content, or with native switches and Flutter text after them, rendered
+  completely: their content is clipped to their own native surface.
+- A `showModalBottomSheet` with a white Flutter surface and native switches
+  lost the Flutter text, the draft, the label and the Material switch after
+  its first native switch; this is the regression the mixed-modal fix above
+  addressed. Over a page without native views it rendered completely.
+- A Flutter-drawn text selection toolbar of a field in a sheet or an alert
+  lost the parts outside the popup's surface (its rounded ends, and about 11
+  points on the left in the sheet). A field's default toolbar on iOS is the
+  system menu, a UIKit view, which is not affected.
+- A `Tooltip` below a popover stayed complete, but only because it lay over
+  the tab bar's platform view.
+- An app toast in its own `OverlayEntry`, above a popover and over the page's
+  "+" button, lost its rounded ends where the button's native view is.
+
+Behaviour of the fix, observed in the same simulator:
+
+- The package's popover, alert and sheets leave the page's native glass on
+  screen under the barrier, and close without a frame that lacks it.
+- A `showModalBottomSheet` isolates the page as before; the page's controls
+  show their Flutter rendering under the barrier instead of leaving gaps. A
+  frame-by-frame look at a screen recording of opening and closing it found no
+  frame without the "+" button. Before the UIKit fade-out was delayed, a slow
+  first frame in a debug build left about 0.1 s without it on opening, and the
+  returning native view, fading in over the Flutter rendering, made the
+  control look washed out for about 0.25 s on closing.
+- Focusing a field in a sheet isolates the page, and the Flutter toolbar is
+  complete. The guarded toast is complete; the unguarded one loses its rounded
+  ends, as documented.
+- Tapping where a page control is while a package popup is open only closes
+  the popup, and XCUITest does not find the page's controls, in
+  `testPopupsKeepNativeControlsBeneathThemOutOfReach`.
+- `GLASS_MODAL_PROBE` still renders its Material sheet and dialog completely.
+
+These observations depend on the embedder's slicing, an implementation detail;
+rerun them after a Flutter upgrade.
+
 ## Build detail and limits
 
 `flutter build ios --simulator --debug` failed while checking the combined

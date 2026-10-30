@@ -104,7 +104,12 @@ class _NativeLayoutProbePageState extends State<NativeLayoutProbePage> {
         const SizedBox(height: 12),
         Wrap(
           spacing: 16,
-          children: [Text('Icon taps: $_taps'), Text('Icon holds: $_holds')],
+          children: [
+            Text('Icon taps: $_taps'),
+            Text('Icon holds: $_holds'),
+            Text('Layout: $_layout'),
+            Text('Tab: $_tab'),
+          ],
         ),
         const SizedBox(height: 16),
         LiquidGlassSegmentedControl<int>(
@@ -137,7 +142,9 @@ class _NativeLayoutProbePageState extends State<NativeLayoutProbePage> {
                 final value = await showLiquidGlassAlert<String>(
                   context: context,
                   title: const Text('Confirm'),
-                  content: const Text('Native views beneath stay hidden.'),
+                  content: const Text(
+                    'Native views beneath stay under the barrier.',
+                  ),
                   actions: const [
                     LiquidGlassAlertAction(
                       label: 'Cancel',
@@ -246,7 +253,7 @@ class _NativeLayoutProbePageState extends State<NativeLayoutProbePage> {
   );
 }
 
-/// A sheet with native buttons, which stay visible above the page's hidden
+/// A sheet with native buttons, which stay visible above the page's
 /// native views.
 class _LayoutSheet extends StatefulWidget {
   const _LayoutSheet();

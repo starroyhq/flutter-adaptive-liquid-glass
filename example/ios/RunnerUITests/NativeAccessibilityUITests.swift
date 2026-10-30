@@ -413,7 +413,7 @@ final class NativeAccessibilityUITests: XCTestCase {
     attachScreen("r2-segment-refused")
   }
 
-  func testPopupsHideNativeControlsBeneathThem() throws {
+  func testPopupsKeepNativeControlsBeneathThemOutOfReach() throws {
     openCatalogSearchEntry("Open native layout probe")
     expectText("Popup result: none")
     // A tab, a segment, a text capsule and a standalone icon on the page.
@@ -424,11 +424,25 @@ final class NativeAccessibilityUITests: XCTestCase {
       "layout-plus-tap": app.buttons["layout-plus-tap"],
     ]
     expectTappable(beneath)
+    // Screen points, read now: under a popup the elements are not found.
+    let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+    let centers = beneath.mapValues { element in
+      origin.withOffset(CGVector(dx: element.frame.midX, dy: element.frame.midY))
+    }
     attachFrames("r2-popups-frames", beneath)
     attachScreen("r2-popup-0-initial")
     // The same kind of native button outside a popup, for comparison with
     // the sheet's below.
     attachHierarchy("Layout probe hierarchy")
+
+    // The package's popups leave the page's native glass on screen under
+    // their barrier. VoiceOver must not reach it, and a tap where a control
+    // is only dismisses the popup.
+    func expectUnchanged() {
+      expectLabel(containing: "Icon taps: 0")
+      expectLabel(containing: "Layout: 0")
+      expectLabel(containing: "Tab: 0")
+    }
 
     button(labelled: "Menu").tap()
     let first = app.buttons["First choice"]
@@ -436,6 +450,14 @@ final class NativeAccessibilityUITests: XCTestCase {
     expectHidden(beneath)
     Thread.sleep(forTimeInterval: 1)
     attachScreen("r2-popup-1-menu-open")
+    attachHierarchy("Layout probe hierarchy under the menu")
+    centers["layout-plus-tap"]!.tap()
+    expectText("Popup result: menu cancelled")
+    expectUnchanged()
+    expectTappable(beneath)
+
+    button(labelled: "Menu").tap()
+    XCTAssertTrue(first.waitForExistence(timeout: 10))
     first.tap()
     expectText("Popup result: menu first")
     expectTappable(beneath)
@@ -447,6 +469,16 @@ final class NativeAccessibilityUITests: XCTestCase {
     expectHidden(beneath)
     Thread.sleep(forTimeInterval: 1)
     attachScreen("r2-popup-3-alert-open")
+    centers["Grid"]!.tap()
+    expectText("Popup result: alert dismissed")
+    expectUnchanged()
+    app.buttons["layout-alert"].tap()
+    XCTAssertTrue(ok.waitForExistence(timeout: 10))
+    centers["Saved"]!.tap()
+    expectText("Popup result: alert dismissed")
+    expectUnchanged()
+    app.buttons["layout-alert"].tap()
+    XCTAssertTrue(ok.waitForExistence(timeout: 10))
     ok.tap()
     expectText("Popup result: alert ok")
     expectTappable(beneath)
@@ -473,6 +505,12 @@ final class NativeAccessibilityUITests: XCTestCase {
     expectText("Popup result: sheet closed")
     expectTappable(beneath)
     attachScreen("r2-popup-6-sheet-closed")
+    app.buttons["layout-sheet"].tap()
+    XCTAssertTrue(sheetAction.waitForExistence(timeout: 10))
+    centers["layout-plus-tap"]!.tap()
+    expectText("Popup result: sheet dismissed")
+    expectUnchanged()
+    expectTappable(beneath)
   }
 
   func testStandaloneIconLongPressStillFires() throws {

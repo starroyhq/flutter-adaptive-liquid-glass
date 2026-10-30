@@ -37,9 +37,9 @@ final class AdaptiveLiquidGlassSuppression {
 }
 
 /// Hides a platform view whose Flutter route is covered, or that lies beneath a
-/// popup it does not belong to. The view fades out in 0.15 s and back in in
-/// 0.25 s; the state it is created with applies without animation. A hidden
-/// view also leaves the accessibility tree and stops taking touches.
+/// popup it does not belong to. The view fades out in 0.15 s after 0.3 s and
+/// returns at once; the state it is created with applies without animation. A
+/// hidden view leaves the accessibility tree and stops taking touches at once.
 final class AdaptiveLiquidGlassFade {
   private weak var view: UIView?
   private let suppression: AdaptiveLiquidGlassSuppression
@@ -79,11 +79,17 @@ final class AdaptiveLiquidGlassFade {
     guard let view else { return }
     view.accessibilityElementsHidden = hidden
     view.isUserInteractionEnabled = !hidden
-    let alpha: CGFloat = hidden ? 0 : 1
-    if animated {
-      UIView.animate(withDuration: hidden ? 0.15 : 0.25) { view.alpha = alpha }
+    view.layer.removeAllAnimations()
+    if hidden && animated {
+      // Flutter takes a covered view out of composition and paints the
+      // control's Flutter rendering in its place in the same frame. This
+      // message can arrive before that frame is on screen, so the fade waits
+      // for it rather than leaving neither on screen.
+      UIView.animate(withDuration: 0.15, delay: 0.3) { view.alpha = 0 }
     } else {
-      view.alpha = alpha
+      // A returning view has the control's Flutter rendering under it until
+      // it is back, so it appears at once.
+      view.alpha = hidden ? 0 : 1
     }
   }
 

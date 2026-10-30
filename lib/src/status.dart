@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'fallback_activity_indicator.dart';
 import 'native_status.dart';
+import 'native_visibility.dart';
 import 'theme.dart';
 
 enum LiquidGlassActivityIndicatorStyle { medium, large }
@@ -43,13 +44,16 @@ class LiquidGlassActivityIndicator extends StatelessWidget {
         );
     final Widget indicator;
     if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native) {
-      indicator = NativeStatus(
-        kind: 'activity',
-        animating: moving,
-        style: style.name,
-        color: foreground,
-        height: size,
-        width: size,
+      indicator = NativeCoverFallback(
+        fallback: (_) => this,
+        child: NativeStatus(
+          kind: 'activity',
+          animating: moving,
+          style: style.name,
+          color: foreground,
+          height: size,
+          width: size,
+        ),
       );
     } else {
       indicator = SizedBox.square(
@@ -101,12 +105,15 @@ class LiquidGlassProgressView extends StatelessWidget {
     final shown = progress.isNaN ? 0.0 : progress.clamp(0.0, 1.0);
     final Widget indicator =
         LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native
-        ? NativeStatus(
-            kind: 'progress',
-            progress: shown,
-            height: height,
-            color: active,
-            trackColor: track,
+        ? NativeCoverFallback(
+            fallback: (_) => this,
+            child: NativeStatus(
+              kind: 'progress',
+              progress: shown,
+              height: height,
+              color: active,
+              trackColor: track,
+            ),
           )
         : LinearProgressIndicator(
             value: shown,

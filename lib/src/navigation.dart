@@ -74,41 +74,44 @@ class LiquidGlassTabBar extends StatelessWidget {
   }
 
   Widget _buildNative(BuildContext context, LiquidGlassThemeData glassTheme) {
-    final tabBar = NativeVisibility(
-      child: NativeTabBar(
-        items: [
-          for (final item in items)
-            nativeTabItem(
-              label: item.label,
-              icon: item.icon,
-              selectedIcon: item.selectedIcon,
-              sfSymbol: item.sfSymbol,
-              badge: item.badge,
-            ),
-        ],
-        // Debug builds assert the range; keep the native bar valid in release.
-        currentIndex: selectedIndex.clamp(0, items.length - 1),
-        action: trailingAction == null
-            ? null
-            : nativeTabItem(
-                label: trailingAction!.label,
-                icon: trailingAction!.icon ?? Icons.search,
-                sfSymbol: trailingAction!.sfSymbol ?? 'magnifyingglass',
+    final tabBar = NativeCoverFallback(
+      fallback: _buildFallback,
+      child: NativeVisibility(
+        child: NativeTabBar(
+          items: [
+            for (final item in items)
+              nativeTabItem(
+                label: item.label,
+                icon: item.icon,
+                selectedIcon: item.selectedIcon,
+                sfSymbol: item.sfSymbol,
+                badge: item.badge,
               ),
-        onActionPressed: trailingAction?.onPressed == null
-            ? null
-            : () {
-                if (!LiquidGlassFeedback.canInteract(context)) return;
-                LiquidGlassFeedback.tap(context);
-                trailingAction!.onPressed!();
-              },
-        selectedItemColor:
-            glassTheme.colors.selectedForeground ??
-            glassTheme.colors.accent ??
-            Theme.of(context).colorScheme.primary,
-        onTabSelected: (index) {
-          if (index >= 0 && index < items.length) onSelected(index);
-        },
+          ],
+          // Debug builds assert the range; keep the native bar valid in release.
+          currentIndex: selectedIndex.clamp(0, items.length - 1),
+          action: trailingAction == null
+              ? null
+              : nativeTabItem(
+                  label: trailingAction!.label,
+                  icon: trailingAction!.icon ?? Icons.search,
+                  sfSymbol: trailingAction!.sfSymbol ?? 'magnifyingglass',
+                ),
+          onActionPressed: trailingAction?.onPressed == null
+              ? null
+              : () {
+                  if (!LiquidGlassFeedback.canInteract(context)) return;
+                  LiquidGlassFeedback.tap(context);
+                  trailingAction!.onPressed!();
+                },
+          selectedItemColor:
+              glassTheme.colors.selectedForeground ??
+              glassTheme.colors.accent ??
+              Theme.of(context).colorScheme.primary,
+          onTabSelected: (index) {
+            if (index >= 0 && index < items.length) onSelected(index);
+          },
+        ),
       ),
     );
     // UIKit keeps its native Liquid Glass shape, selection, hit testing and
@@ -349,16 +352,19 @@ class LiquidGlassNavigationBar extends StatelessWidget
     if (nativeMode && reasons.isEmpty) {
       return SafeArea(
         bottom: false,
-        child: NativeVisibility(
-          child: NativeNavigationBar(
-            title: title,
-            subtitle: subtitle,
-            tintColor:
-                glassColors.foreground ??
-                glassColors.accent ??
-                Theme.of(context).colorScheme.primary,
-            leading: leading,
-            actions: actions,
+        child: NativeCoverFallback(
+          fallback: (_) => this,
+          child: NativeVisibility(
+            child: NativeNavigationBar(
+              title: title,
+              subtitle: subtitle,
+              tintColor:
+                  glassColors.foreground ??
+                  glassColors.accent ??
+                  Theme.of(context).colorScheme.primary,
+              leading: leading,
+              actions: actions,
+            ),
           ),
         ),
       );

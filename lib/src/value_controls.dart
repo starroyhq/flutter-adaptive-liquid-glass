@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'native_value_control.dart';
 import 'fallback_value_controls.dart';
+import 'native_visibility.dart';
 import 'theme.dart';
 
 /// A controlled slider. A null [onChanged] disables interaction.
@@ -39,19 +40,22 @@ class LiquidGlassSlider extends StatelessWidget {
     final glass = LiquidGlassTheme.of(context);
     final accent = glass.colors.accent;
     if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native) {
-      return NativeValueControl(
-        kind: 'slider',
-        value: value,
-        min: min,
-        max: max,
-        divisions: divisions,
-        enabled: onChanged != null,
-        accent: accent,
-        semanticLabel: semanticLabel,
-        semanticValue: _format(value),
-        onChanged: (value) => onChanged?.call(value),
-        onChangeStart: onChangeStart,
-        onChangeEnd: onChangeEnd,
+      return NativeCoverFallback(
+        fallback: (_) => this,
+        child: NativeValueControl(
+          kind: 'slider',
+          value: value,
+          min: min,
+          max: max,
+          divisions: divisions,
+          enabled: onChanged != null,
+          accent: accent,
+          semanticLabel: semanticLabel,
+          semanticValue: _format(value),
+          onChanged: (value) => onChanged?.call(value),
+          onChangeStart: onChangeStart,
+          onChangeEnd: onChangeEnd,
+        ),
       );
     }
     return FallbackGlassSlider(
@@ -86,13 +90,16 @@ class LiquidGlassSwitch extends StatelessWidget {
     final glass = LiquidGlassTheme.of(context);
     final accent = glass.colors.accent;
     if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native) {
-      return NativeValueControl(
-        kind: 'switch',
-        value: value ? 1 : 0,
-        enabled: onChanged != null,
-        accent: accent,
-        semanticLabel: semanticLabel,
-        onChanged: (value) => onChanged?.call(value >= .5),
+      return NativeCoverFallback(
+        fallback: (_) => this,
+        child: NativeValueControl(
+          kind: 'switch',
+          value: value ? 1 : 0,
+          enabled: onChanged != null,
+          accent: accent,
+          semanticLabel: semanticLabel,
+          onChanged: (value) => onChanged?.call(value >= .5),
+        ),
       );
     }
     return FallbackGlassSwitch(
@@ -138,18 +145,21 @@ class LiquidGlassStepper extends StatelessWidget {
     );
     final colors = LiquidGlassTheme.of(context).colors;
     if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native) {
-      return NativeValueControl(
-        kind: 'stepper',
-        value: value,
-        min: min,
-        max: max,
-        step: step,
-        wraps: wraps,
-        enabled: onChanged != null,
-        accent: colors.accent,
-        semanticLabel: semanticLabel,
-        semanticValue: _format(value),
-        onChanged: (value) => onChanged?.call(value),
+      return NativeCoverFallback(
+        fallback: (_) => this,
+        child: NativeValueControl(
+          kind: 'stepper',
+          value: value,
+          min: min,
+          max: max,
+          step: step,
+          wraps: wraps,
+          enabled: onChanged != null,
+          accent: colors.accent,
+          semanticLabel: semanticLabel,
+          semanticValue: _format(value),
+          onChanged: (value) => onChanged?.call(value),
+        ),
       );
     }
     return FallbackGlassStepper(

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'theme.dart';
+
 /// Route coverage is separate from UIKit alpha: a transparent platform view can
 /// still reserve a composition slice and clip Flutter content in the overlay.
 final nativeRouteCoverage = NativeRouteCoverage();
@@ -56,6 +58,64 @@ List<Route<dynamic>> nativeRouteChain(BuildContext context) {
           nativeRouteCoverage.covers(route),
     ),
     popupOwner: routes.any((route) => route is PopupRoute),
+  );
+}
+
+/// Paints the control's Flutter rendering in the layout box of [child] while a
+/// popup that isolates the routes below it covers [child]'s route, so the page
+/// keeps the control in view instead of an empty gap. [child]'s native views
+/// leave composition in the same frame through [NativeVisibility], and return
+/// in the same frame the stand-in goes, once the popup has fully exited.
+///
+/// [fallback] runs under a fallback [LiquidGlassTheme], so passing the public
+/// widget itself builds its Flutter branch. The stand-in ignores input and
+/// accessibility; the popup's barrier blocks both anyway. A control whose own
+/// key is a [GlobalKey] gets no stand-in, as one key cannot be mounted twice.
+class NativeCoverFallback extends StatelessWidget {
+  const NativeCoverFallback({
+    super.key,
+    required this.fallback,
+    required this.child,
+  });
+
+  final WidgetBuilder fallback;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: nativeRouteCoverage,
+    child: child,
+    builder: (context, child) {
+      final covered = nativeRouteChain(context).any(nativeRouteCoverage.covers);
+      // The native child stays first so that its element, and its platform
+      // view, survive the stand-in coming and going.
+      return Stack(
+        fit: StackFit.passthrough,
+        children: [
+          child!,
+          if (covered)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ExcludeSemantics(
+                  child: LiquidGlassTheme(
+                    data: LiquidGlassTheme.of(
+                      context,
+                    ).copyWith(mode: LiquidGlassMode.fallback),
+                    child: Builder(
+                      builder: (context) {
+                        final stand = fallback(context);
+                        return stand.key is GlobalKey
+                            ? const SizedBox.shrink()
+                            : stand;
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    },
   );
 }
 

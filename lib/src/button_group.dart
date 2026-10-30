@@ -7,6 +7,7 @@ import 'native_button_layout.dart';
 import 'native_capsule.dart';
 import 'native_fallback_report.dart';
 import 'surface.dart';
+import 'native_visibility.dart';
 import 'theme.dart';
 
 /// Adjacent actions share one continuous glass capsule, including on iOS.
@@ -40,25 +41,28 @@ class LiquidGlassButtonGroup extends StatelessWidget {
       );
     }
     if (nativeMode && !largeText) {
-      return NativeCapsule(
-        items: [
-          for (final action in actions)
-            NativeCapsuleItem(
-              id: action.id,
-              label: action.label,
-              title:
-                  action.showLabel ||
-                      action.icon == null && action.sfSymbol == null
-                  ? action.label
-                  : null,
-              icon: action.icon,
-              sfSymbol: action.sfSymbol,
-              onPressed: action.onPressed,
-              onLongPress: action.onLongPress,
-              longPressSemanticLabel: action.longPressSemanticLabel,
-            ),
-        ],
-        grouped: true,
+      return NativeCoverFallback(
+        fallback: (_) => this,
+        child: NativeCapsule(
+          items: [
+            for (final action in actions)
+              NativeCapsuleItem(
+                id: action.id,
+                label: action.label,
+                title:
+                    action.showLabel ||
+                        action.icon == null && action.sfSymbol == null
+                    ? action.label
+                    : null,
+                icon: action.icon,
+                sfSymbol: action.sfSymbol,
+                onPressed: action.onPressed,
+                onLongPress: action.onLongPress,
+                longPressSemanticLabel: action.longPressSemanticLabel,
+              ),
+          ],
+          grouped: true,
+        ),
       );
     }
     return LiquidGlassSurface(

@@ -10,6 +10,7 @@ import 'feedback.dart';
 import 'native_picker.dart';
 import 'presentation.dart';
 import 'surface.dart';
+import 'native_visibility.dart';
 import 'theme.dart';
 
 enum LiquidGlassDatePickerMode { date, time, dateAndTime }
@@ -123,31 +124,34 @@ class _LiquidGlassDatePickerState extends State<LiquidGlassDatePicker> {
   Widget build(BuildContext context) {
     final policy = _DatePolicy(widget);
     if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native) {
-      return NativePicker(
-        kind: 'date',
-        height: switch (widget.style) {
-          LiquidGlassDatePickerStyle.compact => 48,
-          LiquidGlassDatePickerStyle.wheels => 216,
-          LiquidGlassDatePickerStyle.inline =>
-            widget.mode == LiquidGlassDatePickerMode.time ? 216 : 390,
-        },
-        configuration: {
-          'value': policy.display.millisecondsSinceEpoch,
-          'mode': widget.mode.name,
-          'style': widget.style.name,
-          'minimumDate': policy.minimum?.millisecondsSinceEpoch,
-          'maximumDate': policy.maximum?.millisecondsSinceEpoch,
-          'minuteInterval': widget.minuteInterval,
-          'locale': widget.locale?.toLanguageTag(),
-          'enabled': widget.onChanged != null,
-          'semanticLabel': widget.semanticLabel,
-          'tint': LiquidGlassTheme.of(context).colors.accent?.toARGB32(),
-        },
-        onChanged: (value) {
-          if (value is num && value.isFinite) {
-            _changed(DateTime.fromMillisecondsSinceEpoch(value.toInt()));
-          }
-        },
+      return NativeCoverFallback(
+        fallback: (_) => widget,
+        child: NativePicker(
+          kind: 'date',
+          height: switch (widget.style) {
+            LiquidGlassDatePickerStyle.compact => 48,
+            LiquidGlassDatePickerStyle.wheels => 216,
+            LiquidGlassDatePickerStyle.inline =>
+              widget.mode == LiquidGlassDatePickerMode.time ? 216 : 390,
+          },
+          configuration: {
+            'value': policy.display.millisecondsSinceEpoch,
+            'mode': widget.mode.name,
+            'style': widget.style.name,
+            'minimumDate': policy.minimum?.millisecondsSinceEpoch,
+            'maximumDate': policy.maximum?.millisecondsSinceEpoch,
+            'minuteInterval': widget.minuteInterval,
+            'locale': widget.locale?.toLanguageTag(),
+            'enabled': widget.onChanged != null,
+            'semanticLabel': widget.semanticLabel,
+            'tint': LiquidGlassTheme.of(context).colors.accent?.toARGB32(),
+          },
+          onChanged: (value) {
+            if (value is num && value.isFinite) {
+              _changed(DateTime.fromMillisecondsSinceEpoch(value.toInt()));
+            }
+          },
+        ),
       );
     }
     return _localized(
@@ -577,21 +581,24 @@ class _LiquidGlassColorPickerState extends State<LiquidGlassColorPicker> {
   @override
   Widget build(BuildContext context) {
     if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native) {
-      return NativePicker(
-        kind: 'color',
-        height: 48,
-        width: 48,
-        configuration: {
-          'value': _color.toARGB32(),
-          'enabled': widget.onChanged != null,
-          'supportsAlpha': widget.supportsAlpha,
-          'title': widget.title,
-          'semanticLabel': widget.semanticLabel,
-          'tint': LiquidGlassTheme.of(context).colors.accent?.toARGB32(),
-        },
-        onChanged: (value) {
-          if (value is int) _changed(Color(value));
-        },
+      return NativeCoverFallback(
+        fallback: (_) => widget,
+        child: NativePicker(
+          kind: 'color',
+          height: 48,
+          width: 48,
+          configuration: {
+            'value': _color.toARGB32(),
+            'enabled': widget.onChanged != null,
+            'supportsAlpha': widget.supportsAlpha,
+            'title': widget.title,
+            'semanticLabel': widget.semanticLabel,
+            'tint': LiquidGlassTheme.of(context).colors.accent?.toARGB32(),
+          },
+          onChanged: (value) {
+            if (value is int) _changed(Color(value));
+          },
+        ),
       );
     }
     final hex = _hex(_color, widget.supportsAlpha);

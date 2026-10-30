@@ -124,25 +124,28 @@ class LiquidGlassButton extends StatelessWidget {
     if (nativeMode && !loading && !largeText) {
       // An icon-only button keeps its standalone look, with or without a
       // long press.
-      return NativeCapsule(
-        standaloneIcon: label == null,
-        prominent: emphasized,
-        items: [
-          NativeCapsuleItem(
-            id: id ?? 'button',
-            label: _accessibleLabel ?? label!,
-            title: label,
-            detail: detail,
-            icon: icon,
-            sfSymbol: sfSymbol,
-            iconColor: iconColor,
-            iconSize: iconSize,
-            menuIndicator: menuIndicator,
-            onPressed: callback,
-            onLongPress: longCallback,
-            longPressSemanticLabel: longPressSemanticLabel,
-          ),
-        ],
+      return NativeCoverFallback(
+        fallback: (_) => this,
+        child: NativeCapsule(
+          standaloneIcon: label == null,
+          prominent: emphasized,
+          items: [
+            NativeCapsuleItem(
+              id: id ?? 'button',
+              label: _accessibleLabel ?? label!,
+              title: label,
+              detail: detail,
+              icon: icon,
+              sfSymbol: sfSymbol,
+              iconColor: iconColor,
+              iconSize: iconSize,
+              menuIndicator: menuIndicator,
+              onPressed: callback,
+              onLongPress: longCallback,
+              longPressSemanticLabel: longPressSemanticLabel,
+            ),
+          ],
+        ),
       );
     }
     final content = Row(
@@ -267,19 +270,22 @@ class LiquidGlassSegmentedControl<T> extends StatelessWidget {
       );
     }
     if (nativeMode && !largeText) {
-      return NativeVisibility(
-        child: NativeSegmentedControl(
-          labels: [for (final segment in segments) segment.label],
-          selectedIndex: segments.indexWhere(
-            (segment) => segment.value == selected,
+      return NativeCoverFallback(
+        fallback: (_) => this,
+        child: NativeVisibility(
+          child: NativeSegmentedControl(
+            labels: [for (final segment in segments) segment.label],
+            selectedIndex: segments.indexWhere(
+              (segment) => segment.value == selected,
+            ),
+            enabled: onChanged != null,
+            color: glassColors.accent ?? Theme.of(context).colorScheme.primary,
+            onValueChanged: (index) {
+              if (index >= 0 && index < segments.length) {
+                onChanged?.call(segments[index].value);
+              }
+            },
           ),
-          enabled: onChanged != null,
-          color: glassColors.accent ?? Theme.of(context).colorScheme.primary,
-          onValueChanged: (index) {
-            if (index >= 0 && index < segments.length) {
-              onChanged?.call(segments[index].value);
-            }
-          },
         ),
       );
     }

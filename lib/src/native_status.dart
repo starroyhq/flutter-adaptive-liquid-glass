@@ -52,7 +52,7 @@ class _NativeStatusState extends State<NativeStatus> {
     for (final route in _ancestorRoutes()) {
       // A popped route remains visible through its own reverse transition.
       // A nested Navigator must also respect its ancestor's active coverage.
-      suppressed |= route.isActive && !route.isCurrent;
+      suppressed |= nativeRouteHidden(route);
       popupOwner |= route is PopupRoute;
     }
     return {

@@ -34,6 +34,13 @@ abstract final class _NativeGlassLifecycle {
 ///
 /// Native views under popup routes must not float above a Flutter overlay.
 /// Calls are platform gated, balanced per route, and sequenced across observers.
+///
+/// Other popups isolate the routes below them: their native views leave
+/// composition and controls paint their Flutter rendering instead until the
+/// popup has fully exited. The package's alerts, sheets and popovers keep the
+/// native views below them, under their barrier, except while a text field,
+/// selectable text or selection area in them has focus, or while a
+/// `LiquidGlassOverlayGuard` is mounted.
 class LiquidGlassNavigatorObserver extends NavigatorObserver {
   LiquidGlassNavigatorObserver()
     : _nativeAvailable = (() => liquidGlassNativeAvailable);
@@ -45,7 +52,9 @@ class LiquidGlassNavigatorObserver extends NavigatorObserver {
 
   final bool Function() _nativeAvailable;
   final Map<Route<dynamic>, Object> _popups = {};
+  final Map<Route<dynamic>, VoidCallback> _keepers = {};
   final List<Route<dynamic>> _routes = [];
+  final Object _keptToken = Object();
   bool _disposed = false;
   static Future<void>? _pending;
 
@@ -71,8 +80,56 @@ class LiquidGlassNavigatorObserver extends NavigatorObserver {
       return;
     }
     nativeRouteCoverage.release(_popups.remove(route)!);
-    _routes.remove(route);
     _enqueue(false);
+  }
+
+  /// Whether [route] currently keeps the native views below it.
+  bool _keeps(Route<dynamic> route) =>
+      _keepers.containsKey(route) &&
+      (route as NativeKeepingPopup).keepsNativeBelow.value;
+
+  /// Starts following a popup that can keep the native views below it, and
+  /// isolates or keeps them as it asks.
+  void _track(Route<dynamic>? route) {
+    if (_disposed || route == null) return;
+    if (route is NativeKeepingPopup && !_keepers.containsKey(route)) {
+      void changed() => _apply(route);
+      _keepers[route] = changed;
+      (route as NativeKeepingPopup).keepsNativeBelow.addListener(changed);
+    }
+    _apply(route);
+  }
+
+  /// Stops following [route]: once it is popped or removed, it keeps the mode
+  /// it had for the rest of its exit.
+  void _untrack(Route<dynamic>? route) {
+    final changed = _keepers.remove(route);
+    if (changed != null) {
+      (route as NativeKeepingPopup).keepsNativeBelow.removeListener(changed);
+    }
+  }
+
+  void _apply(Route<dynamic> route) {
+    if (_disposed) return;
+    if (_keeps(route)) {
+      _release(route);
+    } else {
+      _retain(route);
+    }
+    _publishKept();
+  }
+
+  /// Routes that are not current only because every route above them in this
+  /// navigator is a popup that keeps the native views below it.
+  void _publishKept() {
+    final kept = <Route<dynamic>>{};
+    if (!_disposed && _nativeAvailable()) {
+      for (var index = _routes.length - 1; index > 0; index--) {
+        if (!_keeps(_routes[index])) break;
+        kept.add(_routes[index - 1]);
+      }
+    }
+    nativeRouteCoverage.keep(_keptToken, kept);
   }
 
   void _enqueue(bool add) {
@@ -106,29 +163,40 @@ class LiquidGlassNavigatorObserver extends NavigatorObserver {
       _routes.add(previousRoute);
     }
     if (!_routes.contains(route)) _routes.add(route);
-    _retain(route);
+    _track(route);
   }
 
   @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _untrack(route);
     final token = _popups[route];
     if (token == null) {
       _routes.remove(route);
+      _publishKept();
       return;
     }
     if (route is TransitionRoute) {
       // `popped` resolves when Navigator.pop is called. Native views must stay
       // hidden until the exit animation and overlay removal finish instead.
-      unawaited(route.completed.then((_) => _release(route, token: token)));
+      unawaited(route.completed.then((_) => _finish(route, token)));
     } else {
-      _release(route, token: token);
+      _finish(route, token);
     }
+  }
+
+  void _finish(Route<dynamic> route, Object token) {
+    if (!identical(_popups[route], token)) return;
+    _release(route, token: token);
+    _routes.remove(route);
+    _publishKept();
   }
 
   @override
   void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _untrack(route);
     _release(route);
     _routes.remove(route);
+    _publishKept();
   }
 
   @override
@@ -143,18 +211,24 @@ class LiquidGlassNavigatorObserver extends NavigatorObserver {
     }
     // Retain first so popup-to-popup replacement cannot briefly restore the
     // covered platform views between two serialized channel calls.
-    _retain(newRoute);
+    _untrack(oldRoute);
+    _track(newRoute);
     _release(oldRoute);
     _routes.remove(oldRoute);
+    _publishKept();
   }
 
   /// Balance active overlays when an application discards this navigator.
   void dispose() {
     if (_disposed) return;
+    for (final route in _keepers.keys.toList()) {
+      _untrack(route);
+    }
     _disposed = true;
     for (final route in _popups.keys.toList()) {
       _release(route);
     }
     _routes.clear();
+    nativeRouteCoverage.keep(_keptToken, const {});
   }
 }

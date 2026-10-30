@@ -1,8 +1,11 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'feedback.dart';
 import 'package:flutter/scheduler.dart';
+
+import 'native_visibility.dart';
 
 import 'surface.dart';
 import 'theme.dart';
@@ -242,12 +245,81 @@ Future<T?> _showPopup<T>({
       slide: slide,
       scale: scale,
       barrierColor: barrierColor,
+      // A popup whose own content is not on native glass would paint Flutter
+      // material over the page's native views, so it isolates them, as other
+      // popups do.
+      nativeContent: LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native,
       settings: settings,
     ),
   );
 }
 
-class _GlassPopupRoute<T> extends PopupRoute<T> {
+/// Lets Flutter content that an app paints above the package's alerts,
+/// sheets and popovers, such as a toast in its own [OverlayEntry], extend
+/// past the popup without being clipped.
+///
+/// Those popups leave the native glass of the page below them on screen.
+/// Flutter content painted above such a popup is then only safe on the
+/// popup's own surface: outside it, where the page's native views sit,
+/// Flutter's iOS platform view composition can drop it. While at least one
+/// guard is mounted, these popups instead isolate the page, as other popups
+/// do: the page's native controls are drawn by Flutter until the guard is
+/// gone. The popups' own native views are unaffected. When the guard mounts
+/// while such a popup is open, [child] is painted from the frame in which the
+/// page is isolated.
+///
+/// A guard changes nothing while none of these popups is open. Flutter
+/// content above native views on a page without a popup remains unsupported
+/// (see the README).
+class LiquidGlassOverlayGuard extends StatefulWidget {
+  const LiquidGlassOverlayGuard({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<LiquidGlassOverlayGuard> createState() =>
+      _LiquidGlassOverlayGuardState();
+}
+
+class _LiquidGlassOverlayGuardState extends State<LiquidGlassOverlayGuard> {
+  bool _counted = false;
+  late bool _shown = !nativeRouteCoverage.keepsAny;
+
+  @override
+  void initState() {
+    super.initState();
+    // Coverage listeners rebuild, which is not allowed while this guard is
+    // being built; the count changes once the frame is done.
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _counted = true;
+      nativeOverlayGuards.value++;
+      if (!_shown) setState(() => _shown = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    if (_counted) {
+      // Dispose runs within a frame, so the callback runs as it ends.
+      SchedulerBinding.instance.addPostFrameCallback(
+        (_) => nativeOverlayGuards.value--,
+      );
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Visibility(
+    visible: _shown,
+    maintainState: true,
+    maintainAnimation: true,
+    maintainSize: true,
+    child: widget.child,
+  );
+}
+
+class _GlassPopupRoute<T> extends PopupRoute<T> implements NativeKeepingPopup {
   _GlassPopupRoute({
     required this.builder,
     required this.dismissible,
@@ -258,8 +330,71 @@ class _GlassPopupRoute<T> extends PopupRoute<T> {
     required this.slide,
     required this.scale,
     required this.barrierColor,
+    required this.nativeContent,
     super.settings,
   }) : super(traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop);
+
+  /// Whether the popup's content resolves to native glass.
+  final bool nativeContent;
+  final ValueNotifier<bool> _keeps = ValueNotifier(false);
+
+  /// Has focus whenever the primary focus is in the popup, including in a
+  /// navigator nested in it.
+  final FocusNode _content = FocusNode(
+    debugLabel: 'Liquid Glass popup content',
+    canRequestFocus: false,
+    skipTraversal: true,
+  );
+  bool _restoring = false;
+
+  @override
+  ValueListenable<bool> get keepsNativeBelow => _keeps;
+
+  /// Flutter content beyond the popup's native surface would be clipped where
+  /// the page's native views stay: a selection toolbar, its handles or the
+  /// magnifier of a focused field in the popup, or an app's guarded overlay.
+  bool get _wantsKeep =>
+      nativeContent &&
+      nativeOverlayGuards.value == 0 &&
+      !(_content.hasFocus &&
+          nativeSelectionFocus(FocusManager.instance.primaryFocus!));
+
+  void _policyChanged() {
+    if (!isActive) return;
+    final next = _wantsKeep;
+    if (next == _keeps.value) return;
+    if (!next) {
+      _keeps.value = false;
+      return;
+    }
+    // Keep the page isolated for the frame that removes the toolbar or the
+    // guarded overlay, so that the native views return only after it.
+    if (_restoring) return;
+    _restoring = true;
+    SchedulerBinding.instance
+      ..addPostFrameCallback((_) {
+        _restoring = false;
+        if (isActive && _wantsKeep) _keeps.value = true;
+      })
+      ..scheduleFrame();
+  }
+
+  @override
+  void install() {
+    super.install();
+    _keeps.value = _wantsKeep;
+    FocusManager.instance.addListener(_policyChanged);
+    nativeOverlayGuards.addListener(_policyChanged);
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeListener(_policyChanged);
+    nativeOverlayGuards.removeListener(_policyChanged);
+    _keeps.dispose();
+    _content.dispose();
+    super.dispose();
+  }
 
   final WidgetBuilder builder;
   final bool dismissible;
@@ -288,7 +423,11 @@ class _GlassPopupRoute<T> extends PopupRoute<T> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) {
-    Widget result = Builder(builder: builder);
+    Widget result = Focus(
+      focusNode: _content,
+      includeSemantics: false,
+      child: Builder(builder: builder),
+    );
     if (localGlass != null) {
       result = LiquidGlassTheme(data: localGlass!, child: result);
     }

@@ -113,11 +113,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
     return visited.toList();
   }
 
-  bool get _covered => _routes().any(
-    (route) =>
-        (route.isActive && !route.isCurrent) ||
-        nativeRouteCoverage.covers(route),
-  );
+  bool get _covered => _routes().any(nativeRouteHidden);
 
   void _syncInteraction({bool force = false}) {
     final lifecycle = WidgetsBinding.instance.lifecycleState;

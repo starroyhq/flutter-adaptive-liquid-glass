@@ -104,11 +104,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar>
       'leading': items(widget.leading),
       'actions': items(widget.actions),
       'popupOwner': routes.any((route) => route is PopupRoute),
-      'suppressed': routes.any(
-        (route) =>
-            (route.isActive && !route.isCurrent) ||
-            nativeRouteCoverage.covers(route),
-      ),
+      'suppressed': routes.any(nativeRouteHidden),
       'interactionEnabled':
           lifecycle == null || lifecycle == AppLifecycleState.resumed,
     };

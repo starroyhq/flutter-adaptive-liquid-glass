@@ -146,10 +146,7 @@ class _NativeValueControlState extends State<NativeValueControl>
       // A nested Navigator can keep its own page current while an ancestor
       // popup/page is covered. UIKit must cancel tracking in that case too.
       // Inactive popped routes retain their native control during the exit.
-      if ((route.isActive && !route.isCurrent) ||
-          nativeRouteCoverage.covers(route)) {
-        return true;
-      }
+      if (nativeRouteHidden(route)) return true;
       final navigator = route.navigator;
       route = navigator == null ? null : ModalRoute.of(navigator.context);
     }

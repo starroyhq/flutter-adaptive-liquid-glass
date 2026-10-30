@@ -172,9 +172,7 @@ class _NativePickerState extends State<NativePicker>
     var suppressed = false;
     var popupOwner = false;
     for (final ancestor in _ancestorRoutes()) {
-      suppressed |=
-          (ancestor.isActive && !ancestor.isCurrent) ||
-          nativeRouteCoverage.covers(ancestor);
+      suppressed |= nativeRouteHidden(ancestor);
       popupOwner |= ancestor is PopupRoute;
     }
     final configuration = <String, Object?>{

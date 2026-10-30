@@ -119,14 +119,24 @@ class LiquidGlassNavigatorObserver extends NavigatorObserver {
     _publishKept();
   }
 
-  /// Routes that are not current only because every route above them in this
+  /// Routes that are not current only because every route above them in their
   /// navigator is a popup that keeps the native views below it.
+  ///
+  /// Routers such as go_router also report a nested navigator's routes to the
+  /// observers of the root navigator, so the routes seen here are grouped by
+  /// navigator before each stack is walked from its top.
   void _publishKept() {
     final kept = <Route<dynamic>>{};
     if (!_disposed && _nativeAvailable()) {
-      for (var index = _routes.length - 1; index > 0; index--) {
-        if (!_keeps(_routes[index])) break;
-        kept.add(_routes[index - 1]);
+      final stacks = <NavigatorState?, List<Route<dynamic>>>{};
+      for (final route in _routes) {
+        (stacks[route.navigator] ??= []).add(route);
+      }
+      for (final stack in stacks.values) {
+        for (var index = stack.length - 1; index > 0; index--) {
+          if (!_keeps(stack[index])) break;
+          kept.add(stack[index - 1]);
+        }
       }
     }
     nativeRouteCoverage.keep(_keptToken, kept);

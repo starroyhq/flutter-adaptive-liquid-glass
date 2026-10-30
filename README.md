@@ -900,8 +900,9 @@ time and memory than the same number of Flutter widgets. A list or settings page
 with a switch on every row creates a UIKit switch for every row that is built.
 The Flutter fallback has no platform views, but every fallback surface,
 including the one behind each non-prominent button, segmented control, stepper
-and color well, applies its own background blur. No hardware GPU, frame-time or
-memory profile has been recorded for either path.
+and color well, applies its own background blur. Apart from the popup check in
+[doc/fallback-validation.md](doc/fallback-validation.md), no hardware GPU,
+frame-time or memory profile has been recorded for either path.
 
 Keep glass on navigation and floating controls. Give a long list, a form or a
 settings page the Flutter controls, keeping the app's colors and feedback:

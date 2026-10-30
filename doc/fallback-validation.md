@@ -128,6 +128,23 @@ Behaviour of the fix, observed in the same simulator:
   `testPopupsKeepNativeControlsBeneathThemOutOfReach`.
 - `GLASS_MODAL_PROBE` still renders its Material sheet and dialog completely.
 
+Frame times on an iPhone Air (iOS 27.2), profile mode, `flutter drive` with
+`traceAction`, one run each: eight rounds of opening and closing a row-menu
+popover and a fit-content sheet with two native switches over the same list
+page. In 0.6.1 the page's native views leave composition while each popup is
+open; with the fix they stay, and the barrier's slice adds an overlay layer.
+
+| | 0.6.1 | fix |
+| --- | --- | --- |
+| frames | 157 | 149 |
+| build average / p90 / worst (ms) | 0.48 / 1.01 / 2.08 | 0.46 / 0.87 / 2.85 |
+| raster average / p90 / worst (ms) | 0.87 / 1.34 / 5.17 | 0.99 / 1.50 / 7.52 |
+| frames over the build or raster budget | 0 | 0 |
+
+Raster time rises by about 0.1 ms on average and the worst frame by about
+2.4 ms, all well inside the 8.3 ms budget at 120 Hz. A single run on one
+device; GPU time and memory were not measured.
+
 These observations depend on the embedder's slicing, an implementation detail;
 rerun them after a Flutter upgrade.
 

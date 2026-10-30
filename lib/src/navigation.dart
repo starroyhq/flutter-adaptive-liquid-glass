@@ -76,6 +76,7 @@ class LiquidGlassTabBar extends StatelessWidget {
   Widget _buildNative(BuildContext context, LiquidGlassThemeData glassTheme) {
     final tabBar = NativeCoverFallback(
       fallback: _buildFallback,
+      alignment: Alignment.bottomCenter,
       child: NativeVisibility(
         child: NativeTabBar(
           items: [

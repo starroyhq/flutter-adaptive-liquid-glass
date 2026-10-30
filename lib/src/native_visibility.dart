@@ -76,10 +76,14 @@ class NativeCoverFallback extends StatelessWidget {
     super.key,
     required this.fallback,
     required this.child,
+    this.alignment = Alignment.center,
   });
 
   final WidgetBuilder fallback;
   final Widget child;
+
+  /// Where the Flutter rendering sits when its height differs from [child]'s.
+  final AlignmentGeometry alignment;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -97,17 +101,25 @@ class NativeCoverFallback extends StatelessWidget {
             Positioned.fill(
               child: IgnorePointer(
                 child: ExcludeSemantics(
-                  child: LiquidGlassTheme(
-                    data: LiquidGlassTheme.of(
-                      context,
-                    ).copyWith(mode: LiquidGlassMode.fallback),
-                    child: Builder(
-                      builder: (context) {
-                        final stand = fallback(context);
-                        return stand.key is GlobalKey
-                            ? const SizedBox.shrink()
-                            : stand;
-                      },
+                  // The Flutter rendering keeps the native width but its own
+                  // height, which can exceed the native box (the fallback tab
+                  // bar is taller than the native one).
+                  child: OverflowBox(
+                    minHeight: 0,
+                    maxHeight: MediaQuery.sizeOf(context).height,
+                    alignment: alignment,
+                    child: LiquidGlassTheme(
+                      data: LiquidGlassTheme.of(
+                        context,
+                      ).copyWith(mode: LiquidGlassMode.fallback),
+                      child: Builder(
+                        builder: (context) {
+                          final stand = fallback(context);
+                          return stand.key is GlobalKey
+                              ? const SizedBox.shrink()
+                              : stand;
+                        },
+                      ),
                     ),
                   ),
                 ),

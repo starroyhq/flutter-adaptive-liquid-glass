@@ -1,9 +1,11 @@
-## Unreleased
+## 0.7.0
 - The package's alerts, sheets and popovers, and the menus and picker editors
   built on them, no longer hide the native glass of the page below them. The
   page's tab bar, buttons, segmented controls and other native controls stay
   on screen under the barrier, which still takes taps; VoiceOver does not reach
-  them. Before, every popup removed them for as long as it was open.
+  them. Before, every popup removed them for as long as it was open. This also
+  holds with nested Navigators whose inner routes are reported to the outer
+  Navigator's observer as well, as `go_router`'s `ShellRoute` does.
 - While a text field, selectable text or `SelectionArea` in one of these
   popups has focus, or while a new `LiquidGlassOverlayGuard` is mounted (for
   app content such as a toast in its own `OverlayEntry`), the popup isolates

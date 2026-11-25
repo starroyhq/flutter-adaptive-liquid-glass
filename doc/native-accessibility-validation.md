@@ -655,10 +655,10 @@ suite can succeed with missing or duplicate cases. The palette suite retains
 the first-use rule above. Controls must all pass.
 
 On the 0.8.0 merge, XCTest could spend minutes querying the active app or a
-control after the simulator had booted. An explicit accessibility IPC or
-snapshot timeout allows one retry of the affected suite on a fresh simulator.
-If any ordinary assertion fails, the job fails without a retry. Both result
-bundles are retained when a retry runs.
+control after the simulator had booted. Either a simulator boot timeout or an
+explicit accessibility IPC or snapshot timeout allows one retry of the affected
+suite on a fresh simulator. If any ordinary assertion fails, the job fails
+without a retry. Result bundles from both attempts are retained when available.
 
 ## Limits
 

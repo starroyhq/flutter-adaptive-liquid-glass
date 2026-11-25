@@ -109,11 +109,9 @@ def require_complete_results(bundle, expected, suite):
 def run_suite(runtime, name, tests, bundle):
     device = simctl("create", name, DEVICE_TYPE, runtime, capture_output=True).stdout.strip()
     try:
-        simctl("boot", device)
-        simctl("bootstatus", device, "-b", timeout=420)
-        devices = read_json("xcrun", "simctl", "list", "devices", "--json")["devices"][runtime]
-        if not any(item["udid"] == device and item["state"] == "Booted" for item in devices):
-            raise SystemExit(f"Simulator {device} did not boot on {runtime}")
+        # Wait for this device's first-boot migration without enumerating the
+        # runner's full device list once the requested runtime is ready.
+        simctl("bootstatus", device, "-b", timeout=600)
         run_tool(
             "xcodebuild", "-workspace", "Runner.xcworkspace", "-scheme", "NativeSliderAcceptance",
             "-configuration", "Debug", "-sdk", "iphonesimulator",
@@ -123,7 +121,7 @@ def run_suite(runtime, name, tests, bundle):
             "-collect-test-diagnostics", "never",
             *(f"-only-testing:RunnerUITests/{test}" for test in sorted(tests)),
             "ARCHS=arm64", "ONLY_ACTIVE_ARCH=NO", "CODE_SIGNING_ALLOWED=NO", "test-without-building",
-            cwd=IOS, timeout=1200,
+            cwd=IOS, timeout=1500,
         )
     finally:
         try:
@@ -148,10 +146,15 @@ def main():
         bundle = results / f"attempt-{attempt}.xcresult"
         try:
             run_suite(runtime, name, tests, bundle)
-        except subprocess.CalledProcessError:
-            if attempt == 2 or not only_ax_timeouts(bundle):
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            if attempt == 2:
                 raise
-            message = "XCTest accessibility IPC timed out; retrying once on a new simulator."
+            if isinstance(error, subprocess.TimeoutExpired) and error.cmd[:3] == ("xcrun", "simctl", "bootstatus"):
+                message = "Simulator boot timed out; retrying once on a new simulator."
+            elif isinstance(error, subprocess.CalledProcessError) and only_ax_timeouts(bundle):
+                message = "XCTest accessibility IPC timed out; retrying once on a new simulator."
+            else:
+                raise
             print(message, flush=True)
             lines.append(message)
         else:

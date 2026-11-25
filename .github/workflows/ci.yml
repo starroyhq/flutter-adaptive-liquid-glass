@@ -119,7 +119,7 @@ jobs:
             xcode: /Applications/Xcode_27.1.app
     name: native-interaction (iOS ${{ matrix.ios }}, ${{ matrix.suite }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    timeout-minutes: 55
     env:
       GLASS_IOS_MAJOR: ${{ matrix.ios }}
       GLASS_NATIVE_SUITE: ${{ matrix.suite }}

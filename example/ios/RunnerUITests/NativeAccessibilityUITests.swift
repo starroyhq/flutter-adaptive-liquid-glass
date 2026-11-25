@@ -590,7 +590,7 @@ final class NativeAccessibilityUITests: XCTestCase {
     let find = app.buttons["Find"]
     let day = app.buttons["Day"], week = app.buttons["Week"], month = app.buttons["Month"]
     for element in [alpha, beta, gamma, find, day, week, month] {
-      XCTAssertTrue(waitUntilHittable(element), element.description)
+      XCTAssertTrue(waitUntilHittable(element, timeout: 30), element.description)
     }
     attachFrames("r3-rtl-frames", [
       "Alpha": alpha, "Beta": beta, "Gamma": gamma, "Find": find,

@@ -23,6 +23,7 @@ PALETTE_TESTS = {
 SIMULATOR_FAILURES = (
     "kAXErrorIPCTimeout",
     "Timed out while evaluating UI query",
+    "Failed to get screenshot: Timed out while requesting screenshot",
     "Failed to terminate dev.starroyhq.flutterAdaptiveLiquidGlass.example:",
     "Native test fixture did not reach the foreground",
     "Native test fixture did not load the catalog",
@@ -158,7 +159,7 @@ def main():
             if isinstance(error, subprocess.TimeoutExpired) and error.cmd[:3] == ("xcrun", "simctl", "bootstatus"):
                 message = "Simulator boot timed out; retrying once on a new simulator."
             elif isinstance(error, subprocess.CalledProcessError) and only_simulator_failures(bundle):
-                message = "XCTest fixture startup or accessibility query failed; retrying once on a new simulator."
+                message = "XCTest simulator communication failed; retrying once on a new simulator."
             else:
                 raise
             print(message, flush=True)

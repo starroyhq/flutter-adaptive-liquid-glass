@@ -656,10 +656,10 @@ the first-use rule above. Controls must all pass.
 
 On the 0.8.0 merge, XCTest could spend minutes querying the active app or a
 control after the simulator had booted. Simulator boot timeouts and explicit
-XCTest fixture startup or accessibility query failures allow one retry of the
-affected suite on a fresh simulator. If any assertion about a control fails,
-the job fails without a retry. Result bundles from both attempts are retained
-when available.
+XCTest fixture startup, accessibility query or screenshot transport failures
+allow one retry of the affected suite on a fresh simulator. If any assertion
+about a control fails, the job fails without a retry. Result bundles from both
+attempts are retained when available.
 
 ## Limits
 

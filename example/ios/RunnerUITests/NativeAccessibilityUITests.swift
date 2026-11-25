@@ -8,8 +8,9 @@ final class NativeAccessibilityUITests: XCTestCase {
     continueAfterFailure = false
     app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
     app.launch()
+    XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
     let probe = app.buttons["Open accessibility probe"]
-    XCTAssertTrue(probe.waitForExistence(timeout: 30))
+    XCTAssertTrue(waitUntilHittable(probe, timeout: 30))
     probe.tap()
     XCTAssertTrue(app.staticTexts["Accessibility renderer: native"].waitForExistence(timeout: 20))
   }
@@ -90,14 +91,16 @@ final class NativeAccessibilityUITests: XCTestCase {
   }
 
   func testCatalogColorPickerReopensAfterNativeTabRecreation() throws {
-    app.buttons["back"].tap()
+    returnToCatalog()
     let pickersTab = app.buttons["Pickers"]
-    XCTAssertTrue(pickersTab.waitForExistence(timeout: 10))
-    pickersTab.tap()
+    tapSelection(pickersTab, from: "Surface and buttons", to: "Date picker")
     try openCatalogColorPicker()
     closePalette(app.otherElements["UIColorPicker"])
-    app.buttons["Controls"].tap()
-    pickersTab.tap()
+    let controlsTab = app.buttons["Controls"]
+    XCTAssertTrue(waitUntilHittable(controlsTab))
+    controlsTab.tap()
+    expectText("Surface and buttons")
+    tapSelection(pickersTab, from: "Surface and buttons", to: "Date picker")
     try openCatalogColorPicker()
     closePalette(app.otherElements["UIColorPicker"])
   }
@@ -322,8 +325,7 @@ final class NativeAccessibilityUITests: XCTestCase {
     expectText("Tab: 0")
 
     // The system segmented control.
-    app.buttons["Two"].tap()
-    expectText("Segment: 1")
+    tapSelection(app.buttons["Two"], from: "Segment: 0", to: "Segment: 1")
 
     // Standalone icon buttons carry their id and semantic label natively.
     let add = app.buttons["probe-add"]
@@ -596,8 +598,7 @@ final class NativeAccessibilityUITests: XCTestCase {
     XCTAssertGreaterThan(week.frame.midX, month.frame.midX)
 
     // Indexes stay logical: the leftmost tab is the last, the rightmost the first.
-    gamma.tap()
-    expectText("Tab: 2")
+    tapSelection(gamma, from: "Tab: 0", to: "Tab: 2")
     let tabs = [alpha, beta, gamma].sorted { $0.frame.midX < $1.frame.midX }
     tabs.last!.tap()
     expectText("Tab: 0")
@@ -617,7 +618,7 @@ final class NativeAccessibilityUITests: XCTestCase {
   @discardableResult
   private func openCatalogSearchEntry(_ title: String, file: StaticString = #filePath,
                                       line: UInt = #line) -> XCUIElement {
-    app.buttons["back"].tap()
+    returnToCatalog(file: file, line: line)
     let entry = revealCatalogSearchEntry(title, file: file, line: line)
     entry.tap()
     return entry
@@ -631,7 +632,7 @@ final class NativeAccessibilityUITests: XCTestCase {
   private func revealCatalogSearchEntry(_ title: String, file: StaticString = #filePath,
                                         line: UInt = #line) -> XCUIElement {
     let searchTab = app.buttons["Search"]
-    XCTAssertTrue(searchTab.waitForExistence(timeout: 10), file: file, line: line)
+    XCTAssertTrue(waitUntilHittable(searchTab), file: file, line: line)
     searchTab.tap()
     let entry = app.buttons[title]
     for _ in 0..<3 {
@@ -650,6 +651,12 @@ final class NativeAccessibilityUITests: XCTestCase {
     if !reachable { attachHierarchy("Catalog Search page without \(title)") }
     XCTAssertTrue(reachable, "\(title) must be reachable", file: file, line: line)
     return entry
+  }
+
+  private func returnToCatalog(file: StaticString = #filePath, line: UInt = #line) {
+    app.buttons["back"].tap()
+    let probe = app.staticTexts["Accessibility renderer: native"]
+    XCTAssertTrue(probe.waitForNonExistence(timeout: 15), file: file, line: line)
   }
 
   /// A button found by its label, for native buttons whose identifier is the
@@ -710,10 +717,23 @@ final class NativeAccessibilityUITests: XCTestCase {
     return XCTWaiter.wait(for: [hittable], timeout: timeout) == .completed
   }
 
+  /// Retries only an idempotent selection while the previous state is still visible.
+  private func tapSelection(_ element: XCUIElement, from previous: String, to next: String,
+                            file: StaticString = #filePath, line: UInt = #line) {
+    XCTAssertTrue(waitUntilHittable(element), file: file, line: line)
+    element.tap()
+    if app.staticTexts[next].waitForExistence(timeout: 15) { return }
+    if app.staticTexts[previous].exists {
+      XCTAssertTrue(waitUntilHittable(element), file: file, line: line)
+      element.tap()
+    }
+    expectText(next, file: file, line: line)
+  }
+
   private func openCatalogColorPicker() throws {
     let well = app.buttons["Preview color"]
     for _ in 0..<4 {
-      if well.exists && well.isHittable { break }
+      if waitUntilHittable(well, timeout: 3) { break }
       app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.76))
         .press(forDuration: 0.05,
                thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.46)),

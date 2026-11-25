@@ -647,6 +647,19 @@ unchanged. The first-use diagnostics workflow keeps its original strict
 assertions. This replaces the "all ten native cases must pass" rule above; the
 gate run is still not rerun to seek a green result.
 
+### Native interaction suites
+
+CI runs separate controls and palette suites on dedicated simulators for both
+iOS versions. It checks the result bundles against the XCTest source so neither
+suite can succeed with missing or duplicate cases. The palette suite retains
+the first-use rule above. Controls must all pass.
+
+On the 0.8.0 merge, XCTest could spend minutes querying the active app or a
+control after the simulator had booted. An explicit accessibility IPC or
+snapshot timeout allows one retry of the affected suite on a fresh simulator.
+If any ordinary assertion fails, the job fails without a retry. Both result
+bundles are retained when a retry runs.
+
 ## Limits
 
 Simulator accessibility trees and activation tests do not establish the complete

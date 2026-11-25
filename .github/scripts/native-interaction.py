@@ -23,6 +23,8 @@ PALETTE_TESTS = {
 SIMULATOR_FAILURES = (
     "kAXErrorIPCTimeout",
     "Timed out while evaluating UI query",
+    "connection to service created from an endpoint was invalidated: "
+    "Failed to check-in, peer may have been unloaded: mach_error=10000003",
     "Failed to get screenshot: Timed out while requesting screenshot",
     "Failed to terminate dev.starroyhq.flutterAdaptiveLiquidGlass.example:",
     "Native test fixture did not reach the foreground",

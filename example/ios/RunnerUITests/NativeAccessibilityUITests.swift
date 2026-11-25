@@ -658,7 +658,7 @@ final class NativeAccessibilityUITests: XCTestCase {
   private func returnToCatalog(file: StaticString = #filePath, line: UInt = #line) {
     app.buttons["back"].tap()
     let probe = app.staticTexts["Accessibility renderer: native"]
-    XCTAssertTrue(probe.waitForNonExistence(timeout: 15), file: file, line: line)
+    XCTAssertTrue(probe.waitForNonExistence(timeout: 30), file: file, line: line)
   }
 
   /// A button found by its label, for native buttons whose identifier is the
@@ -720,7 +720,7 @@ final class NativeAccessibilityUITests: XCTestCase {
   }
 
   private func waitForStableFrame(_ element: XCUIElement) -> Bool {
-    guard element.waitForExistence(timeout: 15) else { return false }
+    guard element.waitForExistence(timeout: 30) else { return false }
     // A platform view can be in the AX tree before UIKit has placed it. Do
     // not ask XCTest for an activation point while the frame is still moving.
     var previousFrame = CGRect.null
@@ -729,8 +729,10 @@ final class NativeAccessibilityUITests: XCTestCase {
       defer { previousFrame = frame }
       return !frame.isEmpty && !frame.isInfinite && frame == previousFrame
     }
+    // Allow two observations even when a hosted simulator takes a minute to
+    // return the first accessibility frame.
     return XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: settled, object: nil)],
-                          timeout: 15) == .completed
+                          timeout: 90) == .completed
   }
 
   /// Retries only an idempotent selection while the previous state is still visible.

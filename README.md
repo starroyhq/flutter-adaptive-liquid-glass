@@ -377,7 +377,8 @@ reads the current `MediaQuery`. Android uses the features reported by Flutter.
 On older iOS versions, the scope uses the information available from Flutter
 and UIKit, and unavailable native properties are `null`.
 [Flutter display features](https://api.flutter.dev/flutter/widgets/MediaQueryData/displayFeatures.html) ·
-[Flutter sub-screen layout](https://api.flutter.dev/flutter/widgets/DisplayFeatureSubScreen-class.html)
+[Flutter sub-screen layout](https://api.flutter.dev/flutter/widgets/DisplayFeatureSubScreen-class.html) ·
+[Runnable window geometry example](example/README.md#window-geometry-example)
 
 On iOS 27.1 and later, builds using the iOS 27.1 or later SDK read UIKit's
 Duo vertical edge and reserved regions. Window control margins are available

@@ -39,7 +39,8 @@ only production dependency.
   `null`.
 
 See [Window geometry](../README.md#window-geometry) for the API example and
-property reference.
+property reference. The [runnable example](../example/README.md#window-geometry-example)
+displays the geometry reported by the current device as it changes.
 
 ## Validation
 
@@ -48,12 +49,20 @@ The package passes 377 tests, including native geometry updates, preservation of
 the mounted widget tree and Flutter display features. The example passes 11
 tests.
 
-An iPhone Duo simulator running iOS 27.1 reports a 466×678 logical-pixel outer
-screen, compact horizontal and regular vertical size classes, a trailing
-vertical bar, and two reserved regions. The
-[geometry smoke test](../example/integration_test/window_geometry_test.dart)
-checks the native bridge. Inner-screen and half-fold placement remain for
-device validation.
+The [geometry smoke test](../example/integration_test/window_geometry_test.dart)
+checks the native bridge. The runnable example was also exercised on the iOS
+27.1 iPhone Duo simulator with the Device Hub pose and rotation controls.
+[Apple Device Hub guide](https://developer.apple.com/documentation/xcode/interacting-with-your-app-in-device-hub)
+
+| Simulator pose | Window size in logical pixels | Observed geometry |
+| --- | --- | --- |
+| Closed | 466 × 678 | Compact / regular, trailing vertical bar, two active occlusions |
+| Fully open, landscape | 951 × 669 | Regular / regular, trailing vertical bar, inactive flat division, zero display features |
+| Partially open, landscape | 951 × 669 | Active half-open division at x 455.5 with width 40, one display feature |
+| Partially open, portrait | 669 × 951 | Active half-open division at y 455.5 with height 40, one display feature |
+
+Physical Duo validation remains for the hinge transition thresholds and for
+placement and touch behavior near the system-reserved regions.
 
 An iPad (A16) simulator on iPadOS 27.0 reports window control margins through
 the native guide in its default window. Resized and Stage Manager windows

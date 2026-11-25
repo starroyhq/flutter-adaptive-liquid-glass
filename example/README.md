@@ -144,6 +144,18 @@ local checks used iOS 27; the dedicated CI gate uses actual iOS 26 for the nativ
 slider scenario below. See [release validation](../doc/release-validation.md)
 for the normal-duration slider result and the remaining platform coverage.
 
+## Window geometry example
+
+```sh
+flutter run -d <device-id> --target=lib/window_geometry_example.dart
+```
+
+The [example](lib/window_geometry_example.dart) shows the current window's
+size classes, safe area, vertical navigation edge, reserved regions and Flutter
+display features. Rotate, fold or resize the device to see how the reported
+values change. On supported iPads, the example also shows window-control
+margins. A dash marks an unavailable size class or vertical edge.
+
 ## Original material probe
 
 ```sh

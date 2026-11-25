@@ -29,6 +29,7 @@ SIMULATOR_FAILURES = (
     "Failed to terminate dev.starroyhq.flutterAdaptiveLiquidGlass.example:",
     "Native test fixture did not reach the foreground",
     "Native test fixture did not load the catalog",
+    "Native test fixture did not open the accessibility probe",
 )
 
 

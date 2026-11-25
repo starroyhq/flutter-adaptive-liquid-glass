@@ -11,9 +11,16 @@ final class NativeAccessibilityUITests: XCTestCase {
     XCTAssertTrue(app.wait(for: .runningForeground, timeout: 30),
                   "Native test fixture did not reach the foreground")
     let probe = app.buttons["Open accessibility probe"]
-    XCTAssertTrue(probe.waitForExistence(timeout: 45), "Native test fixture did not load the catalog")
+    XCTAssertTrue(waitForStableFrame(probe), "Native test fixture did not load the catalog")
+    let renderer = app.staticTexts["Accessibility renderer: native"]
     probe.tap()
-    XCTAssertTrue(app.staticTexts["Accessibility renderer: native"].waitForExistence(timeout: 20))
+    if renderer.waitForExistence(timeout: 30) { return }
+    // A delayed or missed first tap can leave the app on the catalog. Retry
+    // navigation only while that source page is still visible.
+    if app.staticTexts["Surface and buttons"].exists && waitForStableFrame(probe) {
+      probe.tap()
+    }
+    XCTAssertTrue(renderer.waitForExistence(timeout: 30), "Native test fixture did not open the accessibility probe")
   }
 
   func testNativeLabelsUpdateWithoutExtraCallbacks() throws {

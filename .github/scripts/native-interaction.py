@@ -20,7 +20,13 @@ PALETTE_TESTS = {
     "testProgrammaticDismissalReleasesOnlyTheDepartingPalette",
     "testRemovingSourceDuringPresentationCancelsOwnedPalette",
 }
-AX_TIMEOUTS = ("kAXErrorIPCTimeout", "Timed out while evaluating UI query")
+SIMULATOR_FAILURES = (
+    "kAXErrorIPCTimeout",
+    "Timed out while evaluating UI query",
+    "Failed to terminate dev.starroyhq.flutterAdaptiveLiquidGlass.example:",
+    "Native test fixture did not reach the foreground",
+    "Native test fixture did not load the catalog",
+)
 
 
 def tests_for(suite):
@@ -73,12 +79,12 @@ def result_json(bundle, query):
     return read_json("xcrun", "xcresulttool", "get", "test-results", query, "--path", str(bundle), "--format", "json")
 
 
-def only_ax_timeouts(bundle):
+def only_simulator_failures(bundle):
     if not bundle.exists():
         return False
     failures = result_json(bundle, "summary")["testFailures"]
     return bool(failures) and all(
-        any(reason in issue.get("failureText", "") for reason in AX_TIMEOUTS)
+        any(reason in issue.get("failureText", "") for reason in SIMULATOR_FAILURES)
         for issue in failures
     )
 
@@ -151,8 +157,8 @@ def main():
                 raise
             if isinstance(error, subprocess.TimeoutExpired) and error.cmd[:3] == ("xcrun", "simctl", "bootstatus"):
                 message = "Simulator boot timed out; retrying once on a new simulator."
-            elif isinstance(error, subprocess.CalledProcessError) and only_ax_timeouts(bundle):
-                message = "XCTest accessibility IPC timed out; retrying once on a new simulator."
+            elif isinstance(error, subprocess.CalledProcessError) and only_simulator_failures(bundle):
+                message = "XCTest fixture startup or accessibility query failed; retrying once on a new simulator."
             else:
                 raise
             print(message, flush=True)

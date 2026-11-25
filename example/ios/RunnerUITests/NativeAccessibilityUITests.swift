@@ -101,14 +101,13 @@ final class NativeAccessibilityUITests: XCTestCase {
   func testCatalogColorPickerReopensAfterNativeTabRecreation() throws {
     returnToCatalog()
     let pickersTab = app.buttons["Pickers"]
-    tapSelection(pickersTab, from: "Surface and buttons", to: "Date picker")
+    let controlsPage = app.staticTexts["Surface and buttons"]
+    tapSelection(pickersTab, from: controlsPage, to: "Date picker")
     try openCatalogColorPicker()
     closePalette(app.otherElements["UIColorPicker"])
     let controlsTab = app.buttons["Controls"]
-    XCTAssertTrue(waitForStableFrame(controlsTab))
-    controlsTab.tap()
-    expectText("Surface and buttons")
-    tapSelection(pickersTab, from: "Surface and buttons", to: "Date picker")
+    tapSelection(controlsTab, from: app.buttons["Preview color"], to: "Surface and buttons")
+    tapSelection(pickersTab, from: controlsPage, to: "Date picker")
     try openCatalogColorPicker()
     closePalette(app.otherElements["UIColorPicker"])
   }
@@ -333,7 +332,7 @@ final class NativeAccessibilityUITests: XCTestCase {
     expectText("Tab: 0")
 
     // The system segmented control.
-    tapSelection(app.buttons["Two"], from: "Segment: 0", to: "Segment: 1")
+    tapSelection(app.buttons["Two"], from: app.staticTexts["Segment: 0"], to: "Segment: 1")
 
     // Standalone icon buttons carry their id and semantic label natively.
     let add = app.buttons["probe-add"]
@@ -607,7 +606,7 @@ final class NativeAccessibilityUITests: XCTestCase {
     XCTAssertGreaterThan(week.frame.midX, month.frame.midX)
 
     // Indexes stay logical: the leftmost tab is the last, the rightmost the first.
-    tapSelection(gamma, from: "Tab: 0", to: "Tab: 2")
+    tapSelection(gamma, from: app.staticTexts["Tab: 0"], to: "Tab: 2")
     let tabs = [alpha, beta, gamma].sorted { $0.frame.midX < $1.frame.midX }
     tabs.last!.tap()
     expectText("Tab: 0")
@@ -743,12 +742,12 @@ final class NativeAccessibilityUITests: XCTestCase {
   }
 
   /// Retries only an idempotent selection while the previous state is still visible.
-  private func tapSelection(_ element: XCUIElement, from previous: String, to next: String,
+  private func tapSelection(_ element: XCUIElement, from previous: XCUIElement, to next: String,
                             file: StaticString = #filePath, line: UInt = #line) {
     XCTAssertTrue(waitForStableFrame(element), file: file, line: line)
     element.tap()
     if app.staticTexts[next].waitForExistence(timeout: 15) { return }
-    if app.staticTexts[previous].exists {
+    if previous.exists {
       XCTAssertTrue(waitForStableFrame(element), file: file, line: line)
       element.tap()
     }

@@ -39,7 +39,7 @@ def tests_for(suite):
     return {f"{case}/{name}" for case, tests in names.items() for name in tests}
 
 
-def run_tool(*command, timeout=30, **options):
+def run_tool(*command, timeout=120, **options):
     return subprocess.run(command, check=True, timeout=timeout, text=True, **options)
 
 

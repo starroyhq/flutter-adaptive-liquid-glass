@@ -1,3 +1,12 @@
+## 0.8.0
+
+- Add `LiquidGlassWindowGeometryScope` and `LiquidGlassWindowGeometry` for
+  layouts that adapt to size classes, the system vertical bar on iPhone Duo,
+  folds and hinges, and iPad window controls.
+- The scope combines Flutter display features with active divisions reported
+  by UIKit so that Flutter layout widgets can use them through
+  `MediaQuery.displayFeatures`. Android uses the features reported by Flutter.
+
 ## 0.7.0
 - The package's alerts, sheets and popovers, and the menus and picker editors
   built on them, no longer hide the native glass of the page below them. The

@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -14,15 +14,16 @@ void main() {
       LiquidGlassWindowGeometry? observed;
       Size? mediaSize;
       await tester.pumpWidget(
-        MaterialApp(
-          builder: (context, child) =>
-              LiquidGlassWindowGeometryScope(child: child!),
-          home: Builder(
-            builder: (context) {
-              observed = LiquidGlassWindowGeometry.of(context);
-              mediaSize = MediaQuery.sizeOf(context);
-              return const SizedBox.expand();
-            },
+        WidgetsApp(
+          color: const Color(0xFF000000),
+          builder: (context, _) => LiquidGlassWindowGeometryScope(
+            child: Builder(
+              builder: (context) {
+                observed = LiquidGlassWindowGeometry.of(context);
+                mediaSize = MediaQuery.sizeOf(context);
+                return const SizedBox.expand();
+              },
+            ),
           ),
         ),
       );

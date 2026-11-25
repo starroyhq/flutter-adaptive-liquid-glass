@@ -269,8 +269,10 @@ jobs:
       - run: flutter pub get
       - run: flutter pub get
         working-directory: example
-      - run: flutter analyze --no-pub
-      - run: flutter analyze --no-pub
+      # Recent stable SDKs flag legacy Material imports as informational.
+      # Keep reporting them while testing supported SDKs without a separate dependency.
+      - run: flutter analyze --no-pub --no-fatal-infos
+      - run: flutter analyze --no-pub --no-fatal-infos
         working-directory: example
       - run: flutter test --no-pub
       - run: flutter test --no-pub

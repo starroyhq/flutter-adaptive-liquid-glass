@@ -54,3 +54,7 @@ vertical bar, and two reserved regions. The
 [geometry smoke test](../example/integration_test/window_geometry_test.dart)
 checks the native bridge. Inner-screen and half-fold placement remain for
 device validation.
+
+An iPad (A16) simulator on iPadOS 27.0 reports window control margins through
+the native guide in its default window. Resized and Stage Manager windows
+remain for device validation.

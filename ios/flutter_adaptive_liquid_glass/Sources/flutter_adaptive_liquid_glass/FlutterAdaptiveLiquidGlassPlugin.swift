@@ -32,6 +32,10 @@ public final class FlutterAdaptiveLiquidGlassPlugin: NSObject, FlutterPlugin {
       registrar.addMethodCallDelegate(
         plugin, channel: FlutterMethodChannel(name: name, binaryMessenger: registrar.messenger()))
     }
+    FlutterEventChannel(
+      name: "flutter_adaptive_liquid_glass/window-geometry",
+      binaryMessenger: registrar.messenger()
+    ).setStreamHandler(AdaptiveLiquidGlassWindowGeometry(registrar: registrar))
     registrar.register(AdaptiveLiquidGlassCapsuleFactory(messenger: registrar.messenger()), withId: "flutter_adaptive_liquid_glass/capsule")
     registrar.register(AdaptiveLiquidGlassSurfaceFactory(messenger: registrar.messenger()), withId: "flutter_adaptive_liquid_glass/surface")
     registrar.register(AdaptiveLiquidGlassNavigationBarFactory(messenger: registrar.messenger()), withId: "flutter_adaptive_liquid_glass/navigation-bar")

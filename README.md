@@ -9,6 +9,12 @@ imports use `flutter_adaptive_liquid_glass`, following Dart's
 [package naming rules](https://dart.dev/tools/pub/pubspec#name); hyphens are not
 valid in a pubspec package name.
 
+Version **0.8.0** adds an opt-in window geometry scope for adaptive layouts.
+Read UIKit size classes and the recommended vertical-bar edge on supported iOS
+windows, account for iPad window controls, and use Flutter display features
+for layout around folds and hinges. See [Window geometry](#window-geometry)
+and the [0.8.0 release notes](doc/release-0.8.0.md).
+
 Version **0.7.0** keeps the page's native glass on screen, under the barrier,
 while one of the package's alerts, sheets, popovers or menus is open. Under
 other popups, such as Material sheets and dialogs, the page's native controls
@@ -102,7 +108,7 @@ Or add the version to your app's `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_adaptive_liquid_glass: ^0.7.0
+  flutter_adaptive_liquid_glass: ^0.8.0
 ```
 
 Requires Flutter 3.41.2 or later and Dart 3.11 or later. Supported platforms are
@@ -118,6 +124,13 @@ checks that pinned version and the current stable channel. The package has no
 production dependency besides the Flutter SDK: every native control, including
 the tab bar, the segmented control and icon buttons, is a package-owned UIKit
 bridge. It does not require a global toolchain upgrade.
+
+### Upgrading from 0.7.x
+
+Change the constraint to `^0.8.0`, run `flutter pub get`, then perform a full
+native rebuild. Dart's `^0.7.x` constraints select only 0.7 releases. Add
+`LiquidGlassWindowGeometryScope` to opt into the new layout data. See the
+[0.8.0 release notes](doc/release-0.8.0.md).
 
 ### Upgrading from 0.6.x
 
@@ -328,6 +341,50 @@ long-press action, or added, removed or reordered actions, create a new one.
 Native capsules, tab bars and segmented controls follow the ambient
 `Directionality`, not the device language. Every path retains native materials
 and app appearance.
+
+## Window geometry
+
+Wrap the app's navigator in `LiquidGlassWindowGeometryScope` to read the
+window's layout data and make its display features available to Flutter
+layout widgets.
+
+```dart
+MaterialApp(
+  builder: (context, child) => LiquidGlassWindowGeometryScope(child: child!),
+  home: const ConversationPage(),
+);
+```
+
+Read the geometry from a descendant of the scope with
+`LiquidGlassWindowGeometry.of(context)`. Use the values to choose pane
+layouts, place your app's vertical controls and keep them away from reserved
+areas.
+
+| Property | What it reports |
+| --- | --- |
+| `size` | The Flutter window size in logical pixels |
+| `safeArea` | The window's `MediaQuery.viewPadding`, including system insets while the keyboard is open |
+| `horizontalSizeClass`, `verticalSizeClass` | UIKit's `compact` or `regular` class for each axis, when available |
+| `verticalBarEdge` | UIKit's recommended `leading` or `trailing` edge for vertical navigation, when available |
+| `displayFeatures` | Flutter's display features together with active UIKit divisions, in Flutter window coordinates |
+| `reservedRegions` | Rectangles with a division or occlusion kind, an `isActive` flag and the reported fold posture |
+| `windowControlMargins` | UIKit guide-adjusted margins for iPad window controls, when available |
+
+The scope passes the combined `displayFeatures` to its descendants'
+`MediaQuery`. Flutter's `DisplayFeatureSubScreen` can use that list to place
+content within a pane. Outside a scope, `LiquidGlassWindowGeometry.of(context)`
+reads the current `MediaQuery`. Android uses the features reported by Flutter.
+On older iOS versions, the scope uses the information available from Flutter
+and UIKit, and unavailable native properties are `null`.
+[Flutter display features](https://api.flutter.dev/flutter/widgets/MediaQueryData/displayFeatures.html) ·
+[Flutter sub-screen layout](https://api.flutter.dev/flutter/widgets/DisplayFeatureSubScreen-class.html) ·
+[Runnable window geometry example](example/README.md#window-geometry-example)
+
+On iOS 27.1 and later, builds using the iOS 27.1 or later SDK read UIKit's
+Duo vertical edge and reserved regions. Window control margins are available
+on iPadOS 26 and later.
+[UIKit reserved regions](https://developer.apple.com/documentation/uikit/uiview/reservedregion) ·
+[iPad window control layout](https://developer.apple.com/videos/play/wwdc2025/282/)
 
 ## Component catalog
 

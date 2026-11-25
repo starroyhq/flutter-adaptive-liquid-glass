@@ -2,10 +2,11 @@
 
 Standalone iOS/Android showcase for `flutter_adaptive_liquid_glass`. Its dependency
 uses `path: ../`, resolving to the surrounding package checkout. This example
-demonstrates the **0.7.0** component catalog. Applications can use the hosted
-`flutter_adaptive_liquid_glass: ^0.7.0` dependency; the example deliberately keeps
-its local path so it tests the same source checkout. See the
-[upgrade notes](../README.md#upgrading-from-02x) when moving from 0.2.x.
+demonstrates the **0.8.0** component catalog. Applications can use the hosted
+`flutter_adaptive_liquid_glass: ^0.8.0` dependency. The example keeps its local
+path so it tests the same source checkout. See the
+[upgrade notes](../README.md#upgrading-from-07x) and
+[window geometry guide](../README.md#window-geometry).
 
 Development and the pinned CI jobs use Flutter 3.41.9 / Dart 3.11.5; CI also
 builds this example on the current stable channel with Swift Package Manager.
@@ -142,6 +143,18 @@ separately; an iOS 26+ simulator result is not an iOS hardware result. Broader
 local checks used iOS 27; the dedicated CI gate uses actual iOS 26 for the native
 slider scenario below. See [release validation](../doc/release-validation.md)
 for the normal-duration slider result and the remaining platform coverage.
+
+## Window geometry example
+
+```sh
+flutter run -d <device-id> --target=lib/window_geometry_example.dart
+```
+
+The [example](lib/window_geometry_example.dart) shows the current window's
+size classes, safe area, vertical navigation edge, reserved regions and Flutter
+display features. Rotate, fold or resize the device to see how the reported
+values change. On supported iPads, the example also shows window-control
+margins. A dash marks an unavailable size class or vertical edge.
 
 ## Original material probe
 

@@ -924,14 +924,29 @@ final class NativeAccessibilityUITests: XCTestCase {
 
   private func openCatalogColorPicker() throws {
     let well = app.buttons["Preview color"]
+    let appFrame = app.frame
+    let tab = app.buttons["Pickers"]
+    XCTAssertTrue(waitForStableFrame(tab), "The catalog tab bar must be laid out")
+    let tabFrame = tab.frame
+    // The tab bar overlays the scroll view. Use rendered geometry here because
+    // XCTest can fail the test while resolving .isHittable for the native well.
+    let viewport = CGRect(x: appFrame.minX, y: appFrame.minY, width: appFrame.width,
+                          height: tabFrame.minY - appFrame.minY)
+    XCTAssertFalse(viewport.isEmpty)
+    func isVisible(_ frame: CGRect) -> Bool {
+      !frame.isEmpty && !frame.isInfinite && viewport.contains(frame)
+    }
+    let visible = NSPredicate { _, _ in
+      well.exists && isVisible(well.frame)
+    }
     for _ in 0..<4 {
-      if waitUntilHittable(well, timeout: 3) { break }
+      let shown = XCTNSPredicateExpectation(predicate: visible, object: nil)
+      if XCTWaiter.wait(for: [shown], timeout: 3) == .completed { break }
       app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.76))
         .press(forDuration: 0.05,
                thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.46)),
                withVelocity: .slow, thenHoldForDuration: 0.2)
     }
-    XCTAssertTrue(well.exists && well.isHittable)
     // Flutter's scroll/layout tickers do not participate in XCTest idleness.
     // Resolve one measured-center system tap after three stable AX frames.
     // The probe deliberately retains element.tap() as an independent control.
@@ -939,22 +954,24 @@ final class NativeAccessibilityUITests: XCTestCase {
     var stableSamples = 0
     var samples: [String] = []
     let settled = NSPredicate { _, _ in
-      let frame = well.frame
+      let frame = well.exists ? well.frame : .null
       samples.append("t=\(ProcessInfo.processInfo.systemUptime) frame=\(frame)")
-      let valid = !frame.isNull && !frame.isInfinite && !frame.isEmpty
-      stableSamples = valid && frame == previousFrame ? stableSamples + 1 : 0
+      stableSamples = isVisible(frame) && frame == previousFrame ? stableSamples + 1 : 0
       previousFrame = frame
       return stableSamples >= 2
     }
     let result = XCTWaiter.wait(
       for: [XCTNSPredicateExpectation(predicate: settled, object: nil)], timeout: 45)
-    let frames = XCTAttachment(string: samples.joined(separator: "\n"))
+    let frames = XCTAttachment(string: (["Visible viewport: \(viewport)"] + samples).joined(separator: "\n"))
     frames.name = "Catalog color well frame samples"
     frames.lifetime = .keepAlways
     add(frames)
     XCTAssertEqual(result, .completed)
-    XCTAssertTrue(well.isEnabled && well.isHittable)
-    well.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    XCTAssertTrue(well.exists && isVisible(previousFrame), "The color well must be visible above the tab bar")
+    XCTAssertTrue(well.isEnabled, "The visible color well must accept input")
+    app.coordinate(withNormalizedOffset: .zero)
+      .withOffset(CGVector(dx: previousFrame.midX - appFrame.minX, dy: previousFrame.midY - appFrame.minY))
+      .tap()
     _ = try waitForPalette(title: "Preview color")
   }
 

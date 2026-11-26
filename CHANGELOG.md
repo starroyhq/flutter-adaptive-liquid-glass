@@ -8,6 +8,13 @@
   accepts SF Symbols and PNG icons. UIKit supplies the native menu width and
   presentation. Custom triggers and explicit tap-only or hold-only triggers
   keep their Flutter popovers.
+- In a scrollable Flutter layout such as a `ListView`, `GridView`, or horizontal
+  scroller, a gesture starting on a default native menu button goes to UIKit.
+  Start scrolling outside the button, put the button in a fixed header, or
+  use an explicit `.tap` or `.longPress` trigger with the Flutter popover.
+- On iOS 26+, navigation bar actions share a system glass background on each
+  side. Actions can show bitmap icons or badges and can open individual UIKit
+  menus. The Flutter fallback reads the same action data.
 
 ## 0.8.0
 

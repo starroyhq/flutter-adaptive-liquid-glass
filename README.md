@@ -9,7 +9,8 @@ imports use `flutter_adaptive_liquid_glass`, following Dart's
 [package naming rules](https://dart.dev/tools/pub/pubspec#name); hyphens are not
 valid in a pubspec package name.
 
-Version **0.9.0** uses UIKit's glass styles for standalone buttons. See the
+Version **0.9.0** uses UIKit's glass styles for standalone buttons, native
+menus, and grouped navigation bar actions. See the
 [0.9.0 release notes](doc/release-0.9.0.md).
 
 Version **0.8.0** adds an opt-in window geometry scope for adaptive layouts.
@@ -977,13 +978,15 @@ routes: stop painting the underlying native controls while such an overlay is
 active. Changing themes does
 not remove the native tab platform view. Verify system materials on iOS hardware.
 
-`LiquidGlassNavigationBar` keeps a disabled action in the native bar and updates
-it in place. It uses the Flutter title layout when an icon action lacks an
-`sfSymbol`, an action has a long press, either side has more than one action,
-or the text is large; debug builds print which. Basic icon-only navigation
-should supply an `sfSymbol` with every icon. The supported native layout uses a
-package-owned `UINavigationBar` bridge and announces each action's business
-label. UIKit retains the system material and bar-button rendering.
+`LiquidGlassNavigationBar` uses one UIKit glass group per side on iOS 26+,
+including for mixed text and icon items. UIKit can collapse a group when
+space is limited. Use distinct action IDs across the bar. An action can use
+an SF Symbol, a PNG (`iconPng`), or a Flutter glyph rasterized for UIKit.
+The `badge` is a string label, with an empty string showing a dot and
+`null` clearing it. A `LiquidGlassNavigationMenu` provides a data-driven
+menu and selection callback on an action. Flutter handles the title and
+actions for long-press actions or large text. Disabled actions remain
+mounted as the bar updates. [UIKit navigation bar](https://developer.apple.com/documentation/UIKit/customizing-your-app-s-navigation-bar)
 
 ## Performance
 
@@ -1030,10 +1033,9 @@ controls in profile mode on a device.
   and channel values (see [Date and color pickers](#date-and-color-pickers)) and
   the slider's percentage value, which `semanticFormatterCallback` replaces.
 - Some native controls switch to Flutter rendering: fixed-height button
-  groups, segmented controls and the navigation bar at large text sizes, and
-  the navigation bar unless it
-  has at most one leading and one trailing action, without long presses and
-  with an `sfSymbol` beside every icon. Debug builds print each such reason
+  groups, segmented controls and the navigation bar at large text sizes.
+  The navigation bar also uses the Flutter layout for long-press actions.
+  Debug builds print each such reason
   once with `debugPrint`, naming the control and what to change; release
   builds print nothing. Native sliders, switches and steppers stay native at
   every text size.

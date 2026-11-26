@@ -26,6 +26,8 @@ private final class AdaptiveLiquidGlassNavigationBar: NSObject, FlutterPlatformV
   private let container: AdaptiveNavigationContainer
   private let bar = UINavigationBar()
   private let item = UINavigationItem()
+  private let leadingGroup = UIBarButtonItemGroup(barButtonItems: [], representativeItem: nil)
+  private let trailingGroup = UIBarButtonItemGroup(barButtonItems: [], representativeItem: nil)
   private let channel: FlutterMethodChannel
   private let suppression: AdaptiveLiquidGlassSuppression
   private var suppressionObserver: UUID?
@@ -52,7 +54,9 @@ private final class AdaptiveLiquidGlassNavigationBar: NSObject, FlutterPlatformV
     NSLayoutConstraint.activate([
       bar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
       bar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-      bar.topAnchor.constraint(equalTo: container.topAnchor),
+      // Leave room for badges that extend above the native button, even in
+      // windows whose safe area starts at the top of the screen.
+      bar.topAnchor.constraint(equalTo: container.topAnchor, constant: 6),
       bar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
     ])
     bar.items = [item]
@@ -94,26 +98,42 @@ private final class AdaptiveLiquidGlassNavigationBar: NSObject, FlutterPlatformV
     let style: UIUserInterfaceStyle = props["dark"] as? Bool == true ? .dark : .light
     container.overrideUserInterfaceStyle = style
     bar.overrideUserInterfaceStyle = style
-    let direction: UISemanticContentAttribute = props["rtl"] as? Bool == true
-      ? .forceRightToLeft : .forceLeftToRight
+    let rightToLeft = props["rtl"] as? Bool == true
+    let direction: UISemanticContentAttribute = rightToLeft ? .forceRightToLeft : .forceLeftToRight
     container.semanticContentAttribute = direction
     bar.semanticContentAttribute = direction
+    if #available(iOS 17.0, *) {
+      // UINavigationBar's item groups follow the layout-direction trait.
+      bar.traitOverrides.layoutDirection = rightToLeft ? .rightToLeft : .leftToRight
+    }
     bar.tintColor = Self.color(props["tintColor"])
     item.title = props["title"] as? String ?? ""
     if #available(iOS 26.0, *) { item.subtitle = props["subtitle"] as? String }
-    let nextLeading = updateItems(leading, from: props["leading"] as? [[String: Any]] ?? [])
-    let nextActions = updateItems(actions, from: props["actions"] as? [[String: Any]] ?? [])
+    let nextLeading = updateItems(leading, from: props["leading"] as? [[String: Any]] ?? [],
+                                  rightToLeft: rightToLeft)
+    let nextActions = updateItems(actions, from: props["actions"] as? [[String: Any]] ?? [],
+                                  rightToLeft: rightToLeft)
     // Keep existing UIBarButtonItems when only labels, symbols or colors change,
     // preserving their accessibility focus and UIKit interaction state.
-    if !sameItems(leading, nextLeading) { item.leftBarButtonItems = nextLeading }
-    if !sameItems(actions, nextActions) { item.rightBarButtonItems = nextActions }
+    if !sameItems(leading, nextLeading) {
+      updateGroup(leadingGroup, with: nextLeading)
+      if leading.isEmpty != nextLeading.isEmpty {
+        item.leadingItemGroups = nextLeading.isEmpty ? [] : [leadingGroup]
+      }
+    }
+    if !sameItems(actions, nextActions) {
+      updateGroup(trailingGroup, with: nextActions)
+      if actions.isEmpty != nextActions.isEmpty {
+        item.trailingItemGroups = nextActions.isEmpty ? [] : [trailingGroup]
+      }
+    }
     leading = nextLeading
     actions = nextActions
     updateVisibility()
   }
 
   private func updateItems(_ previous: [AdaptiveNavigationItem],
-                           from props: [[String: Any]]) -> [AdaptiveNavigationItem] {
+                           from props: [[String: Any]], rightToLeft: Bool) -> [AdaptiveNavigationItem] {
     var remaining = previous
     return props.compactMap { props in
       guard let id = props["id"] as? String, let label = props["label"] as? String else { return nil }
@@ -125,19 +145,61 @@ private final class AdaptiveLiquidGlassNavigationBar: NSObject, FlutterPlatformV
                                         target: self, action: #selector(pressed(_:)))
         button.actionId = id
       }
-      if let symbol = props["sfSymbol"] as? String {
-        button.title = nil
-        button.image = UIImage(systemName: symbol)
-      } else {
-        button.image = nil
-        button.title = label
+      let icon = AdaptiveNavigationIcon(
+        symbol: props["sfSymbol"] as? String,
+        png: (props["png"] as? FlutterStandardTypedData)?.data,
+        template: props["template"] as? Bool == true,
+        mirror: props["mirror"] as? Bool == true,
+        direction: rightToLeft ? .rightToLeft : .leftToRight)
+      if button.icon != icon {
+        button.icon = icon
+        button.image = AdaptiveLiquidGlassMenu.image(
+          symbol: icon.symbol, png: icon.png, template: icon.template, mirror: icon.mirror,
+          direction: icon.direction)
       }
+      let title = button.image == nil ? label : nil
+      if button.title != title { button.title = title }
       button.accessibilityIdentifier = id
       button.accessibilityLabel = label
+      applyBadge(props["badge"] as? String, to: button)
       button.configuredEnabled = props["enabled"] as? Bool ?? true
+      let menu = (props["menu"] as? [String: Any]).flatMap(AdaptiveNavigationMenu.init)
+      if (button.menuData == nil) != (menu == nil) {
+        // A bar-button item with a menu uses it as the primary action when it
+        // has no target/action. UIKit owns menu presentation and gestures.
+        button.target = menu == nil ? self : nil
+        button.action = menu == nil ? #selector(pressed(_:)) : nil
+        button.preferredMenuElementOrder = .fixed
+      }
+      button.menuData = menu
       // UIKit's glass bar-button glyphs do not always inherit the bar tint.
       button.tintColor = bar.tintColor
       return button
+    }
+  }
+
+  private func applyBadge(_ value: String?, to button: AdaptiveNavigationItem) {
+    if #available(iOS 26.0, *) {
+      // Flutter platform view creation and configure both run on the platform
+      // thread. UIKit's Swift badge factory requires an explicit main actor.
+      MainActor.assumeIsolated {
+        let badge = value.map { $0.isEmpty ? UIBarButtonItem.Badge.indicator() : .string($0) }
+        if button.badge != badge { button.badge = badge }
+      }
+    }
+  }
+
+  private func updateGroup(_ group: UIBarButtonItemGroup, with buttons: [AdaptiveNavigationItem]) {
+    // One UIKit group per side keeps mixed text and image items on a shared
+    // glass background. UIKit can collapse the group when space is limited.
+    group.barButtonItems = buttons
+    if buttons.count > 1 {
+      if group.representativeItem == nil {
+        group.representativeItem = UIBarButtonItem(
+          image: UIImage(systemName: "ellipsis"), style: .plain, target: nil, action: nil)
+      }
+    } else {
+      group.representativeItem = nil
     }
   }
 
@@ -146,13 +208,44 @@ private final class AdaptiveLiquidGlassNavigationBar: NSObject, FlutterPlatformV
   }
 
   @objc private func pressed(_ sender: AdaptiveNavigationItem) {
-    guard !container.isHidden, container.window != nil, applicationActive,
-          interactionEnabled, sender.isEnabled,
-          (leading + actions).contains(where: { $0 === sender }) else { return }
+    guard sender.menuData == nil, canActivate(sender) else { return }
     sequence += 1
     channel.invokeMethod("pressed", arguments: [
       "id": sender.actionId, "epoch": epoch, "sequence": sequence,
     ])
+  }
+
+  private func canActivate(_ sender: AdaptiveNavigationItem) -> Bool {
+    guard !container.isHidden, container.window != nil, applicationActive,
+          interactionEnabled, sender.isEnabled,
+          (leading + actions).contains(where: { $0 === sender }) else { return false }
+    return true
+  }
+
+  private func applyMenu(to button: AdaptiveNavigationItem) {
+    guard button.isEnabled, let menu = button.menuData, !menu.items.isEmpty else {
+      if button.menu != nil {
+        button.menuGeneration += 1
+        button.menu = nil
+      }
+      return
+    }
+    let epoch = self.epoch
+    if button.menu != nil && button.installedMenuEpoch == epoch &&
+        button.installedMenuRevision == menu.revision { return }
+    button.installedMenuEpoch = epoch
+    button.installedMenuRevision = menu.revision
+    button.menuGeneration += 1
+    let generation = button.menuGeneration
+    button.menu = AdaptiveLiquidGlassMenu.make(items: menu.items) { [weak self, weak button] itemId in
+      guard let self, let button, self.epoch == epoch, button.menuGeneration == generation,
+            button.menuData?.revision == menu.revision, self.canActivate(button) else { return }
+      self.sequence += 1
+      self.channel.invokeMethod("menuSelected", arguments: [
+        "id": button.actionId, "itemId": itemId, "revision": menu.revision,
+        "epoch": epoch, "sequence": self.sequence,
+      ])
+    }
   }
 
   private func updateVisibility() {
@@ -161,7 +254,10 @@ private final class AdaptiveLiquidGlassNavigationBar: NSObject, FlutterPlatformV
     container.isHidden = hidden
     container.accessibilityElementsHidden = hidden
     container.isUserInteractionEnabled = interactive
-    for button in leading + actions { button.isEnabled = interactive && button.configuredEnabled }
+    for button in leading + actions {
+      button.isEnabled = interactive && button.configuredEnabled && button.menuData?.items.isEmpty != true
+      applyMenu(to: button)
+    }
   }
 
   func view() -> UIView { container }
@@ -185,6 +281,31 @@ private final class AdaptiveLiquidGlassNavigationBar: NSObject, FlutterPlatformV
 private final class AdaptiveNavigationItem: UIBarButtonItem {
   var actionId = ""
   var configuredEnabled = true
+  var icon: AdaptiveNavigationIcon?
+  var menuData: AdaptiveNavigationMenu?
+  var installedMenuEpoch: Int?
+  var installedMenuRevision: Int?
+  var menuGeneration = 0
+}
+
+private struct AdaptiveNavigationIcon: Equatable {
+  let symbol: String?
+  let png: Data?
+  let template: Bool
+  let mirror: Bool
+  let direction: UITraitEnvironmentLayoutDirection
+}
+
+private struct AdaptiveNavigationMenu {
+  let revision: Int
+  let items: [[String: Any]]
+
+  init?(_ props: [String: Any]) {
+    guard let revision = props["revision"] as? Int,
+          let items = props["items"] as? [[String: Any]] else { return nil }
+    self.revision = revision
+    self.items = items
+  }
 }
 
 private final class AdaptiveNavigationContainer: UIView {

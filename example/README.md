@@ -201,6 +201,21 @@ hold **File actions**, drag onto a menu item, and lift to select. Tap the
 empty background to dismiss the open menu. The page counts selections and
 cancellations separately.
 
+## Native navigation probe
+
+```sh
+flutter run -d <device-id> --dart-define=GLASS_NATIVE_NAVIGATION_PROBE=true
+```
+
+The catalog's Search page opens the same probe. The navigation bar shows two
+actions on each side. **Edit** is text, **Display options** uses a Flutter
+glyph bitmap, and **Bookmark options** uses a two-color PNG. Open both menus,
+including **Move bookmark → Archive bookmark**, and check their separate
+results. **Cycle badge** changes the bookmark badge from 3 to 8, clears it,
+then restores 3. **Switch direction** moves the action groups to the opposite
+edges. Run on iOS 26 or later to see UIKit's shared glass backgrounds and
+system menu presentation.
+
 ## Native controls probe
 
 ```sh

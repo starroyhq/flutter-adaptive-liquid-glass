@@ -347,7 +347,9 @@ final class NativeAccessibilityUITests: XCTestCase {
     app.buttons["Back"].tap()
     XCTAssertTrue(waitForStableFrame(searchTab))
     XCTAssertTrue(waitUntilHittable(searchTab))
-    app.buttons["Controls"].tap()
+    let controlsTab = app.buttons["Controls"]
+    XCTAssertTrue(waitUntilHittable(controlsTab))
+    tapSelection(controlsTab, from: openProbe, to: "Surface and buttons")
     XCTAssertTrue(openProbe.waitForNonExistence(timeout: 10))
     revealCatalogSearchEntry("Open native controls probe")
   }

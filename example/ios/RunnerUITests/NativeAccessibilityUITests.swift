@@ -508,6 +508,65 @@ final class NativeAccessibilityUITests: XCTestCase {
     expectText("Menu cancellations: 1")
   }
 
+  func testNativeNavigationGroupsMenusAndBadges() throws {
+    openCatalogSearchEntry("Open native navigation probe")
+    let back = app.buttons["nav-probe-back"]
+    let edit = app.buttons["nav-probe-edit"]
+    let display = app.buttons["nav-probe-display"]
+    let bookmark = app.buttons["nav-probe-bookmark"]
+    let actions = ["back": back, "edit": edit, "display": display, "bookmark": bookmark]
+    expectTappable(actions)
+    attachScreen("native-navigation-ltr-badge-3")
+    attachFrames("native-navigation-ltr-item-frames", actions)
+    XCTAssertLessThan(back.frame.midX, edit.frame.midX)
+    XCTAssertLessThan(edit.frame.midX, display.frame.midX)
+    XCTAssertLessThan(display.frame.midX, bookmark.frame.midX)
+    edit.tap()
+    expectText("Edits: 1")
+
+    display.tap()
+    let grid = app.buttons["Grid layout"]
+    XCTAssertTrue(waitUntilHittable(grid))
+    XCTAssertFalse(app.buttons["Move bookmark"].exists)
+    attachScreen("native-navigation-display-menu")
+    grid.tap()
+    expectText("Layout: grid")
+    expectText("Bookmark: none")
+
+    bookmark.tap()
+    let move = app.buttons["Move bookmark"]
+    XCTAssertTrue(waitUntilHittable(move))
+    XCTAssertFalse(app.buttons["Grid layout"].exists)
+    let remove = app.buttons["Remove bookmark"]
+    XCTAssertTrue(remove.exists)
+    XCTAssertFalse(remove.isEnabled)
+    move.tap()
+    let archive = app.buttons["Archive bookmark"]
+    XCTAssertTrue(waitUntilHittable(archive))
+    attachScreen("native-navigation-bookmark-submenu")
+    archive.tap()
+    expectText("Bookmark: archive")
+    expectText("Layout: grid")
+
+    let badgeToggle = app.buttons["Cycle badge"]
+    badgeToggle.tap()
+    expectText("Badge: 8")
+    XCTAssertTrue(waitUntilHittable(bookmark))
+    attachScreen("native-navigation-ltr-badge-8")
+    badgeToggle.tap()
+    expectText("Badge: none")
+    XCTAssertTrue(waitUntilHittable(bookmark))
+    attachScreen("native-navigation-ltr-badge-cleared")
+
+    app.buttons["Switch direction"].tap()
+    expectTappable(actions)
+    attachScreen("native-navigation-rtl")
+    attachFrames("native-navigation-rtl-item-frames", actions)
+    XCTAssertGreaterThan(back.frame.midX, edit.frame.midX)
+    XCTAssertGreaterThan(edit.frame.midX, display.frame.midX)
+    XCTAssertGreaterThan(display.frame.midX, bookmark.frame.midX)
+  }
+
   func testPopupsKeepNativeControlsBeneathThemOutOfReach() throws {
     openCatalogSearchEntry("Open native layout probe")
     expectText("Popup result: none")

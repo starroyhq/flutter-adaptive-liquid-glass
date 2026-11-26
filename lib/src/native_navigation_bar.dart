@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 
 import 'actions.dart';
 import 'feedback.dart';
+import 'menu_data.dart';
+import 'native_icon_raster.dart';
 import 'native_visibility.dart';
 
 /// Internal UINavigationBar bridge. UIKit owns the bar, its glass and buttons;
@@ -40,12 +42,80 @@ class _NativeNavigationBarState extends State<NativeNavigationBar>
   List<Route<dynamic>> _coverageRoutes = const [];
   bool _routeCovered = false;
   bool _syncScheduled = false;
+  final _icons = <IconData, Uint8List?>{};
+  final _pendingIcons = <IconData>{};
+  final _menus = <String, _NavigationMenu>{};
+  int _menuRevision = 0;
+
+  Iterable<LiquidGlassAction> get _actions sync* {
+    yield* widget.leading;
+    yield* widget.actions;
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     nativeRouteCoverage.addListener(_coverageChanged);
+    _prepareActions();
+  }
+
+  @override
+  void didUpdateWidget(covariant NativeNavigationBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _prepareActions();
+  }
+
+  void _prepareActions() {
+    final icons = <IconData>{
+      for (final action in _actions)
+        if (action.iconPng == null && action.icon != null) action.icon!,
+    };
+    _icons.removeWhere((icon, _) => !icons.contains(icon));
+    for (final icon in icons) {
+      if (!_icons.containsKey(icon) && _pendingIcons.add(icon)) {
+        unawaited(_prepareIcon(icon));
+      }
+    }
+
+    final menus = {
+      for (final action in _actions)
+        if (action.menu != null) action.id: action.menu!.items,
+    };
+    _menus.removeWhere((id, _) => !menus.containsKey(id));
+    for (final entry in menus.entries) {
+      final previous = _menus[entry.key];
+      if (previous != null && sameMenuItems(previous.items, entry.value)) {
+        continue;
+      }
+      final menu = _NavigationMenu(
+        snapshotMenuItems(entry.value, <String>{}),
+        ++_menuRevision,
+      );
+      _menus[entry.key] = menu;
+      if (menu.items.isNotEmpty) unawaited(_prepareMenu(entry.key, menu));
+    }
+  }
+
+  Future<void> _prepareIcon(IconData icon) async {
+    final png = await nativeIconPng(icon, canvasSize: 22, glyphSize: 18);
+    _pendingIcons.remove(icon);
+    if (!mounted ||
+        !_actions.any(
+          (action) => action.iconPng == null && action.icon == icon,
+        )) {
+      return;
+    }
+    setState(() => _icons[icon] = png);
+  }
+
+  Future<void> _prepareMenu(String id, _NavigationMenu menu) async {
+    final payload = await prepareNativeMenu(menu.items);
+    if (!mounted || _menus[id] != menu) return;
+    setState(() {
+      menu.payload = payload;
+      menu.revision = ++_menuRevision;
+    });
   }
 
   @override
@@ -86,14 +156,10 @@ class _NativeNavigationBarState extends State<NativeNavigationBar>
   Map<String, Object?> _props() {
     final routes = _routes();
     final lifecycle = WidgetsBinding.instance.lifecycleState;
+    final canOpenMenu =
+        _menus.isNotEmpty && LiquidGlassFeedback.canInteract(context);
     List<Map<String, Object?>> items(List<LiquidGlassAction> actions) => [
-      for (final action in actions)
-        {
-          'id': action.id,
-          'label': action.label,
-          'sfSymbol': action.sfSymbol,
-          'enabled': action.onPressed != null,
-        },
+      for (final action in actions) _item(action, canOpenMenu),
     ];
     return {
       'title': widget.title,
@@ -110,6 +176,49 @@ class _NativeNavigationBarState extends State<NativeNavigationBar>
     };
   }
 
+  Map<String, Object?> _item(LiquidGlassAction action, bool canOpenMenu) {
+    final menu = _menus[action.id];
+    final png = action.iconPng;
+    final bitmap = png == null ? _icons[action.icon] : Uint8List.fromList(png);
+    return {
+      'id': action.id,
+      'label': action.label,
+      'sfSymbol': action.sfSymbol,
+      if (bitmap != null) ...{
+        'png': bitmap,
+        'template': png == null,
+        'mirror': png == null && (action.icon?.matchTextDirection ?? false),
+      },
+      if (action.badge != null) 'badge': action.badge,
+      'enabled': menu == null
+          ? action.onPressed != null
+          : canOpenMenu && action.menu!.enabled && menu.payload != null,
+      if (menu != null)
+        'menu': {
+          'revision': menu.revision,
+          'items': menu.payload?.items ?? const <Map<String, Object?>>[],
+        },
+    };
+  }
+
+  bool _sameItem(Map<String, Object?> a, Map<String, Object?> b) {
+    if (a.length != b.length) return false;
+    for (final key in a.keys) {
+      if (!b.containsKey(key)) return false;
+      final next = a[key], previous = b[key];
+      if (key == 'png') {
+        if (!listEquals(next as Uint8List?, previous as Uint8List?)) {
+          return false;
+        }
+      } else if (key == 'menu') {
+        if (!mapEquals(next as Map?, previous as Map?)) return false;
+      } else if (next != previous) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   bool _sameConfiguration(Map<String, Object?> next) {
     if (_configuration.length != next.length) return false;
     for (final key in next.keys) {
@@ -120,7 +229,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar>
           return false;
         }
         for (var i = 0; i < value.length; ++i) {
-          if (!mapEquals(value[i], previous[i])) return false;
+          if (!_sameItem(value[i], previous[i])) return false;
         }
       } else if (value != previous) {
         return false;
@@ -130,6 +239,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar>
   }
 
   bool _sameInteractionConfiguration(Map<String, Object?> next) {
+    if (_menus.isNotEmpty && next['rtl'] != _configuration['rtl']) return false;
     for (final key in ['suppressed', 'interactionEnabled', 'popupOwner']) {
       if (next[key] != _configuration[key]) return false;
     }
@@ -142,7 +252,9 @@ class _NativeNavigationBarState extends State<NativeNavigationBar>
       }
       for (var i = 0; i < items.length; ++i) {
         if (items[i]['id'] != previous[i]['id'] ||
-            items[i]['enabled'] != previous[i]['enabled']) {
+            items[i]['enabled'] != previous[i]['enabled'] ||
+            (items[i]['menu'] as Map?)?['revision'] !=
+                (previous[i]['menu'] as Map?)?['revision']) {
           return false;
         }
       }
@@ -193,7 +305,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar>
     channel.setMethodCallHandler((call) async {
       if (!mounted ||
           _channel != channel ||
-          call.method != 'pressed' ||
+          (call.method != 'pressed' && call.method != 'menuSelected') ||
           !LiquidGlassFeedback.canInteract(context)) {
         return;
       }
@@ -202,8 +314,20 @@ class _NativeNavigationBarState extends State<NativeNavigationBar>
       final sequence = event['sequence'];
       if (sequence is! int || sequence <= _lastEvent) return;
       _lastEvent = sequence;
-      for (final action in [...widget.leading, ...widget.actions]) {
+      for (final action in _actions) {
         if (action.id != event['id']) continue;
+        if (call.method == 'menuSelected') {
+          final menu = _menus[action.id], model = action.menu;
+          if (menu == null ||
+              model == null ||
+              !model.enabled ||
+              event['revision'] != menu.revision) {
+            return;
+          }
+          final value = menu.payload?.values[event['itemId']];
+          if (value != null) model.onSelected(value);
+          return;
+        }
         final callback = action.onPressed;
         if (callback == null) return;
         LiquidGlassFeedback.tap(context);
@@ -251,4 +375,12 @@ class _NativeNavigationBarState extends State<NativeNavigationBar>
       );
     },
   );
+}
+
+class _NavigationMenu {
+  _NavigationMenu(this.items, this.revision);
+
+  final List<LiquidGlassMenuItem<String>> items;
+  int revision;
+  NativeMenuPayload<String>? payload;
 }

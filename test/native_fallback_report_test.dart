@@ -66,20 +66,19 @@ void main() {
           LiquidGlassNavigationBar(
             title: title,
             actions: [
-              for (final id in ['a', 'b'])
-                LiquidGlassAction(
-                  id: id,
-                  label: id,
-                  sfSymbol: 'plus',
-                  onPressed: () {},
-                ),
+              LiquidGlassAction(
+                id: 'a',
+                label: 'Options',
+                sfSymbol: 'plus',
+                onLongPress: () {},
+              ),
             ],
           ),
         ),
       );
     }
     expect(printed, hasLength(1));
-    expect(printed.single, contains('more than one trailing'));
+    expect(printed.single, contains('onLongPress'));
 
     // A different reason is reported separately, also only once.
     for (var i = 0; i < 2; i++) {
@@ -109,32 +108,36 @@ void main() {
   ) async {
     await tester.pumpWidget(
       _host(
-        LiquidGlassNavigationBar(
-          title: 'Inbox',
-          actions: [
-            LiquidGlassAction(
-              id: 'a',
-              label: 'Add',
-              icon: Icons.add,
-              onPressed: () {},
-            ),
-            LiquidGlassAction(
-              id: 'b',
-              label: 'Edit',
-              icon: Icons.edit,
-              sfSymbol: 'pencil',
-              onPressed: () {},
-              onLongPress: () {},
-            ),
-          ],
+        MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: LiquidGlassNavigationBar(
+            title: 'Inbox',
+            actions: [
+              LiquidGlassAction(
+                id: 'a',
+                label: 'Add',
+                icon: Icons.add,
+                onPressed: () {},
+              ),
+              LiquidGlassAction(
+                id: 'b',
+                label: 'Edit',
+                icon: Icons.edit,
+                sfSymbol: 'pencil',
+                onPressed: () {},
+                onLongPress: () {},
+              ),
+            ],
+          ),
         ),
       ),
     );
-    expect(printed, hasLength(3));
-    expect(printed.every((m) => m.contains('LiquidGlassNavigationBar')), true);
-    expect(printed.any((m) => m.contains('more than one trailing')), true);
-    expect(printed.any((m) => m.contains('onLongPress')), true);
-    expect(printed.any((m) => m.contains('without an sfSymbol')), true);
+    final navigation = printed
+        .where((message) => message.contains('LiquidGlassNavigationBar'))
+        .toList();
+    expect(navigation, hasLength(2));
+    expect(navigation.any((m) => m.contains('onLongPress')), true);
+    expect(navigation.any((m) => m.contains('text scale')), true);
   });
 
   testReports('fallback mode never prints', (tester) async {

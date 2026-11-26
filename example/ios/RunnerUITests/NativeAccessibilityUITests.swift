@@ -122,8 +122,7 @@ final class NativeAccessibilityUITests: XCTestCase {
 
     app.buttons["Sample color"].tap()
     _ = try waitForPalette(title: "Sample palette")
-    XCUIDevice.shared.press(.home)
-    app.activate()
+    backgroundAndReturn()
     XCTAssertTrue(palette.waitForNonExistence(timeout: 10))
     expectText("Color calls: 0")
     app.buttons["Sample color"].tap()
@@ -252,8 +251,7 @@ final class NativeAccessibilityUITests: XCTestCase {
 
     // Keep the child presented when cancellation starts. Dismissing only that
     // child must not be mistaken for completion of the owned palette's exit.
-    XCUIDevice.shared.press(.home)
-    app.activate()
+    backgroundAndReturn()
     XCTAssertTrue(app.staticTexts["Nested native cover"].waitForNonExistence(timeout: 10))
     XCTAssertTrue(palette.waitForNonExistence(timeout: 10))
     expectText("Color calls: 0")
@@ -665,6 +663,20 @@ final class NativeAccessibilityUITests: XCTestCase {
     app.buttons["back"].tap()
     let probe = app.staticTexts["Accessibility renderer: native"]
     XCTAssertTrue(probe.waitForNonExistence(timeout: 30), file: file, line: line)
+  }
+
+  private func backgroundAndReturn(file: StaticString = #filePath, line: UInt = #line) {
+    XCUIDevice.shared.press(.home)
+    let backgrounded = NSPredicate { [app] _, _ in
+      let state = app.state
+      return state == .runningBackground || state == .runningBackgroundSuspended
+    }
+    let transition = XCTNSPredicateExpectation(predicate: backgrounded, object: nil)
+    XCTAssertEqual(XCTWaiter.wait(for: [transition], timeout: 30), .completed,
+                   "The app must enter the background before reactivation", file: file, line: line)
+    app.activate()
+    XCTAssertTrue(app.wait(for: .runningForeground, timeout: 30),
+                  "The app must return to the foreground", file: file, line: line)
   }
 
   /// A button found by its label, for native buttons whose identifier is the

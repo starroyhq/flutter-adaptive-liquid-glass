@@ -27,6 +27,7 @@ SIMULATOR_FAILURES = (
     "Failed to check-in, peer may have been unloaded: mach_error=10000003",
     "Failed to get screenshot: Timed out while requesting screenshot",
     "Failed to terminate dev.starroyhq.flutterAdaptiveLiquidGlass.example:",
+    "Failed to launch dev.starroyhq.flutterAdaptiveLiquidGlass.example: Timed out attempting to launch app",
     "Native test fixture did not reach the foreground",
     "Native test fixture did not load the catalog",
     "Native test fixture did not open the accessibility probe",

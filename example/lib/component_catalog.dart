@@ -3,6 +3,7 @@ import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'catalog_popups.dart';
 import 'native_accessibility_example.dart';
+import 'native_button_glass_probe.dart';
 import 'native_controls_probe.dart';
 import 'native_layout_probe.dart';
 import 'native_rtl_probe.dart';
@@ -158,6 +159,14 @@ class _ComponentCatalogAppState extends State<ComponentCatalogApp> {
                 ),
               ),
               child: const Text('Open native RTL probe'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const NativeButtonGlassProbePage(),
+                ),
+              ),
+              child: const Text('Open glass button probe'),
             ),
           ],
           const SizedBox(height: 32),

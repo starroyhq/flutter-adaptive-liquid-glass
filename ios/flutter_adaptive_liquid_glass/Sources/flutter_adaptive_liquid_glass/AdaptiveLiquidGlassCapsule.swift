@@ -13,21 +13,18 @@ final class AdaptiveLiquidGlassCapsuleFactory: NSObject, FlutterPlatformViewFact
   }
 }
 
-/// A single glass material surrounds a row of plain, native UIKit buttons.
-/// UILabel/UIButton own title layout; there is no SwiftUI hosting/compression
-/// bridge and no individual child glass surface to turn a group into circles.
+/// A standalone UIButton supplies its own glass. Grouped buttons still share
+/// one glass backdrop, with a plain configuration on each item.
 private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   private let container: AdaptiveGlassCapsuleContainer
+  private let groupEffect: UIVisualEffectView?
   private let stack = UIStackView()
   private let channel: FlutterMethodChannel
   private var buttons: [AdaptiveGlassCapsuleButton] = []
   /// What each button shows apart from its colors, prepared once.
   private var contents: [AdaptiveGlassCapsuleContent] = []
   private let grouped: Bool
-  /// A lone icon-only button, with or without a long press. It has the look
-  /// of the SwiftUI glass button that drew such a button without a long press
-  /// before: a semibold symbol or a trimmed bitmap, constant colors in every
-  /// state, the window's appearance, and a fade instead of hiding.
+  /// Preserve the icon-only button's glyph layout and route fade.
   private let standalone: Bool
   /// Flutter's text direction, which orders the buttons and places each
   /// image beside its title, independently of the device language.
@@ -37,6 +34,8 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   /// they change.
   private var foregroundValue: NSNumber?
   private var tintValue: NSNumber?
+  private var prominent: Bool
+  private var loading: Bool
   private var iconColorValues: [NSNumber?] = []
   private var fade: AdaptiveLiquidGlassFade?
   private let suppression: AdaptiveLiquidGlassSuppression
@@ -56,26 +55,25 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     fontSize = CGFloat((arguments["fontSize"] as? NSNumber)?.doubleValue ?? 17)
     foregroundValue = arguments["foreground"] as? NSNumber
     tintValue = arguments["tint"] as? NSNumber
+    prominent = arguments["prominent"] as? Bool ?? false
+    loading = arguments["loading"] as? Bool ?? false
     self.suppression = suppression
     popupOwner = arguments["popupOwner"] as? Bool ?? false
     routeSuppressed = arguments["suppressed"] as? Bool ?? false
     interactionEnabled = arguments["interactionEnabled"] as? Bool ?? true
     interactionEpoch = arguments["epoch"] as? Int ?? 0
-    if #available(iOS 26.0, *) {
-      let glass = UIGlassEffect(style: .regular)
-      glass.isInteractive = true
-      glass.tintColor = Self.color(arguments["tint"])
-      container = AdaptiveGlassCapsuleContainer(effect: glass)
-    } else {
-      // The Dart adapter never requests this platform view before iOS 26.
-      container = AdaptiveGlassCapsuleContainer(effect: UIBlurEffect(style: .systemMaterial))
-    }
+    container = AdaptiveGlassCapsuleContainer(frame: frame)
+    groupEffect = grouped ? UIVisualEffectView(effect: Self.groupMaterial(tintValue)) : nil
     channel = FlutterMethodChannel(name: "flutter_adaptive_liquid_glass/capsule/\(identifier)", binaryMessenger: messenger)
     super.init()
-    container.frame = frame
-    container.layer.cornerRadius = 24
-    container.layer.cornerCurve = .continuous
-    container.clipsToBounds = true
+    if let groupEffect {
+      groupEffect.frame = container.bounds
+      groupEffect.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      groupEffect.layer.cornerRadius = 24
+      groupEffect.layer.cornerCurve = .continuous
+      groupEffect.clipsToBounds = true
+      container.addSubview(groupEffect)
+    }
     if standalone {
       fade = AdaptiveLiquidGlassFade(view: container, suppression: suppression,
                                      routeSuppressed: routeSuppressed, popupOwner: popupOwner)
@@ -94,7 +92,8 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     updateVisibility()
     let direction: UISemanticContentAttribute = rightToLeft ? .forceRightToLeft : .forceLeftToRight
     container.semanticContentAttribute = direction
-    container.contentView.semanticContentAttribute = direction
+    let contentView = groupEffect?.contentView ?? container
+    contentView.semanticContentAttribute = direction
     if #available(iOS 17.0, *) {
       // Buttons resolve a symbol with a right-to-left variant, such as
       // arrow.backward, in this direction too.
@@ -106,13 +105,13 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     stack.distribution = .fill
     stack.spacing = 0
     stack.translatesAutoresizingMaskIntoConstraints = false
-    container.contentView.addSubview(stack)
+    contentView.addSubview(stack)
     let inset: CGFloat = grouped ? 4 : 0
     NSLayoutConstraint.activate([
-      stack.leadingAnchor.constraint(equalTo: container.contentView.leadingAnchor, constant: inset),
-      stack.trailingAnchor.constraint(equalTo: container.contentView.trailingAnchor, constant: -inset),
-      stack.topAnchor.constraint(equalTo: container.contentView.topAnchor),
-      stack.bottomAnchor.constraint(equalTo: container.contentView.bottomAnchor),
+      stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: inset),
+      stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -inset),
+      stack.topAnchor.constraint(equalTo: contentView.topAnchor),
+      stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
     ])
 
     let foreground = Self.color(arguments["foreground"]) ?? .label
@@ -122,16 +121,6 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       let iconColorValue = item["iconColor"] as? NSNumber
       let config = makeConfiguration(content, foreground: foreground, iconColor: Self.color(iconColorValue))
       let button = AdaptiveGlassCapsuleButton(configuration: config)
-      if standalone {
-        // Highlighted and disabled states keep the configuration as it is,
-        // as the SwiftUI button style that returned its label unchanged did.
-        button.fixedConfiguration = config
-        button.configurationUpdateHandler = { button in
-          guard let button = button as? AdaptiveGlassCapsuleButton,
-                let fixed = button.fixedConfiguration else { return }
-          button.configuration = fixed
-        }
-      }
       contents.append(content)
       iconColorValues.append(iconColorValue)
       button.semanticContentAttribute = direction
@@ -269,9 +258,16 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   /// A button's configuration for [content] in the given colors.
   private func makeConfiguration(_ content: AdaptiveGlassCapsuleContent, foreground: UIColor,
                                  iconColor: UIColor?) -> UIButton.Configuration {
-    var config = UIButton.Configuration.plain()
+    var config: UIButton.Configuration
+    if !grouped, #available(iOS 26.0, *) {
+      config = prominent ? .prominentGlass() : .glass()
+      config.baseBackgroundColor = Self.color(tintValue)
+      config.showsActivityIndicator = loading
+    } else {
+      config = .plain()
+      config.background.backgroundColor = .clear
+    }
     config.baseForegroundColor = foreground
-    config.background.backgroundColor = .clear
     config.imagePadding = 8
     config.imagePlacement = .leading
     // A capsule narrower than its title ends it with an ellipsis instead of
@@ -304,29 +300,23 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       // The platform's own pop-up affordance for a button that opens a menu.
       config.indicator = .popup
     }
-    if standalone {
-      config.imageColorTransformer = UIConfigurationColorTransformer { _ in foreground }
-    }
     return config
   }
 
-  /// Applies an enabled state, emphasis and colors without a new view. The
-  /// glass is replaced only for a new tint, and a button's configuration
-  /// only for a new foreground or icon color; images are never redrawn.
+  /// Updates the mounted button and lets UIKit resolve its current state.
   private func applyUpdate(_ state: [String: Any]) {
     let tintValue = state["tint"] as? NSNumber
-    if tintValue != self.tintValue {
-      self.tintValue = tintValue
-      if #available(iOS 26.0, *) {
-        let glass = UIGlassEffect(style: .regular)
-        glass.isInteractive = true
-        glass.tintColor = Self.color(tintValue)
-        container.effect = glass
-      }
-    }
     let foregroundValue = state["foreground"] as? NSNumber
-    let foregroundChanged = foregroundValue != self.foregroundValue
+    let prominent = state["prominent"] as? Bool ?? self.prominent
+    let loading = state["loading"] as? Bool ?? self.loading
+    let tintChanged = tintValue != self.tintValue
+    let configurationChanged = foregroundValue != self.foregroundValue
+      || (!grouped && (tintChanged || prominent != self.prominent || loading != self.loading))
+    if tintChanged { groupEffect?.effect = Self.groupMaterial(tintValue) }
+    self.tintValue = tintValue
     self.foregroundValue = foregroundValue
+    self.prominent = prominent
+    self.loading = loading
     let foreground = Self.color(foregroundValue) ?? .label
     let items = state["items"] as? [[String: Any]] ?? []
     for (index, button) in buttons.enumerated() where index < items.count {
@@ -334,11 +324,10 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       // A long press is structural: its recognizer exists from creation.
       button.tapEnabled = item["tapEnabled"] as? Bool ?? button.tapEnabled
       let iconColorValue = item["iconColor"] as? NSNumber
-      guard foregroundChanged || iconColorValue != iconColorValues[index] else { continue }
+      guard configurationChanged || iconColorValue != iconColorValues[index] else { continue }
       iconColorValues[index] = iconColorValue
       let config = makeConfiguration(contents[index], foreground: foreground,
                                      iconColor: Self.color(iconColorValue))
-      if standalone { button.fixedConfiguration = config }
       button.configuration = config
     }
     updateVisibility()
@@ -373,7 +362,7 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   private func activate(_ button: AdaptiveGlassCapsuleButton, longPress: Bool) -> Bool {
     // A standalone icon fades rather than hides, so its state is checked.
     guard standalone ? !suppressed : !container.isHidden, container.window != nil,
-          interactionEnabled, applicationActive, button.isEnabled,
+          interactionEnabled, applicationActive, !loading, button.isEnabled,
           longPress ? button.longPressEnabled : button.tapEnabled else { return false }
     sequence += 1
     channel.invokeMethod(longPress ? "longPressed" : "pressed", arguments: [
@@ -401,8 +390,8 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     }
     container.accessibilityElementsHidden = hidden
     for button in buttons {
-      button.isEnabled = canInteract && (button.tapEnabled || button.longPressEnabled)
-      button.longPressRecognizer?.isEnabled = canInteract && button.longPressEnabled
+      button.isEnabled = canInteract && !loading && (button.tapEnabled || button.longPressEnabled)
+      button.longPressRecognizer?.isEnabled = canInteract && !loading && button.longPressEnabled
     }
   }
 
@@ -417,6 +406,14 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   /// The point size of an SF Symbol whose glyph is about as large as a
   /// Material icon of one point.
   static let symbolScale: CGFloat = 0.75
+
+  private static func groupMaterial(_ tint: NSNumber?) -> UIVisualEffect {
+    guard #available(iOS 26.0, *) else { return UIBlurEffect(style: .systemMaterial) }
+    let glass = UIGlassEffect(style: .regular)
+    glass.isInteractive = true
+    glass.tintColor = color(tint)
+    return glass
+  }
 
   /// Draws [image] aspect-fit and centred in a square of [side] points.
   private static func fit(_ image: UIImage, in side: CGFloat) -> UIImage {
@@ -529,7 +526,7 @@ private struct AdaptiveGlassCapsuleContent {
   let menuIndicator: Bool
 }
 
-private final class AdaptiveGlassCapsuleContainer: UIVisualEffectView {
+private final class AdaptiveGlassCapsuleContainer: UIView {
   var onWindowChanged: (() -> Void)?
   override func didMoveToWindow() {
     super.didMoveToWindow()
@@ -545,9 +542,6 @@ private final class AdaptiveGlassCapsuleButton: UIButton {
   var pressCancelled = false
   var longPressRecognizer: UILongPressGestureRecognizer?
   var onAccessibilityActivate: ((Bool) -> Bool)?
-  /// A standalone button's configuration in every state.
-  var fixedConfiguration: UIButton.Configuration?
-
   override func accessibilityActivate() -> Bool {
     onAccessibilityActivate?(!tapEnabled && longPressEnabled) ?? false
   }

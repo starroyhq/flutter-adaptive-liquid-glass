@@ -421,6 +421,40 @@ final class NativeAccessibilityUITests: XCTestCase {
     attachScreen("r2-segment-refused")
   }
 
+  func testOfficialGlassButtonOpensUIKitMenu() throws {
+    openCatalogSearchEntry("Open glass button probe")
+    let regular = app.buttons["glass-probe-regular"]
+    let prominent = app.buttons["glass-probe-prominent"]
+    let large = app.buttons["glass-probe-large"]
+    let loading = app.buttons["glass-probe-loading"]
+    expectTappable(["regular": regular, "prominent": prominent, "large text": large])
+    XCTAssertTrue(loading.waitForExistence(timeout: 10))
+    XCTAssertGreaterThan(large.frame.height, regular.frame.height)
+    tapCenter(of: loading)
+    expectText("Button presses: 0")
+    regular.press(forDuration: 0.35)
+    expectText("Button presses: 1")
+    prominent.tap()
+    expectText("Button presses: 2")
+    large.tap()
+    expectText("Button presses: 3")
+    app.buttons["glass-probe-group-cut"].tap()
+    expectText("Group choice: cut")
+    attachScreen("official-glass-buttons")
+
+    app.buttons["Attach UIKit menus"].tap()
+    expectText("UIKit menu: attached")
+    for (button, title) in [(regular, "Regular menu choice"), (prominent, "Prominent menu choice")] {
+      button.tap()
+      let action = app.descendants(matching: .any).matching(identifier: title).firstMatch
+      XCTAssertTrue(action.waitForExistence(timeout: 10))
+      attachScreen(title)
+      action.tap()
+      expectText("UIKit menu: \(title)")
+      expectText("Button presses: 3")
+    }
+  }
+
   func testPopupsKeepNativeControlsBeneathThemOutOfReach() throws {
     openCatalogSearchEntry("Open native layout probe")
     expectText("Popup result: none")

@@ -1,3 +1,9 @@
+## 0.9.0
+
+- On iOS 26+, standalone buttons use UIKit's glass and prominent glass
+  configurations. UIKit renders the pressed and disabled states and the
+  loading indicator. Text buttons grow with the app's text scale.
+
 ## 0.8.0
 
 - Add `LiquidGlassWindowGeometryScope` and `LiquidGlassWindowGeometry` for

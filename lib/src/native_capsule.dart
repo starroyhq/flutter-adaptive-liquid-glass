@@ -43,27 +43,27 @@ class NativeCapsuleItem {
   final String? longPressSemanticLabel;
 }
 
-/// One platform view owns one glass effect and all its plain UIKit buttons.
+/// One platform view owns a native glass button or a grouped glass capsule.
 ///
-/// A capsule keeps its view when an action's enabled state, or the capsule's
-/// emphasis or colors, change: they reach the live view through its `update`
-/// method, item by item in order. Adding, removing or reordering actions, or
-/// changing what an action shows, creates a new view.
+/// Enabled state, loading, emphasis, and colors update the live view through
+/// `update`. Adding, removing, or reordering actions, or changing their labels
+/// or icons, creates a new view.
 class NativeCapsule extends StatefulWidget {
   const NativeCapsule({
     super.key,
     required this.items,
     this.grouped = false,
     this.prominent = false,
+    this.loading = false,
     this.standaloneIcon = false,
-  }) : assert(!standaloneIcon || (!grouped && items.length == 1));
+  }) : assert(!standaloneIcon || (!grouped && items.length == 1)),
+       assert(!loading || (!grouped && items.length == 1));
   final List<NativeCapsuleItem> items;
-  final bool grouped, prominent;
+  final bool grouped, prominent, loading;
 
   /// A single icon-only button, with or without a long press, drawn as the
   /// standalone glass icon button: a semibold symbol, or a glyph bitmap
-  /// trimmed to the icon size, in colors that do not change when pressed or
-  /// disabled. A bitmap icon reserves its space until the bitmap is drawn.
+  /// trimmed to the icon size. A bitmap icon reserves its space until drawn.
   final bool standaloneIcon;
   @override
   State<NativeCapsule> createState() => _NativeCapsuleState();
@@ -220,6 +220,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
           _channel != channel ||
           generation != _viewGeneration ||
           signature != _measurementSignature ||
+          widget.loading ||
           !nativeCapsuleActionAllowed(context)) {
         return null;
       }
@@ -309,6 +310,8 @@ class _NativeCapsuleState extends State<NativeCapsule>
       'rtl': rtl,
       'grouped': widget.grouped,
       'standaloneIcon': widget.standaloneIcon,
+      'prominent': widget.prominent,
+      'loading': widget.loading,
       'foreground':
           (widget.prominent
                   ? glassColors.onAccent ?? colors.onPrimary
@@ -350,18 +353,22 @@ class _NativeCapsuleState extends State<NativeCapsule>
     // layout: they are left out of the signature and reach the live view in
     // place. A long press stays structural: it adds a native recognizer.
     final enabledState = [
+      widget.loading,
       for (final item in widget.items) ...[
         item.onPressed != null,
         item.onLongPress != null,
       ],
     ];
     final dynamicState = [
+      widget.prominent,
       params['foreground'],
       params['tint'],
       for (final item in widget.items) item.iconColor?.toARGB32(),
       ...enabledState,
     ];
     _latestDynamic = {
+      'prominent': params['prominent'],
+      'loading': params['loading'],
       'foreground': params['foreground'],
       'tint': params['tint'],
       'items': [
@@ -417,21 +424,24 @@ class _NativeCapsuleState extends State<NativeCapsule>
       if (_channelGeneration == _viewGeneration) _sendUpdate();
     }
     final generation = _viewGeneration;
-    final estimate = widget.items.fold<double>(
-      widget.grouped ? 8 : 0,
-      (sum, item) =>
-          sum +
-          NativeButtonLayout.measure(
-            label: item.title,
-            detail: item.detail,
-            hasIcon: item.icon != null || item.sfSymbol != null,
-            usesSfSymbol: item.sfSymbol != null,
-            iconSize: item.iconSize,
-            menuIndicator: item.menuIndicator,
-            textScaler: MediaQuery.textScalerOf(context),
-            direction: Directionality.of(context),
-          ).width,
-    );
+    var estimate = widget.grouped ? 8.0 : 0.0;
+    var height = NativeButtonLayout.height;
+    for (final item in widget.items) {
+      final layout = NativeButtonLayout.measure(
+        label: item.title,
+        detail: item.detail,
+        hasIcon: widget.loading || item.icon != null || item.sfSymbol != null,
+        usesSfSymbol: !widget.loading && item.sfSymbol != null,
+        iconSize: widget.loading ? 20 : item.iconSize,
+        menuIndicator: item.menuIndicator,
+        textScaler: MediaQuery.textScalerOf(context),
+        direction: Directionality.of(context),
+      );
+      estimate += layout.width;
+      if (!widget.grouped && layout.contentHeight > height) {
+        height = layout.contentHeight;
+      }
+    }
     final width = _measuredWidth != null && _measuredWidth! > estimate
         ? _measuredWidth!
         : estimate;
@@ -439,12 +449,12 @@ class _NativeCapsuleState extends State<NativeCapsule>
       final item = widget.items.single;
       // Reserve the button's space until its bitmap is drawn.
       if (item.sfSymbol == null && item.icon != null) {
-        return SizedBox(width: width, height: 48);
+        return SizedBox(width: width, height: height);
       }
     }
     return SizedBox(
       width: width,
-      height: 48,
+      height: height,
       child: NativeVisibility(
         child: UiKitView(
           key: ValueKey(signature),

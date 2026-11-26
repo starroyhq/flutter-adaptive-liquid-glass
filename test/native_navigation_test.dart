@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -75,15 +77,19 @@ void main() {
     int? viewId,
     int? epoch,
     int sequence = 1,
+    int? menuRevision,
+    int? itemId,
   }) async {
     final target = viewId ?? id;
     await binding.defaultBinaryMessenger.handlePlatformMessage(
       'flutter_adaptive_liquid_glass/navigation-bar/$target',
       const StandardMethodCodec().encodeMethodCall(
-        MethodCall('pressed', {
+        MethodCall(menuRevision == null ? 'pressed' : 'menuSelected', {
           'id': action,
           'epoch': epoch ?? config(target)['epoch'],
           'sequence': sequence,
+          'revision': ?menuRevision,
+          'itemId': ?itemId,
         }),
       ),
       (_) {},
@@ -136,18 +142,120 @@ void main() {
     expect(config()['subtitle'], isNull);
   });
 
+  testWidgets(
+    'ordered sides, badge updates and per-item menu events use one native bar',
+    (tester) async {
+      final png = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a42sAAAAASUVORK5CYII=',
+      );
+      final selections = <String>[];
+      Widget grouped({String? badge, String itemLabel = 'Rename'}) =>
+          MaterialApp(
+            home: LiquidGlassTheme(
+              data: const _NativeTheme(),
+              child: Scaffold(
+                appBar: LiquidGlassNavigationBar(
+                  title: 'Files',
+                  leading: [
+                    LiquidGlassAction(
+                      id: 'inbox',
+                      label: 'Inbox',
+                      iconPng: png,
+                      badge: badge,
+                      onPressed: () {},
+                    ),
+                    LiquidGlassAction(
+                      id: 'edit',
+                      label: 'Edit',
+                      menu: LiquidGlassNavigationMenu(
+                        items: [
+                          LiquidGlassMenuItem(
+                            value: 'rename',
+                            label: itemLabel,
+                            sfSymbol: 'pencil',
+                          ),
+                        ],
+                        onSelected: (value) => selections.add('edit/$value'),
+                      ),
+                    ),
+                  ],
+                  actions: [
+                    LiquidGlassAction(
+                      id: 'share',
+                      label: 'Share',
+                      menu: LiquidGlassNavigationMenu(
+                        items: const [
+                          LiquidGlassMenuItem(value: 'copy', label: 'Copy'),
+                        ],
+                        onSelected: (value) => selections.add('share/$value'),
+                      ),
+                    ),
+                    const LiquidGlassAction(id: 'sync', label: 'Sync'),
+                  ],
+                ),
+              ),
+            ),
+          );
+      Map item(String side, int index) =>
+          (config()[side] as List)[index] as Map;
+      Map menu(String side, int index) => item(side, index)['menu'] as Map;
+
+      await tester.pumpWidget(grouped(badge: '3'));
+      await tester.pumpAndSettle();
+      final view = id, originalEpoch = config()['epoch'];
+      expect((config()['leading'] as List).map((row) => row['id']), [
+        'inbox',
+        'edit',
+      ]);
+      expect((config()['actions'] as List).map((row) => row['id']), [
+        'share',
+        'sync',
+      ]);
+      expect(item('leading', 0)['badge'], '3');
+      expect(item('leading', 0)['png'], png);
+      expect(item('leading', 0)['template'], false);
+      expect((menu('leading', 1)['items'] as List).single['symbol'], 'pencil');
+      final editRevision = menu('leading', 1)['revision'] as int;
+      final shareRevision = menu('actions', 0)['revision'] as int;
+
+      await tester.pumpWidget(grouped(badge: '8'));
+      await tester.pumpAndSettle();
+      expect(item('leading', 0)['badge'], '8');
+      expect(id, view);
+      expect(config()['epoch'], originalEpoch);
+      await event('edit', menuRevision: editRevision, itemId: 0);
+      await event('edit', menuRevision: editRevision, itemId: 0);
+      await event('share', menuRevision: shareRevision, itemId: 0, sequence: 2);
+      expect(selections, ['edit/rename', 'share/copy']);
+
+      await tester.pumpWidget(grouped(itemLabel: 'Rename file'));
+      await tester.pumpAndSettle();
+      expect(creation.keys, [view]);
+      expect(item('leading', 0)['badge'], isNull);
+      expect(config()['epoch'], isNot(originalEpoch));
+      expect(menu('leading', 1)['revision'], isNot(editRevision));
+      await event('edit', menuRevision: editRevision, itemId: 0, sequence: 3);
+      await event('share', menuRevision: shareRevision, itemId: 0, sequence: 4);
+      expect(selections, ['edit/rename', 'share/copy', 'share/copy']);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
   testWidgets('native bar receives business labels separately from symbols', (
     tester,
   ) async {
     await tester.pumpWidget(host(onPressed: () {}));
     await tester.pumpAndSettle();
     expect(creation[id]!['title'], 'Components');
-    expect((creation[id]!['actions'] as List).single, {
-      'id': 'theme',
-      'label': 'Toggle theme',
-      'sfSymbol': 'circle.lefthalf.filled',
-      'enabled': true,
-    });
+    expect(
+      (creation[id]!['actions'] as List).single,
+      allOf(
+        containsPair('id', 'theme'),
+        containsPair('label', 'Toggle theme'),
+        containsPair('sfSymbol', 'circle.lefthalf.filled'),
+        containsPair('enabled', true),
+      ),
+    );
     expect((creation[id]!['leading'] as List).single, {
       'id': 'back',
       'label': 'Back',
@@ -188,12 +296,15 @@ void main() {
       expect(config()['rtl'], true);
       expect(config()['tintColor'], Colors.purple.toARGB32());
       expect(config()['epoch'], previousEpoch);
-      expect((config()['actions'] as List).single, {
-        'id': 'theme',
-        'label': 'Switch to light appearance',
-        'sfSymbol': 'circle.lefthalf.filled',
-        'enabled': true,
-      });
+      expect(
+        (config()['actions'] as List).single,
+        allOf(
+          containsPair('id', 'theme'),
+          containsPair('label', 'Switch to light appearance'),
+          containsPair('sfSymbol', 'circle.lefthalf.filled'),
+          containsPair('enabled', true),
+        ),
+      );
       // UIKit captured this event before Flutter changed the business label
       // and theme. Its action remains enabled, so delivering it late is valid.
       await event('theme', epoch: previousEpoch);

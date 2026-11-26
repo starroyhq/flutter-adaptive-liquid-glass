@@ -6,6 +6,7 @@ import 'button_group.dart';
 import 'fallback_pressable.dart';
 import 'fallback_selection_track.dart';
 import 'feedback.dart';
+import 'menu.dart';
 import 'native_fallback_report.dart';
 import 'native_navigation_bar.dart';
 import 'native_tab_bar.dart';
@@ -313,31 +314,18 @@ class LiquidGlassNavigationBar extends StatelessWidget
   Widget build(BuildContext context) {
     final glassColors = LiquidGlassTheme.of(context).colors;
     final all = [...leading, ...actions];
-    // Keep the existing native layout limits; grouped/long-press actions use
-    // the Flutter title layout with our native capsule buttons below. A
-    // disabled action stays in the native bar, which updates it in place.
+    assert(
+      all.map((action) => action.id).toSet().length == all.length,
+      'Navigation bar action IDs must be unique across both sides.',
+    );
+    // Long-press actions and large text still use the Flutter title layout.
     final nativeMode =
         LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native;
     final reasons = <(String, String)>[
-      if (leading.length > 1)
-        (
-          'it has more than one leading action',
-          'Keep at most one leading action for the native bar.',
-        ),
-      if (actions.length > 1)
-        (
-          'it has more than one trailing action',
-          'Keep at most one trailing action for the native bar.',
-        ),
       if (all.any((action) => action.onLongPress != null))
         (
           'an action has onLongPress',
           'Remove onLongPress from the bar actions for the native bar.',
-        ),
-      if (all.any((action) => action.icon != null && action.sfSymbol == null))
-        (
-          'an action has an icon without an sfSymbol',
-          'Give every icon action an sfSymbol for the native bar.',
         ),
       if (MediaQuery.textScalerOf(context).scale(17) > 24)
         (
@@ -398,69 +386,213 @@ class LiquidGlassNavigationBar extends StatelessWidget
         longPressSemanticLabel: action.longPressSemanticLabel,
       ),
     );
+    Widget actionTray(List<LiquidGlassAction> items) {
+      if (items.isEmpty) return const SizedBox.shrink();
+      if (items.any(
+        (action) =>
+            action.menu != null ||
+            action.badge != null ||
+            action.iconPng != null,
+      )) {
+        return LiquidGlassSurface(
+          radius: 24,
+          style: LiquidGlassSurfaceStyle.control,
+          padding: EdgeInsets.symmetric(horizontal: items.length > 1 ? 4 : 0),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final item in items)
+                _NavigationAction(key: ValueKey(item.id), action: item),
+            ],
+          ),
+        );
+      }
+      return items.length > 1
+          ? LiquidGlassButtonGroup(actions: barGroup(items))
+          : actionButton(items.single);
+    }
+
     return SafeArea(
       bottom: false,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            if (leading.length > 1)
-              LiquidGlassButtonGroup(actions: barGroup(leading))
-            else
-              ...leading.map(actionButton),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: subtitle == null
-                    ? Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: glassColors.foreground,
-                        ),
-                      )
-                    // Large text scales the two lines down rather than
-                    // overflowing the bar's fixed height.
-                    : FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: AlignmentDirectional.centerStart,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              title,
-                              maxLines: 1,
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: glassColors.foreground,
-                                  ),
-                            ),
-                            Text(
-                              subtitle!,
-                              maxLines: 1,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color:
-                                        (glassColors.foreground ??
-                                                Theme.of(
-                                                  context,
-                                                ).colorScheme.onSurface)
-                                            .withValues(alpha: .6),
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Leave room for the title. Inline groups keep their own width
+            // when they fit and scroll independently on crowded bars.
+            final available = (constraints.maxWidth - 48).clamp(
+              0.0,
+              double.infinity,
+            );
+            final sideWidth = leading.isNotEmpty && actions.isNotEmpty
+                ? available / 2
+                : available.toDouble();
+            Widget tray(List<LiquidGlassAction> items) => items.isEmpty
+                ? const SizedBox.shrink()
+                : ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: sideWidth),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      primary: false,
+                      child: actionTray(items),
+                    ),
+                  );
+            return Row(
+              children: [
+                tray(leading),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: _fallbackTitle(context, glassColors.foreground),
+                  ),
+                ),
+                tray(actions),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _fallbackTitle(BuildContext context, Color? foreground) {
+    final theme = Theme.of(context);
+    if (subtitle == null) {
+      return Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.titleLarge?.copyWith(color: foreground),
+      );
+    }
+    // Large text scales the two lines down to fit the bar's fixed height.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: AlignmentDirectional.centerStart,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            maxLines: 1,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: foreground,
+            ),
+          ),
+          Text(
+            subtitle!,
+            maxLines: 1,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: (foreground ?? theme.colorScheme.onSurface).withValues(
+                alpha: .6,
               ),
             ),
-            if (actions.length > 1)
-              LiquidGlassButtonGroup(actions: barGroup(actions))
-            else
-              ...actions.map(actionButton),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A plain Flutter action inside the navigation tray's shared surface.
+class _NavigationAction extends StatelessWidget {
+  const _NavigationAction({super.key, required this.action});
+
+  final LiquidGlassAction action;
+
+  @override
+  Widget build(BuildContext context) {
+    final menu = action.menu;
+    if (menu == null) return _button(context, action.onPressed);
+    return LiquidGlassMenuButton<String>(
+      id: action.id,
+      semanticLabel: action.label,
+      items: menu.items,
+      enabled: menu.enabled,
+      onSelected: menu.onSelected,
+      builder: _button,
+    );
+  }
+
+  Widget _button(BuildContext context, VoidCallback? onTap) {
+    final foreground =
+        LiquidGlassTheme.of(context).colors.foreground ??
+        Theme.of(context).colorScheme.onSurface;
+    final label = FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(action.label, style: TextStyle(color: foreground)),
+    );
+    final icon = action.icon;
+    final png = action.iconPng;
+    final glyph = icon == null
+        ? label
+        : Icon(icon, size: 22, color: foreground);
+    Widget content = png == null
+        ? glyph
+        : Image.memory(
+            png,
+            width: 22,
+            height: 22,
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => glyph,
+          );
+    final badge = action.badge;
+    if (badge != null) {
+      content = Badge(
+        label: badge.isEmpty ? null : Text(badge),
+        child: content,
+      );
+    }
+    final onLongPress = action.onLongPress;
+    final enabled = onTap != null || onLongPress != null;
+    return Tooltip(
+      message: action.label,
+      triggerMode: onLongPress == null ? null : TooltipTriggerMode.manual,
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        label: action.label,
+        value: badge == null || badge.isEmpty ? null : badge,
+        onTap: onTap == null
+            ? null
+            : () {
+                if (!LiquidGlassFeedback.canInteract(context)) return;
+                LiquidGlassFeedback.tap(context);
+                onTap();
+              },
+        onLongPress: onLongPress == null
+            ? null
+            : () {
+                if (!LiquidGlassFeedback.canInteract(context)) return;
+                LiquidGlassFeedback.longPress(context);
+                onLongPress();
+              },
+        onLongPressHint: action.longPressSemanticLabel,
+        excludeSemantics: true,
+        child: Material(
+          color: Colors.transparent,
+          child: FallbackPressable(
+            borderRadius: BorderRadius.circular(24),
+            onTap: onTap,
+            onLongPress: onLongPress,
+            longPressSemanticLabel: action.longPressSemanticLabel,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              child: Opacity(
+                opacity: enabled ? 1 : .48,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  child: Center(widthFactor: 1, child: content),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );

@@ -120,7 +120,18 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       let content = makeContent(item)
       let iconColorValue = item["iconColor"] as? NSNumber
       let config = makeConfiguration(content, foreground: foreground, iconColor: Self.color(iconColorValue))
-      let button = AdaptiveGlassCapsuleButton(configuration: config)
+      let button: AdaptiveGlassCapsuleButton
+      if !grouped, arguments["menuEnabled"] is Bool {
+        let menuButton = AdaptiveGlassMenuButton(configuration: config)
+        menuButton.onMenuResult = { [weak self, weak menuButton] revision, itemID in
+          guard let self, let menuButton else { return }
+          self.sendMenuResult(menuButton, revision: revision, itemID: itemID)
+        }
+        menuButton.applyMenu(arguments)
+        button = menuButton
+      } else {
+        button = AdaptiveGlassCapsuleButton(configuration: config)
+      }
       contents.append(content)
       iconColorValues.append(iconColorValue)
       button.semanticContentAttribute = direction
@@ -321,6 +332,7 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     let items = state["items"] as? [[String: Any]] ?? []
     for (index, button) in buttons.enumerated() where index < items.count {
       let item = items[index]
+      (button as? AdaptiveGlassMenuButton)?.applyMenu(state)
       // A long press is structural: its recognizer exists from creation.
       button.tapEnabled = item["tapEnabled"] as? Bool ?? button.tapEnabled
       let iconColorValue = item["iconColor"] as? NSNumber
@@ -371,8 +383,20 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     return true
   }
 
+  private func sendMenuResult(_ button: AdaptiveGlassMenuButton, revision: Int, itemID: Int?) {
+    guard !suppressed, container.window != nil, interactionEnabled, applicationActive,
+          button.isEnabled, button.menuRevision == revision else { return }
+    sequence += 1
+    var arguments: [String: Any] = [
+      "id": button.actionId, "epoch": interactionEpoch, "sequence": sequence, "revision": revision,
+    ]
+    if let itemID { arguments["itemId"] = itemID }
+    channel.invokeMethod(itemID == nil ? "menuCanceled" : "menuSelected", arguments: arguments)
+  }
+
   private func cancelInteractions() {
     for button in buttons {
+      (button as? AdaptiveGlassMenuButton)?.invalidateMenu()
       button.pressCancelled = true
       button.cancelTracking(with: nil)
       button.longPressRecognizer?.isEnabled = false
@@ -390,7 +414,9 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     }
     container.accessibilityElementsHidden = hidden
     for button in buttons {
-      button.isEnabled = canInteract && !loading && (button.tapEnabled || button.longPressEnabled)
+      let enabled = (button as? AdaptiveGlassMenuButton)?.canOpenMenu
+        ?? (button.tapEnabled || button.longPressEnabled)
+      button.isEnabled = canInteract && !loading && enabled
       button.longPressRecognizer?.isEnabled = canInteract && !loading && button.longPressEnabled
     }
   }
@@ -534,7 +560,7 @@ private final class AdaptiveGlassCapsuleContainer: UIView {
   }
 }
 
-private final class AdaptiveGlassCapsuleButton: UIButton {
+private class AdaptiveGlassCapsuleButton: UIButton {
   var actionId = ""
   var tapEnabled = false
   var longPressEnabled = false
@@ -544,6 +570,93 @@ private final class AdaptiveGlassCapsuleButton: UIButton {
   var onAccessibilityActivate: ((Bool) -> Bool)?
   override func accessibilityActivate() -> Bool {
     onAccessibilityActivate?(!tapEnabled && longPressEnabled) ?? false
+  }
+
+  func activateSystemAccessibility() -> Bool {
+    super.accessibilityActivate()
+  }
+}
+
+private final class AdaptiveGlassMenuButton: AdaptiveGlassCapsuleButton {
+  private final class Presentation {
+    let configuration: UIContextMenuConfiguration
+    let revision: Int
+    var selection: Int?
+
+    init(configuration: UIContextMenuConfiguration, revision: Int) {
+      self.configuration = configuration
+      self.revision = revision
+    }
+  }
+
+  private var presentation: Presentation?
+  private var menuEnabled = false
+  private(set) var menuRevision: Int?
+  var onMenuResult: ((Int, Int?) -> Void)?
+  var canOpenMenu: Bool { menuEnabled && menu != nil }
+
+  func applyMenu(_ state: [String: Any]) {
+    let enabled = state["menuEnabled"] as? Bool ?? menuEnabled
+    let model = state["menu"] as? [String: Any]
+    let revision = model?["revision"] as? Int
+    if !enabled || revision != menuRevision { invalidateMenu() }
+    menuEnabled = enabled
+    guard revision != menuRevision || menu == nil else { return }
+    menuRevision = revision
+    guard let revision, let items = model?["items"] as? [[String: Any]], !items.isEmpty else {
+      menu = nil
+      return
+    }
+    menu = AdaptiveLiquidGlassMenu.make(items: items) { [weak self] itemID in
+      guard let current = self?.presentation, current.revision == revision,
+            current.selection == nil else { return }
+      current.selection = itemID
+    }
+    showsMenuAsPrimaryAction = true
+    preferredMenuElementOrder = .fixed
+  }
+
+  func invalidateMenu() {
+    guard presentation != nil else { return }
+    presentation = nil
+    contextMenuInteraction?.dismissMenu()
+  }
+
+  override func accessibilityActivate() -> Bool {
+    // Let the UIButton handle menu keyboard and accessibility activation.
+    guard isEnabled, canOpenMenu else { return false }
+    return activateSystemAccessibility()
+  }
+
+  override func contextMenuInteraction(
+    _ interaction: UIContextMenuInteraction,
+    willDisplayMenuFor configuration: UIContextMenuConfiguration,
+    animator: (any UIContextMenuInteractionAnimating)?
+  ) {
+    super.contextMenuInteraction(interaction, willDisplayMenuFor: configuration, animator: animator)
+    guard isEnabled, canOpenMenu, let revision = menuRevision else { return }
+    presentation = Presentation(configuration: configuration, revision: revision)
+  }
+
+  override func contextMenuInteraction(
+    _ interaction: UIContextMenuInteraction,
+    willEndFor configuration: UIContextMenuConfiguration,
+    animator: (any UIContextMenuInteractionAnimating)?
+  ) {
+    super.contextMenuInteraction(interaction, willEndFor: configuration, animator: animator)
+    guard let current = presentation, current.configuration === configuration else { return }
+    // UIKit can begin closing before running the UIAction handler. Wait for
+    // the dismissal animation before deciding whether it was cancelled.
+    let finish = { [weak self] in
+      guard let self, self.presentation === current else { return }
+      self.presentation = nil
+      self.onMenuResult?(current.revision, current.selection)
+    }
+    if let animator {
+      animator.addCompletion(finish)
+    } else {
+      DispatchQueue.main.async(execute: finish)
+    }
   }
 }
 

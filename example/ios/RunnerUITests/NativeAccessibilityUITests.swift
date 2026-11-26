@@ -457,6 +457,126 @@ final class NativeAccessibilityUITests: XCTestCase {
     }
   }
 
+  func testDefaultGlassMenuSelectionAndCancellation() throws {
+    openCatalogSearchEntry("Open native menu probe")
+    let trigger = app.buttons["native-menu-probe"]
+    XCTAssertTrue(waitUntilHittable(trigger))
+    let rename = app.buttons["Rename"]
+    let archive = app.buttons["Archive folder"]
+    let outsideMenu = app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.75))
+
+    trigger.tap()
+    XCTAssertTrue(waitUntilHittable(rename))
+    XCTAssertTrue(app.buttons["Favorite"].exists)
+    let disabled = app.buttons["Delete"]
+    XCTAssertTrue(disabled.exists)
+    XCTAssertFalse(disabled.isEnabled)
+    attachScreen("default-glass-menu")
+    outsideMenu.tap()
+    XCTAssertTrue(rename.waitForNonExistence(timeout: 10))
+    expectText("Menu cancellations: 1")
+    expectText("Menu selections: 0")
+
+    trigger.tap()
+    XCTAssertTrue(waitUntilHittable(rename))
+    rename.tap()
+    expectText("Last selection: rename")
+    expectText("Menu selections: 1")
+    expectText("Menu cancellations: 1")
+
+    trigger.tap()
+    let submenu = app.buttons["Move to"]
+    XCTAssertTrue(waitUntilHittable(submenu))
+    submenu.tap()
+    XCTAssertTrue(waitUntilHittable(archive))
+    attachScreen("default-glass-submenu")
+    archive.tap()
+    expectText("Last selection: archive")
+    expectText("Menu selections: 2")
+    expectText("Menu cancellations: 1")
+  }
+
+  func testDefaultGlassMenuPressDrag() throws {
+    openCatalogSearchEntry("Open native menu probe")
+    let trigger = app.buttons["native-menu-probe"]
+    XCTAssertTrue(waitUntilHittable(trigger))
+
+    // Read the system's placement before synthesizing the continuous gesture.
+    trigger.tap()
+    let favorite = app.buttons["Favorite"]
+    XCTAssertTrue(waitUntilHittable(favorite))
+    let destination = app.coordinate(withNormalizedOffset: .zero).withOffset(
+      CGVector(dx: favorite.frame.midX - app.frame.minX, dy: favorite.frame.midY - app.frame.minY))
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.75)).tap()
+    expectText("Menu cancellations: 1")
+    XCTAssertTrue(waitUntilHittable(trigger))
+
+    trigger.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+      .press(forDuration: 0.7, thenDragTo: destination, withVelocity: .slow, thenHoldForDuration: 0.25)
+    expectText("Last selection: favorite")
+    expectText("Menu selections: 1")
+    expectText("Menu cancellations: 1")
+  }
+
+  func testNativeNavigationGroupsMenusAndBadges() throws {
+    openCatalogSearchEntry("Open native navigation probe")
+    let back = app.buttons["nav-probe-back"]
+    let edit = app.buttons["nav-probe-edit"]
+    let display = app.buttons["nav-probe-display"]
+    let bookmark = app.buttons["nav-probe-bookmark"]
+    let actions = ["back": back, "edit": edit, "display": display, "bookmark": bookmark]
+    expectTappable(actions)
+    attachScreen("native-navigation-ltr-badge-3")
+    attachFrames("native-navigation-ltr-item-frames", actions)
+    XCTAssertLessThan(back.frame.midX, edit.frame.midX)
+    XCTAssertLessThan(edit.frame.midX, display.frame.midX)
+    XCTAssertLessThan(display.frame.midX, bookmark.frame.midX)
+    edit.tap()
+    expectText("Edits: 1")
+
+    display.tap()
+    let grid = app.buttons["Grid layout"]
+    XCTAssertTrue(waitUntilHittable(grid))
+    XCTAssertFalse(app.buttons["Move bookmark"].exists)
+    attachScreen("native-navigation-display-menu")
+    grid.tap()
+    expectText("Layout: grid")
+    expectText("Bookmark: none")
+
+    bookmark.tap()
+    let move = app.buttons["Move bookmark"]
+    XCTAssertTrue(waitUntilHittable(move))
+    XCTAssertFalse(app.buttons["Grid layout"].exists)
+    let remove = app.buttons["Remove bookmark"]
+    XCTAssertTrue(remove.exists)
+    XCTAssertFalse(remove.isEnabled)
+    move.tap()
+    let archive = app.buttons["Archive bookmark"]
+    XCTAssertTrue(waitUntilHittable(archive))
+    attachScreen("native-navigation-bookmark-submenu")
+    archive.tap()
+    expectText("Bookmark: archive")
+    expectText("Layout: grid")
+
+    let badgeToggle = app.buttons["Cycle badge"]
+    badgeToggle.tap()
+    expectText("Badge: 8")
+    XCTAssertTrue(waitUntilHittable(bookmark))
+    attachScreen("native-navigation-ltr-badge-8")
+    badgeToggle.tap()
+    expectText("Badge: none")
+    XCTAssertTrue(waitUntilHittable(bookmark))
+    attachScreen("native-navigation-ltr-badge-cleared")
+
+    app.buttons["Switch direction"].tap()
+    expectTappable(actions)
+    attachScreen("native-navigation-rtl")
+    attachFrames("native-navigation-rtl-item-frames", actions)
+    XCTAssertGreaterThan(back.frame.midX, edit.frame.midX)
+    XCTAssertGreaterThan(edit.frame.midX, display.frame.midX)
+    XCTAssertGreaterThan(display.frame.midX, bookmark.frame.midX)
+  }
+
   func testPopupsKeepNativeControlsBeneathThemOutOfReach() throws {
     openCatalogSearchEntry("Open native layout probe")
     expectText("Popup result: none")

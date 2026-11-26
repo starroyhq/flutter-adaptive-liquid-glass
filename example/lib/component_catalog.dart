@@ -6,6 +6,8 @@ import 'native_accessibility_example.dart';
 import 'native_button_glass_probe.dart';
 import 'native_controls_probe.dart';
 import 'native_layout_probe.dart';
+import 'native_menu_probe.dart';
+import 'native_navigation_probe.dart';
 import 'native_rtl_probe.dart';
 
 /// Independent synthetic data only. No account, network or application services.
@@ -167,6 +169,22 @@ class _ComponentCatalogAppState extends State<ComponentCatalogApp> {
                 ),
               ),
               child: const Text('Open glass button probe'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const NativeMenuProbePage(),
+                ),
+              ),
+              child: const Text('Open native menu probe'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const NativeNavigationProbePage(),
+                ),
+              ),
+              child: const Text('Open native navigation probe'),
             ),
           ],
           const SizedBox(height: 32),

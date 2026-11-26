@@ -88,6 +88,8 @@ void main() {
     int? viewId,
     int? eventEpoch,
     int sequence = 1,
+    int? menuRevision,
+    int? itemId,
   }) async {
     final target = viewId ?? id;
     await binding.defaultBinaryMessenger.handlePlatformMessage(
@@ -97,6 +99,8 @@ void main() {
           'id': action,
           'epoch': eventEpoch ?? epoch(target),
           'sequence': sequence,
+          'revision': ?menuRevision,
+          'itemId': ?itemId,
         }),
       ),
       (_) {},
@@ -108,6 +112,114 @@ void main() {
       body: Center(child: NativeCapsule(grouped: true, items: items)),
     ),
   );
+
+  testWidgets('native menu routes only current results to its own trigger', (
+    tester,
+  ) async {
+    final selected = <int>[];
+    var canceled = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeCapsule(
+            items: const [NativeCapsuleItem(id: 'trigger', label: 'More')],
+            menu: NativeCapsuleMenu(
+              revision: 2,
+              items: const [
+                {'id': 4, 'label': 'Rename'},
+              ],
+              enabled: true,
+              onSelected: selected.add,
+              onCanceled: () => canceled++,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(params[id]!['menuEnabled'], isTrue);
+    expect(params[id]!['menu'], {
+      'revision': 2,
+      'items': [
+        {'id': 4, 'label': 'Rename'},
+      ],
+    });
+    final trigger = tester.widget<UiKitView>(find.byType(UiKitView));
+    expect(trigger.gestureRecognizers!.single.type, EagerGestureRecognizer);
+
+    await event('menuSelected', 'other', menuRevision: 2, itemId: 4);
+    await event('menuSelected', 'trigger', menuRevision: 1, itemId: 4);
+    await event('menuSelected', 'trigger', menuRevision: 2);
+    await event('menuSelected', 'trigger', menuRevision: 2, itemId: 4);
+    await event('menuCanceled', 'trigger', menuRevision: 2); // Duplicate.
+    await event('menuCanceled', 'trigger', menuRevision: 2, sequence: 2);
+    expect(selected, [4]);
+    expect(canceled, 1);
+  });
+
+  testWidgets('menu updates preserve the view and invalidate a stale menu', (
+    tester,
+  ) async {
+    final selected = <int>[];
+    var canceled = 0;
+    Widget trigger(int revision, {bool enabled = true}) => MaterialApp(
+      home: Scaffold(
+        body: NativeCapsule(
+          items: const [NativeCapsuleItem(id: 'trigger', label: 'More')],
+          menu: NativeCapsuleMenu(
+            revision: revision,
+            items: [
+              {'id': revision, 'label': 'Action $revision'},
+            ],
+            enabled: enabled,
+            onSelected: selected.add,
+            onCanceled: () => canceled++,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(trigger(1));
+    await tester.pumpAndSettle();
+    final view = id, initialEpoch = epoch(id);
+    // A freshly constructed widget with unchanged item data keeps the menu.
+    await tester.pumpWidget(trigger(1));
+    await tester.pumpAndSettle();
+    expect(updates(view), isEmpty);
+
+    await tester.pumpWidget(trigger(2));
+    await tester.pumpAndSettle();
+    expect(params.keys, [view]);
+    expect(updates(view).single['menu'], {
+      'revision': 2,
+      'items': [
+        {'id': 2, 'label': 'Action 2'},
+      ],
+    });
+    expect(epoch(view), greaterThan(initialEpoch));
+    await event(
+      'menuSelected',
+      'trigger',
+      menuRevision: 1,
+      itemId: 1,
+      eventEpoch: initialEpoch,
+    );
+    await event('menuSelected', 'trigger', menuRevision: 2, itemId: 2);
+    expect(selected, [2]);
+
+    final enabledEpoch = epoch(view);
+    await tester.pumpWidget(trigger(2, enabled: false));
+    await tester.pumpAndSettle();
+    expect(params.keys, [view]);
+    expect(updates(view).last['menuEnabled'], isFalse);
+    expect(epoch(view), greaterThan(enabledEpoch));
+    expect(
+      tester.widget<UiKitView>(find.byType(UiKitView)).gestureRecognizers,
+      isEmpty,
+    );
+    await event('menuCanceled', 'trigger', menuRevision: 2, sequence: 2);
+    expect(canceled, 0);
+  });
 
   testWidgets(
     'long-only native action is enabled with one forwarding recognizer',

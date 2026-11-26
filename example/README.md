@@ -2,10 +2,10 @@
 
 Standalone iOS/Android showcase for `flutter_adaptive_liquid_glass`. Its dependency
 uses `path: ../`, resolving to the surrounding package checkout. This example
-demonstrates the **0.8.0** component catalog. Applications can use the hosted
-`flutter_adaptive_liquid_glass: ^0.8.0` dependency. The example keeps its local
-path so it tests the same source checkout. See the
-[upgrade notes](../README.md#upgrading-from-07x) and
+demonstrates the **0.9.0** component catalog. After release, applications can
+use the hosted `flutter_adaptive_liquid_glass: ^0.9.0` dependency. The example
+keeps its local path so it tests the same source checkout. See the
+[upgrade notes](../README.md#upgrading-from-08x) and
 [window geometry guide](../README.md#window-geometry).
 
 Development and the pinned CI jobs use Flutter 3.41.9 / Dart 3.11.5; CI also
@@ -173,6 +173,19 @@ of color, inspect rapid shared-capsule retargeting, then test reduced motion and
 reduced transparency separately. Enter Chinese, Japanese and emoji into the
 composer and confirm it rises above the keyboard. Tabs hide while editing and
 return after keyboard dismissal.
+
+## Native glass button probe
+
+```sh
+flutter run -d <device-id> --dart-define=GLASS_NATIVE_BUTTON_PROBE=true
+```
+
+The catalog's Search page also opens this probe. Tap **Regular** and the
+prominent star to see the UIKit press response. Tap **Attach UIKit menus** to
+give these two live package buttons UIKit menus, then open and select from
+each menu. The selected item updates the menu status. The **Loading** button
+shows UIKit's spinner, **Large text** uses a 2× text scale, and **Cut** and
+**Paste** show the current shared group capsule.
 
 ## Native controls probe
 

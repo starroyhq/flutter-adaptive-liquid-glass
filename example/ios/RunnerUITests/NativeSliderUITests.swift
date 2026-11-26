@@ -63,10 +63,10 @@ final class NativeSliderUITests: XCTestCase {
       XCTContext.runActivity(named: "Slow drag \(index + 1): \(previous.value) to \(destination)") { _ in
         let start = slider.coordinate(withNormalizedOffset: CGVector(dx: previous.value, dy: 0.5))
         let end = slider.coordinate(withNormalizedOffset: CGVector(dx: destination, dy: 0.5))
-        // Give the simulator time to deliver each move and settle at the
-        // target while the same touch is still active.
-        start.press(forDuration: 0.2, thenDragTo: end,
-                    withVelocity: XCUIGestureVelocity(rawValue: 120), thenHoldForDuration: 1.5)
+        // Give Flutter time to forward the initial thumb press to UIKit
+        // before the drag crosses touch slop, and hold before releasing.
+        start.press(forDuration: 0.8, thenDragTo: end,
+                    withVelocity: .slow, thenHoldForDuration: 1.25)
       }
       let screenshot = XCTAttachment(screenshot: app.screenshot())
       screenshot.name = "Slider after drag \(index + 1)"

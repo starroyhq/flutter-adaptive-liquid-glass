@@ -128,6 +128,15 @@ class _NativeLayoutProbePageState extends State<NativeLayoutProbePage> {
           children: [
             LiquidGlassMenuButton<String>(
               label: 'Menu',
+              // This probe exercises a Flutter popup over native views.
+              builder: (context, open) => LiquidGlassButton(
+                label: 'Menu',
+                icon: Icons.more_horiz,
+                sfSymbol: 'ellipsis',
+                semanticLabel: 'Menu',
+                onPressed: open,
+                onLongPress: open,
+              ),
               items: const [
                 LiquidGlassMenuItem(value: 'first', label: 'First choice'),
                 LiquidGlassMenuItem(value: 'second', label: 'Second choice'),

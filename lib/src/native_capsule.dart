@@ -43,6 +43,25 @@ class NativeCapsuleItem {
   final String? longPressSemanticLabel;
 }
 
+/// The menu data for the single button owned by a native capsule.
+@immutable
+class NativeCapsuleMenu {
+  const NativeCapsuleMenu({
+    required this.revision,
+    required this.items,
+    required this.enabled,
+    required this.onSelected,
+    required this.onCanceled,
+  });
+
+  /// Changes whenever the native item data is replaced.
+  final int revision;
+  final List<Map<String, Object?>> items;
+  final bool enabled;
+  final ValueChanged<int> onSelected;
+  final VoidCallback onCanceled;
+}
+
 /// One platform view owns a native glass button or a grouped glass capsule.
 ///
 /// Enabled state, loading, emphasis, and colors update the live view through
@@ -56,10 +75,13 @@ class NativeCapsule extends StatefulWidget {
     this.prominent = false,
     this.loading = false,
     this.standaloneIcon = false,
+    this.menu,
   }) : assert(!standaloneIcon || (!grouped && items.length == 1)),
-       assert(!loading || (!grouped && items.length == 1));
+       assert(!loading || (!grouped && items.length == 1)),
+       assert(menu == null || (!grouped && items.length == 1 && !loading));
   final List<NativeCapsuleItem> items;
   final bool grouped, prominent, loading;
+  final NativeCapsuleMenu? menu;
 
   /// A single icon-only button, with or without a long press, drawn as the
   /// standalone glass icon button: a semibold symbol, or a glyph bitmap
@@ -120,7 +142,8 @@ class _NativeCapsuleState extends State<NativeCapsule>
     final state = {
       'suppressed': _covered,
       'interactionEnabled':
-          lifecycle == null || lifecycle == AppLifecycleState.resumed,
+          (lifecycle == null || lifecycle == AppLifecycleState.resumed) &&
+          (widget.menu == null || nativeCapsuleActionAllowed(context)),
     };
     final changed = !mapEquals(_interactionState, state);
     if (changed) {
@@ -224,13 +247,30 @@ class _NativeCapsuleState extends State<NativeCapsule>
           !nativeCapsuleActionAllowed(context)) {
         return null;
       }
-      if (call.method != 'pressed' && call.method != 'longPressed') return null;
       final arguments = call.arguments;
       if (arguments is! Map || arguments['epoch'] != _interactionEpoch) {
         return null;
       }
       final sequence = arguments['sequence'];
       if (sequence is! int || sequence <= _lastEvent) return null;
+      final menu = widget.menu;
+      if (menu != null) {
+        if (!menu.enabled ||
+            arguments['id'] != widget.items.single.id ||
+            arguments['revision'] != menu.revision) {
+          return null;
+        }
+        final itemId = arguments['itemId'];
+        if (call.method == 'menuSelected' && itemId is int) {
+          _lastEvent = sequence;
+          menu.onSelected(itemId);
+        } else if (call.method == 'menuCanceled') {
+          _lastEvent = sequence;
+          menu.onCanceled();
+        }
+        return null;
+      }
+      if (call.method != 'pressed' && call.method != 'longPressed') return null;
       _lastEvent = sequence;
       for (final item in widget.items) {
         if (item.id != arguments['id']) continue;
@@ -305,6 +345,13 @@ class _NativeCapsuleState extends State<NativeCapsule>
     // UIKit lays out the actions, and each icon beside its title, in this
     // direction rather than the device language's.
     final rtl = Directionality.of(context) == TextDirection.rtl;
+    final menu = widget.menu;
+    final menuState = {
+      if (menu != null) ...{
+        'menu': {'revision': menu.revision, 'items': menu.items},
+        'menuEnabled': menu.enabled,
+      },
+    };
     final params = <String, Object?>{
       'dark': theme.brightness == Brightness.dark,
       'rtl': rtl,
@@ -322,6 +369,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
           : glassColors.surfaceTint?.toARGB32(),
       'fontSize': fontSize,
       ..._interactionState!,
+      ...menuState,
       'epoch': _interactionEpoch,
       'popupOwner': _routes().any((route) => route is PopupRoute),
       'items': [
@@ -354,6 +402,8 @@ class _NativeCapsuleState extends State<NativeCapsule>
     // place. A long press stays structural: it adds a native recognizer.
     final enabledState = [
       widget.loading,
+      menu?.revision,
+      menu?.enabled,
       for (final item in widget.items) ...[
         item.onPressed != null,
         item.onLongPress != null,
@@ -371,6 +421,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
       'loading': params['loading'],
       'foreground': params['foreground'],
       'tint': params['tint'],
+      ...menuState,
       'items': [
         for (final item in widget.items)
           {
@@ -387,6 +438,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
       fontSize,
       widget.grouped,
       widget.standaloneIcon,
+      menu != null,
       Object.hashAll(
         widget.items.map(
           (item) => Object.hash(
@@ -463,11 +515,17 @@ class _NativeCapsuleState extends State<NativeCapsule>
           creationParamsCodec: const StandardMessageCodec(),
           onPlatformViewCreated: (id) => _created(id, signature, generation),
           gestureRecognizers: {
-            Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
-            if (widget.items.any((item) => item.onLongPress != null))
-              Factory<LongPressGestureRecognizer>(
-                () => LongPressGestureRecognizer(),
-              ),
+            if (menu != null) ...[
+              // Give UIKit the initial touch for its press-and-drag gesture.
+              if (menu.enabled)
+                Factory<EagerGestureRecognizer>(EagerGestureRecognizer.new),
+            ] else ...[
+              Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
+              if (widget.items.any((item) => item.onLongPress != null))
+                Factory<LongPressGestureRecognizer>(
+                  () => LongPressGestureRecognizer(),
+                ),
+            ],
           },
         ),
       ),

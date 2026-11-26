@@ -1,11 +1,121 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_adaptive_liquid_glass/src/menu.dart';
 import 'package:flutter_adaptive_liquid_glass/src/controls.dart';
+import 'package:flutter_adaptive_liquid_glass/src/native_capsule.dart';
 import 'package:flutter_adaptive_liquid_glass/src/theme.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  final png = base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a42sAAAAASUVORK5CYII=',
+  );
+
+  testWidgets(
+    'default native menu shares typed tree data and reuses equivalent snapshots',
+    (tester) async {
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final methods = <MethodChannel>[];
+      messenger.setMockMethodCallHandler(SystemChannels.platform_views, (
+        call,
+      ) async {
+        if (call.method == 'create') {
+          final arguments = call.arguments as Map;
+          final channel = MethodChannel(
+            'flutter_adaptive_liquid_glass/capsule/${arguments['id']}',
+          );
+          methods.add(channel);
+          messenger.setMockMethodCallHandler(channel, (call) async => null);
+        }
+        return null;
+      });
+      addTearDown(() {
+        messenger.setMockMethodCallHandler(SystemChannels.platform_views, null);
+        for (final channel in methods) {
+          messenger.setMockMethodCallHandler(channel, null);
+        }
+      });
+
+      final selections = <_Action>[];
+      Widget menu({bool enabled = true}) => LiquidGlassMenuButton<_Action>(
+        label: 'Options',
+        onSelected: selections.add,
+        items: [
+          LiquidGlassMenuItem(
+            value: _Action.group,
+            label: 'Group',
+            sfSymbol: 'folder',
+            children: [
+              LiquidGlassMenuItem(
+                value: _Action.rename,
+                label: 'Rename',
+                iconPng: png,
+                selected: true,
+                enabled: enabled,
+              ),
+            ],
+          ),
+        ],
+      );
+      NativeCapsuleMenu data() =>
+          tester.widget<NativeCapsule>(find.byType(NativeCapsule)).menu!;
+
+      await _host(tester, menu(), glass: const _NativeMenuTheme());
+      final initial = data();
+      final branch = initial.items.single;
+      final child = (branch['children'] as List<Map<String, Object?>>).single;
+      expect(initial.enabled, isTrue);
+      expect(branch['symbol'], 'folder');
+      expect(child['png'], png);
+      expect(child['selected'], isTrue);
+      initial.onSelected(child['id'] as int);
+      initial.onSelected(branch['id'] as int);
+      expect(selections, [_Action.rename]);
+
+      await _host(tester, menu(), glass: const _NativeMenuTheme());
+      expect(data().revision, initial.revision);
+      await _host(
+        tester,
+        menu(enabled: false),
+        glass: const _NativeMenuTheme(),
+      );
+      expect(data().revision, greaterThan(initial.revision));
+      data().onSelected(child['id'] as int);
+      expect(selections, [_Action.rename]);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
+  testWidgets('Flutter menu shows the bitmap and returns the same typed item', (
+    tester,
+  ) async {
+    _Action? selected;
+    await _host(
+      tester,
+      LiquidGlassMenuButton<_Action>(
+        label: 'Open bitmap menu',
+        items: [
+          LiquidGlassMenuItem(
+            value: _Action.rename,
+            label: 'Rename',
+            sfSymbol: 'pencil',
+            iconPng: png,
+          ),
+        ],
+        onSelected: (value) => selected = value,
+      ),
+    );
+    await tester.tap(find.text('Open bitmap menu'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Image), findsOneWidget);
+    await tester.tap(find.text('Rename'));
+    await tester.pumpAndSettle();
+    expect(selected, _Action.rename);
+  });
+
   testWidgets('menu selection restores trigger keyboard focus for reopening', (
     tester,
   ) async {
@@ -414,13 +524,29 @@ void main() {
   });
 }
 
-Future<void> _host(WidgetTester tester, Widget child) async {
+enum _Action { group, rename }
+
+class _NativeMenuTheme extends LiquidGlassThemeData {
+  const _NativeMenuTheme();
+
+  @override
+  LiquidGlassMode resolve({
+    required bool nativeAvailable,
+    bool highContrast = false,
+    bool disableAnimations = false,
+  }) => LiquidGlassMode.native;
+}
+
+Future<void> _host(
+  WidgetTester tester,
+  Widget child, {
+  LiquidGlassThemeData glass = const LiquidGlassThemeData(
+    mode: LiquidGlassMode.fallback,
+  ),
+}) async {
   await tester.pumpWidget(
     MaterialApp(
-      builder: (_, child) => LiquidGlassTheme(
-        data: const LiquidGlassThemeData(mode: LiquidGlassMode.fallback),
-        child: child!,
-      ),
+      builder: (_, child) => LiquidGlassTheme(data: glass, child: child!),
       home: Scaffold(body: Center(child: child)),
     ),
   );

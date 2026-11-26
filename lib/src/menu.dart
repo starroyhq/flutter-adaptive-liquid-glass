@@ -1,7 +1,13 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'controls.dart';
 import 'feedback.dart';
+import 'native_capsule.dart';
+import 'native_icon_raster.dart';
+import 'native_visibility.dart';
 import 'presentation.dart';
 import 'theme.dart';
 
@@ -18,6 +24,8 @@ class LiquidGlassMenuItem<T extends Object> {
     required this.value,
     required this.label,
     this.icon,
+    this.sfSymbol,
+    this.iconPng,
     this.enabled = true,
     this.destructive = false,
     this.selected = false,
@@ -27,17 +35,23 @@ class LiquidGlassMenuItem<T extends Object> {
   final T value;
   final String label;
   final IconData? icon;
+
+  /// A preferred SF Symbol on iOS. Supply [icon] or [iconPng] for Flutter.
+  final String? sfSymbol;
+
+  /// PNG bytes for a menu icon. [icon] can be used as a fallback.
+  final Uint8List? iconPng;
   final bool enabled;
   final bool destructive;
   final bool selected;
   final List<LiquidGlassMenuItem<T>> children;
 }
 
-/// A glass button with an anchored, keyboard-accessible hierarchical menu.
+/// A glass button with an anchored hierarchical menu.
 ///
-/// Every instance owns its route and anchor; several menu buttons can coexist.
-/// Selecting a branch opens that branch within the same popover. An explicit
-/// Back row returns to its parent without completing the selection.
+/// On iOS 26 and later the default trigger shows a system menu. Flutter
+/// popovers handle custom [builder]s, explicit single-gesture [trigger]s,
+/// and fallback or opaque mode.
 class LiquidGlassMenuButton<T extends Object> extends StatefulWidget {
   LiquidGlassMenuButton({
     super.key,
@@ -45,6 +59,7 @@ class LiquidGlassMenuButton<T extends Object> extends StatefulWidget {
     this.onSelected,
     this.onCanceled,
     this.label,
+    this.id,
     this.icon = Icons.more_horiz,
     this.sfSymbol = 'ellipsis',
     this.semanticLabel,
@@ -67,17 +82,23 @@ class LiquidGlassMenuButton<T extends Object> extends StatefulWidget {
   final ValueChanged<T>? onSelected;
   final VoidCallback? onCanceled;
   final String? label;
+
+  /// Native accessibility identifier for the default button.
+  final String? id;
   final IconData? icon;
   final String? sfSymbol;
   final String? semanticLabel;
   final bool enabled;
   final LiquidGlassMenuTrigger trigger;
   final String? longPressSemanticLabel;
+
+  /// Chooses the Navigator for the Flutter popover.
   final bool useRootNavigator;
+
+  /// The Flutter popover's width. UIKit sizes the system menu automatically.
   final double width;
 
-  /// Sizes the menu to its widest row, between 160 and [width], instead of
-  /// always using [width].
+  /// Sizes the Flutter popover to its widest row, between 160 and [width].
   final bool fitContent;
 
   /// Builds a custom trigger. A null callback means the trigger is disabled.
@@ -104,6 +125,12 @@ class _LiquidGlassMenuButtonState<T extends Object>
     extends State<LiquidGlassMenuButton<T>> {
   bool _opening = false;
 
+  String? get _accessibleLabel =>
+      widget.semanticLabel ??
+      (widget.detail == null
+          ? widget.label
+          : '${widget.label}, ${widget.detail}');
+
   Future<void> _open(BuildContext anchorContext) async {
     if (!mounted ||
         _opening ||
@@ -112,29 +139,7 @@ class _LiquidGlassMenuButtonState<T extends Object>
         !LiquidGlassFeedback.canInteract(context)) {
       return;
     }
-    final values = <T>{};
-    List<LiquidGlassMenuItem<T>> snapshot(List<LiquidGlassMenuItem<T>> items) =>
-        List.unmodifiable(
-          items.map((item) {
-            if (!values.add(item.value)) {
-              throw ArgumentError.value(
-                item.value,
-                'items',
-                'Menu values must be unique throughout the tree.',
-              );
-            }
-            return LiquidGlassMenuItem<T>(
-              value: item.value,
-              label: item.label,
-              icon: item.icon,
-              enabled: item.enabled,
-              destructive: item.destructive,
-              selected: item.selected,
-              children: snapshot(item.children),
-            );
-          }),
-        );
-    final items = snapshot(widget.items);
+    final items = _snapshot(widget.items, <T>{});
     setState(() => _opening = true);
     try {
       final result = await showLiquidGlassPopover<T>(
@@ -164,34 +169,203 @@ class _LiquidGlassMenuButtonState<T extends Object>
       final canOpen = widget.enabled && !_opening && widget.items.isNotEmpty;
       final VoidCallback? open = canOpen ? () => _open(anchorContext) : null;
       if (widget.builder != null) return widget.builder!(anchorContext, open);
-      // The route already guards repeated presentation. Keeping the default
-      // trigger enabled preserves its keyboard focus history while covered;
-      // temporarily disabling it would prevent restoration after menu close.
-      final VoidCallback? defaultOpen =
-          widget.enabled && widget.items.isNotEmpty
-          ? () => _open(anchorContext)
-          : null;
-      return LiquidGlassButton(
-        label: widget.label,
-        detail: widget.detail,
-        icon: widget.icon,
-        iconColor: widget.iconColor,
-        iconSize: widget.iconSize,
-        menuIndicator: widget.menuIndicator,
-        sfSymbol: widget.sfSymbol,
-        semanticLabel: widget.semanticLabel ?? widget.label,
-        onPressed: widget.trigger == LiquidGlassMenuTrigger.longPress
-            ? null
-            : defaultOpen,
-        onLongPress: widget.trigger == LiquidGlassMenuTrigger.tap
-            ? null
-            : defaultOpen,
-        longPressSemanticLabel:
-            widget.longPressSemanticLabel ??
-            widget.semanticLabel ??
-            widget.label,
-      );
+      if (widget.trigger == LiquidGlassMenuTrigger.tapAndLongPress &&
+          LiquidGlassTheme.modeOf(anchorContext) == LiquidGlassMode.native) {
+        return NativeCoverFallback(
+          fallback: (_) => _flutterTrigger(anchorContext),
+          child: _NativeMenuTrigger<T>(
+            menu: widget,
+            trigger: NativeCapsuleItem(
+              id: widget.id ?? 'button',
+              label: _accessibleLabel!,
+              title: widget.label,
+              detail: widget.detail,
+              icon: widget.icon,
+              iconColor: widget.iconColor,
+              iconSize: widget.iconSize,
+              sfSymbol: widget.sfSymbol,
+              menuIndicator: widget.menuIndicator,
+            ),
+          ),
+        );
+      }
+      return _flutterTrigger(anchorContext);
     },
+  );
+
+  Widget _flutterTrigger(BuildContext anchorContext) {
+    // Preserve the trigger's keyboard focus across a Flutter popover.
+    final VoidCallback? open = widget.enabled && widget.items.isNotEmpty
+        ? () => _open(anchorContext)
+        : null;
+    return LiquidGlassButton(
+      id: widget.id,
+      label: widget.label,
+      detail: widget.detail,
+      icon: widget.icon,
+      iconColor: widget.iconColor,
+      iconSize: widget.iconSize,
+      menuIndicator: widget.menuIndicator,
+      sfSymbol: widget.sfSymbol,
+      semanticLabel: widget.semanticLabel ?? widget.label,
+      onPressed: widget.trigger == LiquidGlassMenuTrigger.longPress
+          ? null
+          : open,
+      onLongPress: widget.trigger == LiquidGlassMenuTrigger.tap ? null : open,
+      longPressSemanticLabel:
+          widget.longPressSemanticLabel ?? widget.semanticLabel ?? widget.label,
+    );
+  }
+}
+
+List<LiquidGlassMenuItem<T>> _snapshot<T extends Object>(
+  List<LiquidGlassMenuItem<T>> items,
+  Set<T> values,
+) => List.unmodifiable(
+  items.map((item) {
+    if (!values.add(item.value)) {
+      throw ArgumentError.value(
+        item.value,
+        'items',
+        'Menu values must be unique throughout the tree.',
+      );
+    }
+    return LiquidGlassMenuItem<T>(
+      value: item.value,
+      label: item.label,
+      icon: item.icon,
+      sfSymbol: item.sfSymbol,
+      iconPng: item.iconPng == null ? null : Uint8List.fromList(item.iconPng!),
+      enabled: item.enabled,
+      destructive: item.destructive,
+      selected: item.selected,
+      children: _snapshot(item.children, values),
+    );
+  }),
+);
+
+bool _sameMenu<T extends Object>(
+  List<LiquidGlassMenuItem<T>> a,
+  List<LiquidGlassMenuItem<T>> b,
+) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    final x = a[i], y = b[i];
+    if (x.value != y.value ||
+        x.label != y.label ||
+        x.icon != y.icon ||
+        x.sfSymbol != y.sfSymbol ||
+        !listEquals(x.iconPng, y.iconPng) ||
+        x.enabled != y.enabled ||
+        x.destructive != y.destructive ||
+        x.selected != y.selected ||
+        !_sameMenu(x.children, y.children)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+class _NativeMenuTrigger<T extends Object> extends StatefulWidget {
+  const _NativeMenuTrigger({required this.menu, required this.trigger});
+
+  final LiquidGlassMenuButton<T> menu;
+  final NativeCapsuleItem trigger;
+
+  @override
+  State<_NativeMenuTrigger<T>> createState() => _NativeMenuTriggerState<T>();
+}
+
+class _NativeMenuTriggerState<T extends Object>
+    extends State<_NativeMenuTrigger<T>> {
+  int _revision = 0;
+  List<LiquidGlassMenuItem<T>> _items = const [];
+  List<Map<String, Object?>> _payload = const [];
+  Map<int, T> _values = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _prepareIfChanged();
+  }
+
+  @override
+  void didUpdateWidget(covariant _NativeMenuTrigger<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _prepareIfChanged();
+  }
+
+  void _prepareIfChanged() {
+    final items = widget.menu.items;
+    if (_sameMenu(_items, items)) return;
+    _items = _snapshot(items, <T>{});
+    _values = const {};
+    _payload = const [];
+    unawaited(_encode(_items, ++_revision));
+  }
+
+  Future<void> _encode(List<LiquidGlassMenuItem<T>> items, int revision) async {
+    final values = <int, T>{};
+    var nextId = 0;
+
+    Future<List<Map<String, Object?>>> encode(
+      List<LiquidGlassMenuItem<T>> items, {
+      required bool parentEnabled,
+    }) async {
+      return Future.wait(
+        items.map((item) async {
+          final id = nextId++;
+          final enabled = parentEnabled && item.enabled;
+          if (enabled && item.children.isEmpty) values[id] = item.value;
+          final icon = item.icon;
+          final children = await encode(item.children, parentEnabled: enabled);
+          final png =
+              item.iconPng ??
+              (icon == null
+                  ? null
+                  : await nativeIconPng(icon, canvasSize: 22, glyphSize: 18));
+          return {
+            'id': id,
+            'label': item.label,
+            'enabled': item.enabled,
+            'selected': item.selected,
+            'destructive': item.destructive,
+            'symbol': item.sfSymbol,
+            'png': png,
+            'template': item.iconPng == null && icon != null,
+            'mirror':
+                item.iconPng == null && (icon?.matchTextDirection ?? false),
+            'children': children,
+          };
+        }),
+      );
+    }
+
+    final payload = await encode(items, parentEnabled: true);
+    if (!mounted || revision != _revision) return;
+    setState(() {
+      // Publish prepared icons under a new revision. The same button may
+      // already be mounted with an empty, disabled menu.
+      _revision++;
+      _payload = payload;
+      _values = values;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => NativeCapsule(
+    standaloneIcon: widget.trigger.title == null,
+    items: [widget.trigger],
+    menu: NativeCapsuleMenu(
+      revision: _revision,
+      items: _payload,
+      enabled: widget.menu.enabled && _payload.isNotEmpty,
+      onSelected: (id) {
+        final value = _values[id];
+        if (value != null) widget.menu.onSelected?.call(value);
+      },
+      onCanceled: () => widget.menu.onCanceled?.call(),
+    ),
   );
 }
 
@@ -267,7 +441,7 @@ class _MenuState<T extends Object> extends State<_Menu<T>> {
         _MenuRow(
           key: ValueKey(item.value),
           label: item.label,
-          leading: item.icon == null ? null : Icon(item.icon, size: 22),
+          leading: _menuIcon(item),
           color: item.destructive ? theme.colorScheme.error : foreground,
           selected: item.selected,
           trailing: item.children.isNotEmpty
@@ -302,6 +476,19 @@ class _MenuState<T extends Object> extends State<_Menu<T>> {
       children: rows,
     );
   }
+}
+
+Widget? _menuIcon<T extends Object>(LiquidGlassMenuItem<T> item) {
+  final fallback = item.icon == null ? null : Icon(item.icon, size: 22);
+  final png = item.iconPng;
+  if (png == null) return fallback;
+  return Image.memory(
+    png,
+    width: 22,
+    height: 22,
+    fit: BoxFit.contain,
+    errorBuilder: (_, error, stack) => fallback ?? const SizedBox.shrink(),
+  );
 }
 
 class _MenuRow extends StatelessWidget {

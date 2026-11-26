@@ -187,6 +187,20 @@ each menu. The selected item updates the menu status. The **Loading** button
 shows UIKit's spinner, **Large text** uses a 2× text scale, and **Cut** and
 **Paste** show the current shared group capsule.
 
+## Native menu probe
+
+```sh
+flutter run -d <device-id> --dart-define=GLASS_NATIVE_MENU_PROBE=true
+```
+
+The catalog's Search page also opens this probe. Tap **File actions** to see
+the system menu expand from the glass button on iOS 26 or later. **Rename**
+uses a bitmap glyph and **Favorite** uses a checked SF Symbol item.
+Open **Move to** and choose **Archive folder** to test a submenu. Press and
+hold **File actions**, drag onto a menu item, and lift to select. Tap the
+empty background to dismiss the open menu. The page counts selections and
+cancellations separately.
+
 ## Native controls probe
 
 ```sh

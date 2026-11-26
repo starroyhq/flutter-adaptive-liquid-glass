@@ -6,11 +6,14 @@ import 'component_catalog.dart';
 import 'native_button_glass_probe.dart';
 import 'native_controls_probe.dart';
 import 'native_layout_probe.dart';
+import 'native_menu_probe.dart';
 import 'native_rtl_probe.dart';
 import 'new_controls_example.dart';
 
 void main() => runApp(
-  const bool.fromEnvironment('GLASS_NATIVE_BUTTON_PROBE')
+  const bool.fromEnvironment('GLASS_NATIVE_MENU_PROBE')
+      ? const MaterialApp(home: NativeMenuProbePage())
+      : const bool.fromEnvironment('GLASS_NATIVE_BUTTON_PROBE')
       ? const MaterialApp(home: NativeButtonGlassProbePage())
       : const bool.fromEnvironment('GLASS_NATIVE_CONTROLS_PROBE')
       ? const NativeControlsProbeApp()

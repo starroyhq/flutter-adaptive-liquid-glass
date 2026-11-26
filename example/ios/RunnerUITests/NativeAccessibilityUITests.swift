@@ -447,6 +447,67 @@ final class NativeAccessibilityUITests: XCTestCase {
     }
   }
 
+  func testDefaultGlassMenuSelectionAndCancellation() throws {
+    openCatalogSearchEntry("Open native menu probe")
+    let trigger = app.buttons["native-menu-probe"]
+    XCTAssertTrue(waitUntilHittable(trigger))
+    let rename = app.buttons["Rename"]
+    let archive = app.buttons["Archive folder"]
+    let outsideMenu = app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.75))
+
+    trigger.tap()
+    XCTAssertTrue(waitUntilHittable(rename))
+    XCTAssertTrue(app.buttons["Favorite"].exists)
+    let disabled = app.buttons["Delete"]
+    XCTAssertTrue(disabled.exists)
+    XCTAssertFalse(disabled.isEnabled)
+    attachScreen("default-glass-menu")
+    outsideMenu.tap()
+    XCTAssertTrue(rename.waitForNonExistence(timeout: 10))
+    expectText("Menu cancellations: 1")
+    expectText("Menu selections: 0")
+
+    trigger.tap()
+    XCTAssertTrue(waitUntilHittable(rename))
+    rename.tap()
+    expectText("Last selection: rename")
+    expectText("Menu selections: 1")
+    expectText("Menu cancellations: 1")
+
+    trigger.tap()
+    let submenu = app.buttons["Move to"]
+    XCTAssertTrue(waitUntilHittable(submenu))
+    submenu.tap()
+    XCTAssertTrue(waitUntilHittable(archive))
+    attachScreen("default-glass-submenu")
+    archive.tap()
+    expectText("Last selection: archive")
+    expectText("Menu selections: 2")
+    expectText("Menu cancellations: 1")
+  }
+
+  func testDefaultGlassMenuPressDrag() throws {
+    openCatalogSearchEntry("Open native menu probe")
+    let trigger = app.buttons["native-menu-probe"]
+    XCTAssertTrue(waitUntilHittable(trigger))
+
+    // Read the system's placement before synthesizing the continuous gesture.
+    trigger.tap()
+    let favorite = app.buttons["Favorite"]
+    XCTAssertTrue(waitUntilHittable(favorite))
+    let destination = app.coordinate(withNormalizedOffset: .zero).withOffset(
+      CGVector(dx: favorite.frame.midX - app.frame.minX, dy: favorite.frame.midY - app.frame.minY))
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.75)).tap()
+    expectText("Menu cancellations: 1")
+    XCTAssertTrue(waitUntilHittable(trigger))
+
+    trigger.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+      .press(forDuration: 0.7, thenDragTo: destination, withVelocity: .slow, thenHoldForDuration: 0.25)
+    expectText("Last selection: favorite")
+    expectText("Menu selections: 1")
+    expectText("Menu cancellations: 1")
+  }
+
   func testPopupsKeepNativeControlsBeneathThemOutOfReach() throws {
     openCatalogSearchEntry("Open native layout probe")
     expectText("Popup result: none")

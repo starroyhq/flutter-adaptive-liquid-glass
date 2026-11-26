@@ -576,7 +576,9 @@ with a close button until search ends.
 LiquidGlassMenuButton<String>(
   label: 'More',
   items: const [
-    LiquidGlassMenuItem(value: 'copy', label: 'Copy', icon: Icons.copy),
+    LiquidGlassMenuItem(
+      value: 'copy', label: 'Copy', icon: Icons.copy, sfSymbol: 'doc.on.doc',
+    ),
     LiquidGlassMenuItem(
       value: 'organize',
       label: 'Organize',
@@ -750,11 +752,21 @@ Only the stepper repeats. Scroll takeover, leaving the target, route coverage,
 backgrounding and disposal cancel applicable pending gestures.
 
 Alerts with exactly two actions place them side by side (a cancel action first)
-unless text is large; action sheets show their cancel actions as a separate group.
-`LiquidGlassMenuButton.trigger` accepts `LiquidGlassMenuTrigger.tap`, `.longPress`
-or `.tapAndLongPress` (the default). A custom `builder` keeps the existing
-`(context, open)` signature and owns its gestures. Each default trigger supports
-only one open menu at a time, and remains usable after cancelling or selecting.
+unless text is large. Action sheets show their cancel actions as a separate group.
+On iOS 26+ in native mode, the default menu trigger uses `UIButton.menu`.
+UIKit owns the transition, submenu navigation, press-drag gestures and menu
+size. `onSelected` and `onCanceled` report the completed interaction.
+The trigger takes touches that start on it so UIKit can track the same press
+through to selection. A scroll can start outside the trigger.
+[UIKit menu activation](https://developer.apple.com/documentation/uikit/uicontrol/showsmenuasprimaryaction)
+
+Use `sfSymbol` to prefer an iOS symbol, `iconPng` for a bitmap, and `icon` as a
+portable glyph. UIKit tints the portable glyph as a template. Both paths can
+display the supplied PNG. The custom `builder(context, open)`, explicit
+`LiquidGlassMenuTrigger.tap` and `.longPress` modes, and Flutter rendering on
+other targets keep the package popover. `width`, `fitContent` and
+`useRootNavigator` apply to that popover. Native system menus use the button as
+their anchor and participate in UIKit's presentation instead of a Flutter route.
 
 Native icon buttons with long-press actions use the same UIKit glass style.
 Navigation bars containing these actions combine the existing Flutter title

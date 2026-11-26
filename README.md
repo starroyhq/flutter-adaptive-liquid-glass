@@ -9,6 +9,9 @@ imports use `flutter_adaptive_liquid_glass`, following Dart's
 [package naming rules](https://dart.dev/tools/pub/pubspec#name); hyphens are not
 valid in a pubspec package name.
 
+Version **0.9.0** uses UIKit's glass styles for standalone buttons. See the
+[0.9.0 release notes](doc/release-0.9.0.md).
+
 Version **0.8.0** adds an opt-in window geometry scope for adaptive layouts.
 Read UIKit size classes and the recommended vertical-bar edge on supported iOS
 windows, account for iPad window controls, and use Flutter display features
@@ -108,7 +111,7 @@ Or add the version to your app's `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_adaptive_liquid_glass: ^0.8.0
+  flutter_adaptive_liquid_glass: ^0.9.0
 ```
 
 Requires Flutter 3.41.2 or later and Dart 3.11 or later. Supported platforms are
@@ -124,6 +127,11 @@ checks that pinned version and the current stable channel. The package has no
 production dependency besides the Flutter SDK: every native control, including
 the tab bar, the segmented control and icon buttons, is a package-owned UIKit
 bridge. It does not require a global toolchain upgrade.
+
+### Upgrading from 0.8.x
+
+Change the constraint to `^0.9.0`, run `flutter pub get`, then perform a full
+native rebuild. See the [0.9.0 release notes](doc/release-0.9.0.md).
 
 ### Upgrading from 0.7.x
 
@@ -326,18 +334,15 @@ iOS 26, containing plain UIKit buttons. They are not individual glass circles.
 The fallback similarly has one surface, with tooltip/semantic labels and
 `ValueKey(action.id)` on each action. Do not wrap groups in another glass surface.
 
-Native text buttons use the same small UIKit bridge. `UIButton.Configuration`
-and native title measurement own their layout, replacing the earlier SwiftUI
-path that compressed Chinese titles even with an explicit platform-view width.
-The Flutter estimate prevents first-frame collapse; UIKit's intrinsic content
-width can enlarge it, never shrink it. Icon-only buttons use the same capsule
-bridge in a standalone look, with or without a long-press action: a semibold
-symbol, or the Material glyph trimmed to the icon size, in colors that do not
-change when pressed or disabled. Their `id` is the native accessibility
-identifier and their `semanticLabel` the native label. A button, and each
-action of a button group, toolbar or action bar, keeps its native view when it
-is enabled or disabled or its emphasis or colors change; a new title, icon or
-long-press action, or added, removed or reordered actions, create a new one.
+Standalone text and icon buttons use UIKit's `UIButton.Configuration.glass()`
+or `.prominentGlass()` on iOS 26 and later. UIKit supplies press feedback,
+disabled styling and the loading indicator. Text buttons grow with the
+app's text scale. Flutter estimates the first-frame width, and UIKit's
+intrinsic measurement can enlarge it. Icon buttons support a semibold SF
+Symbol or a trimmed Material glyph bitmap. Their `id` is the native
+accessibility identifier and their `semanticLabel` is the native label.
+Loading, emphasis, enabled state and colors update a mounted button. Changes
+to content or a long-press action can recreate its view.
 Native capsules, tab bars and segmented controls follow the ambient
 `Directionality`, not the device language. Every path retains native materials
 and app appearance.
@@ -751,7 +756,7 @@ or `.tapAndLongPress` (the default). A custom `builder` keeps the existing
 `(context, open)` signature and owns its gestures. Each default trigger supports
 only one open menu at a time, and remains usable after cancelling or selecting.
 
-Native icon buttons with long-press actions use the package's UIKit capsule.
+Native icon buttons with long-press actions use the same UIKit glass style.
 Navigation bars containing these actions combine the existing Flutter title
 layout with native capsules. System iOS 26+ tabs are unchanged. Haptic strength,
 audibility and assistive-technology experience still need physical-device
@@ -1012,9 +1017,9 @@ controls in profile mode on a device.
 - A few defaults are English: the fallback color sheet's HEX label, HEX error
   and channel values (see [Date and color pickers](#date-and-color-pickers)) and
   the slider's percentage value, which `semanticFormatterCallback` replaces.
-- Some native controls switch to Flutter rendering: buttons while `loading`
-  and fixed-height controls (buttons, button groups, segmented controls and
-  the navigation bar) at large text sizes, and the navigation bar unless it
+- Some native controls switch to Flutter rendering: fixed-height button
+  groups, segmented controls and the navigation bar at large text sizes, and
+  the navigation bar unless it
   has at most one leading and one trailing action, without long presses and
   with an `sfSymbol` beside every icon. Debug builds print each such reason
   once with `debugPrint`, naming the control and what to change; release

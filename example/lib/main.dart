@@ -3,13 +3,16 @@ import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart
 
 import 'native_modal_example.dart';
 import 'component_catalog.dart';
+import 'native_button_glass_probe.dart';
 import 'native_controls_probe.dart';
 import 'native_layout_probe.dart';
 import 'native_rtl_probe.dart';
 import 'new_controls_example.dart';
 
 void main() => runApp(
-  const bool.fromEnvironment('GLASS_NATIVE_CONTROLS_PROBE')
+  const bool.fromEnvironment('GLASS_NATIVE_BUTTON_PROBE')
+      ? const MaterialApp(home: NativeButtonGlassProbePage())
+      : const bool.fromEnvironment('GLASS_NATIVE_CONTROLS_PROBE')
       ? const NativeControlsProbeApp()
       : const bool.fromEnvironment('GLASS_NATIVE_LAYOUT_PROBE')
       ? const NativeLayoutProbeApp()

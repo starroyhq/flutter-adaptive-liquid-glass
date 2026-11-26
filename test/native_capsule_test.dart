@@ -351,6 +351,7 @@ void main() {
     VoidCallback? onPressed,
     VoidCallback? onLongPress,
     bool prominent = false,
+    bool loading = false,
     Color? iconColor,
     String? label,
   }) => MaterialApp(
@@ -364,6 +365,7 @@ void main() {
             semanticLabel: 'Add',
             label: label,
             prominent: prominent,
+            loading: loading,
             iconColor: iconColor,
             onPressed: onPressed,
             onLongPress: onLongPress,
@@ -433,11 +435,13 @@ void main() {
       final view = id;
       final colors = scheme(tester);
       expect(params[view]!['standaloneIcon'], isFalse);
+      expect(params[view]!['prominent'], isTrue);
       expect(params[view]!['tint'], colors.primary.toARGB32());
 
       await tester.pumpWidget(lone(label: 'Send', prominent: true));
       await tester.pumpAndSettle();
       expect(id, view);
+      expect(updates(view).last['prominent'], isFalse);
       expect(updates(view).last['tint'], isNull);
       expect(updates(view).last['foreground'], colors.onSurface.toARGB32());
       expect(updatedItem(updates(view).last)['tapEnabled'], isFalse);
@@ -447,10 +451,87 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(id, view);
+      expect(updates(view).last['prominent'], isTrue);
       expect(updates(view).last['tint'], colors.primary.toARGB32());
       expect(updates(view).last['foreground'], colors.onPrimary.toARGB32());
       expect(updatedItem(updates(view).last)['tapEnabled'], isTrue);
       expect(params.keys, [view]);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
+  testWidgets(
+    'native loading keeps the view and rejects tap and hold events',
+    (tester) async {
+      var presses = 0;
+      var holds = 0;
+      Widget button(bool loading) => lone(
+        prominent: true,
+        loading: loading,
+        onPressed: () => presses++,
+        onLongPress: () => holds++,
+      );
+
+      await tester.pumpWidget(button(true));
+      await tester.pumpAndSettle();
+      final view = id, loadingEpoch = epoch(view);
+      expect(params[view]!['loading'], isTrue);
+      expect(params[view]!['prominent'], isTrue);
+      final item = updatedItem(params[view]!);
+      expect(item['tapEnabled'], isTrue);
+      expect(item['longPressEnabled'], isTrue);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      await event('pressed', 'button');
+      await event('longPressed', 'button', sequence: 2);
+      expect(presses, 0);
+      expect(holds, 0);
+
+      await tester.pumpWidget(button(false));
+      await tester.pumpAndSettle();
+      final readyEpoch = epoch(view);
+      expect(readyEpoch, greaterThan(loadingEpoch));
+      expect(updates(view).last['loading'], isFalse);
+      await event('pressed', 'button', eventEpoch: loadingEpoch, sequence: 3);
+      expect(presses, 0);
+      await event('pressed', 'button', sequence: 4);
+      await event('longPressed', 'button', sequence: 5);
+      expect(presses, 1);
+      expect(holds, 1);
+
+      await tester.pumpWidget(button(true));
+      await tester.pumpAndSettle();
+      expect(updates(view).last['loading'], isTrue);
+      expect(epoch(view), greaterThan(readyEpoch));
+      await event('longPressed', 'button', eventEpoch: readyEpoch, sequence: 6);
+      expect(holds, 1);
+      expect(params.keys, [view]);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
+  testWidgets(
+    'large text stays native and gets enough space for the scaled title',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LiquidGlassTheme(
+            data: const _NativeTheme(),
+            child: Scaffold(
+              body: MediaQuery(
+                data: const MediaQueryData(textScaler: TextScaler.linear(2.5)),
+                child: Center(
+                  child: LiquidGlassButton(label: 'Save', onPressed: () {}),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final view = find.byType(UiKitView);
+      expect(view, findsOneWidget);
+      expect(params[id]!['fontSize'], 42.5);
+      expect(tester.getSize(view).height, greaterThan(48));
     },
     variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );

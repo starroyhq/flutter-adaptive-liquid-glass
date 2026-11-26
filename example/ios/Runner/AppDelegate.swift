@@ -4,6 +4,7 @@ import UIKit
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var colorLifecycleWindow: UIWindow?
+  private var buttonProbeChannel: FlutterMethodChannel?
 
   override func application(
     _ application: UIApplication,
@@ -14,6 +15,7 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    registerGlassButtonProbe(engineBridge)
     // Example-only driver: exercise the public AX activation entry point.
     // This does not synthesize touch events or invoke the color-change callback.
     guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "GlassExampleAccessibility") else { return }
@@ -64,6 +66,55 @@ import UIKit
       } else {
         result(well.accessibilityActivate())
       }
+    }
+  }
+
+  /// Gives the example's actual plugin-owned buttons a UIKit menu so the
+  /// system transition can be verified before the public menu API changes.
+  private func registerGlassButtonProbe(_ engineBridge: FlutterImplicitEngineBridge) {
+    guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "GlassExampleButtonProbe") else {
+      return
+    }
+    let channel = FlutterMethodChannel(
+      name: "glass_example/button_probe", binaryMessenger: registrar.messenger())
+    buttonProbeChannel = channel
+    channel.setMethodCallHandler { [weak channel] call, result in
+      guard call.method == "attachMenus" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard #available(iOS 26.0, *), let view = registrar.viewController?.viewIfLoaded else {
+        result(FlutterError(code: "unavailable", message: "UIKit glass unavailable", details: nil))
+        return
+      }
+      func find(_ id: String, in view: UIView) -> UIButton? {
+        if let button = view as? UIButton, button.accessibilityIdentifier == id { return button }
+        for child in view.subviews {
+          if let button = find(id, in: child) { return button }
+        }
+        return nil
+      }
+      guard let regular = find("glass-probe-regular", in: view),
+            let prominent = find("glass-probe-prominent", in: view),
+            let loading = find("glass-probe-loading", in: view),
+            let large = find("glass-probe-large", in: view) else {
+        result(FlutterError(code: "missing_button", message: "Native button missing", details: nil))
+        return
+      }
+      guard loading.configuration?.showsActivityIndicator == true,
+            large.frame.height > regular.frame.height else {
+        result(FlutterError(code: "invalid_button_state", message: "Native loading or large text missing", details: nil))
+        return
+      }
+      for (button, title) in [(regular, "Regular menu choice"), (prominent, "Prominent menu choice")] {
+        button.menu = UIMenu(children: [
+          UIAction(title: title, image: UIImage(systemName: "checkmark")) { _ in
+            channel?.invokeMethod("selected", arguments: title)
+          },
+        ])
+        button.showsMenuAsPrimaryAction = true
+      }
+      result(nil)
     }
   }
 }

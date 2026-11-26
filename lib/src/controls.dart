@@ -107,28 +107,13 @@ class LiquidGlassButton extends StatelessWidget {
     final accent = glassColors.accent ?? colors.primary;
     final nativeMode =
         LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native;
-    final largeText = MediaQuery.textScalerOf(context).scale(14) > 20;
-    if (nativeMode && loading) {
-      reportNativeFallback(
-        'LiquidGlassButton',
-        'loading is true',
-        'The native button returns once loading is false.',
-      );
-    } else if (nativeMode && largeText) {
-      reportNativeFallback(
-        'LiquidGlassButton',
-        'the text scale is above the native button\'s fixed height',
-        'The native button returns at a smaller text size.',
-      );
-    }
-    if (nativeMode && !loading && !largeText) {
-      // An icon-only button keeps its standalone look, with or without a
-      // long press.
+    if (nativeMode) {
       return NativeCoverFallback(
         fallback: (_) => this,
         child: NativeCapsule(
           standaloneIcon: label == null,
           prominent: emphasized,
+          loading: loading,
           items: [
             NativeCapsuleItem(
               id: id ?? 'button',
@@ -140,8 +125,8 @@ class LiquidGlassButton extends StatelessWidget {
               iconColor: iconColor,
               iconSize: iconSize,
               menuIndicator: menuIndicator,
-              onPressed: callback,
-              onLongPress: longCallback,
+              onPressed: onPressed,
+              onLongPress: onLongPress,
               longPressSemanticLabel: longPressSemanticLabel,
             ),
           ],

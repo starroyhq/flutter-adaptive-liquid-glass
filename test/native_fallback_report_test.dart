@@ -59,32 +59,27 @@ void main() {
     });
   }
 
-  testReports('a loading native button explains its Flutter rendering', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _host(LiquidGlassButton(label: 'Save', loading: true, onPressed: () {})),
-    );
-    expect(printed, hasLength(1));
-    expect(printed.single, contains('LiquidGlassButton'));
-    expect(printed.single, contains('loading'));
-  });
-
   testReports('each reason prints once per process', (tester) async {
-    await tester.pumpWidget(
-      _host(
-        Column(
-          children: [
-            LiquidGlassButton(label: 'A', loading: true, onPressed: () {}),
-            LiquidGlassButton(label: 'B', loading: true, onPressed: () {}),
-          ],
+    for (final title in ['Inbox', 'Sent', 'Drafts']) {
+      await tester.pumpWidget(
+        _host(
+          LiquidGlassNavigationBar(
+            title: title,
+            actions: [
+              for (final id in ['a', 'b'])
+                LiquidGlassAction(
+                  id: id,
+                  label: id,
+                  sfSymbol: 'plus',
+                  onPressed: () {},
+                ),
+            ],
+          ),
         ),
-      ),
-    );
-    await tester.pumpWidget(
-      _host(LiquidGlassButton(label: 'C', loading: true, onPressed: () {})),
-    );
+      );
+    }
     expect(printed, hasLength(1));
+    expect(printed.single, contains('more than one trailing'));
 
     // A different reason is reported separately, also only once.
     for (var i = 0; i < 2; i++) {

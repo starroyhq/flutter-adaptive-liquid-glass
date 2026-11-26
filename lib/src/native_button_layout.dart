@@ -1,13 +1,14 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
-/// Fixed native dimensions prevent a compressed SwiftUI intrinsic-size reply
-/// from replacing Flutter's measured width and ellipsizing CJK labels.
+/// Flutter measures the native button's content before the view is created.
+/// A smaller native intrinsic width cannot clip the measured label.
 @immutable
 class NativeButtonLayout {
-  const NativeButtonLayout(this.width, this.labelStyle);
+  const NativeButtonLayout(this.width, this.labelStyle, this.contentHeight);
   final double width;
   final TextStyle labelStyle;
+  final double contentHeight;
   static const height = 48.0;
   static const padding = EdgeInsets.symmetric(horizontal: 16, vertical: 10);
   static const iconSize = 22.0;
@@ -31,7 +32,7 @@ class NativeButtonLayout {
       fontSize: textScaler.scale(17),
       fontWeight: FontWeight.w600,
     );
-    if (label == null) return NativeButtonLayout(height, style);
+    if (label == null) return NativeButtonLayout(height, style, height);
     final painter = TextPainter(
       text: TextSpan(text: label, style: style),
       textDirection: direction,
@@ -69,7 +70,12 @@ class NativeButtonLayout {
               4)
           .ceilToDouble(),
     );
+    final contentHeight = math.max(
+      height,
+      (math.max(painter.height, hasIcon ? glyph : 0) + padding.vertical)
+          .ceilToDouble(),
+    );
     painter.dispose();
-    return NativeButtonLayout(width, style);
+    return NativeButtonLayout(width, style, contentHeight);
   }
 }

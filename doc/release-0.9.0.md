@@ -11,9 +11,19 @@ The navigation bar groups multiple leading and trailing actions on shared
 system glass. A navigation action can show a bitmap icon or a text or dot
 badge, or open its own data-driven menu.
 
+```yaml
+dependencies:
+  flutter_adaptive_liquid_glass: ^0.9.0
+```
+
+The package supports Flutter 3.41.2+, Dart 3.11+, iOS 16+ and Android. Native
+glass requires iOS 26+ and builds with Xcode 26 or later. The Flutter SDK is
+the only production dependency.
+
 ## Upgrading from 0.8.x
 
-Change the dependency constraint to `^0.9.0` and run `flutter pub get`.
+Update the dependency constraint and run `flutter pub get`. The old
+`^0.8.0` constraint selects only 0.8 releases.
 The `LiquidGlassButton` and `LiquidGlassButton.icon` constructor arguments
 carry over. Perform a full native rebuild to pick up the UIKit changes. The
 existing Flutter renderers serve Android, iOS 25 and earlier, and apps using
@@ -63,3 +73,6 @@ select a nested action, and select an item with one press-and-drag gesture.
 The navigation bar test verifies two UIKit groups, a text action and bitmap
 icons, distinct menus, and changing and clearing a badge. It also switches
 between left-to-right and right-to-left layout on the iOS 27.1 simulator.
+
+The known first-use palette limitation on hosted iOS simulators is documented
+in [native accessibility validation](native-accessibility-validation.md#first-use-skip-in-the-gate-from-050).

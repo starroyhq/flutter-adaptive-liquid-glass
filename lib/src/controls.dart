@@ -21,6 +21,7 @@ class LiquidGlassButton extends StatelessWidget {
     this.onLongPress,
     this.longPressSemanticLabel,
     this.prominent = false,
+    this.foregroundColor,
     this.loading = false,
     this.id,
   }) : label = null,
@@ -39,6 +40,7 @@ class LiquidGlassButton extends StatelessWidget {
     this.onLongPress,
     this.longPressSemanticLabel,
     this.prominent = false,
+    this.foregroundColor,
     this.loading = false,
     this.id,
     this.detail,
@@ -64,6 +66,13 @@ class LiquidGlassButton extends StatelessWidget {
   /// Fills the button with the accent color. A disabled button is drawn without
   /// the fill, like any other disabled button, until it can be pressed.
   final bool prominent;
+
+  /// Text, inherited icon tint, and loading indicator color on the prominent
+  /// fill. Defaults to [LiquidGlassColors.onAccent] or [ColorScheme.onPrimary].
+  /// A disabled button gives up its fill and uses the ordinary foreground.
+  /// An explicit [iconColor] still takes precedence for the icon.
+  final Color? foregroundColor;
+
   final bool loading;
 
   /// Names the button to UI tests and accessibility tooling: it becomes the
@@ -102,7 +111,7 @@ class LiquidGlassButton extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final glassColors = LiquidGlassTheme.of(context).colors;
     final textColor = emphasized
-        ? glassColors.onAccent ?? colors.onPrimary
+        ? foregroundColor ?? glassColors.onAccent ?? colors.onPrimary
         : glassColors.foreground ?? colors.onSurface;
     final accent = glassColors.accent ?? colors.primary;
     final nativeMode =
@@ -113,6 +122,7 @@ class LiquidGlassButton extends StatelessWidget {
         child: NativeCapsule(
           standaloneIcon: label == null,
           prominent: emphasized,
+          foregroundColor: textColor,
           loading: loading,
           items: [
             NativeCapsuleItem(

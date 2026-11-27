@@ -1,3 +1,10 @@
+## 0.9.1
+
+- Prominent glass buttons on iOS use the Flutter theme's accent foreground
+  for text, icons and the activity indicator. Bright accent fills remain
+  legible in dark mode. Set `foregroundColor` on `LiquidGlassButton` or
+  `LiquidGlassButton.icon` to override the foreground.
+
 ## 0.9.0
 
 - On iOS 26+, standalone buttons use UIKit's glass and prominent glass

@@ -119,10 +119,11 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       guard let id = item["id"] as? String else { continue }
       let content = makeContent(item)
       let iconColorValue = item["iconColor"] as? NSNumber
-      let config = makeConfiguration(content, foreground: foreground, iconColor: Self.color(iconColorValue))
+      let (configuration, prominentForeground) = makeConfigurations(content, foreground: foreground,
+                                                                   iconColor: Self.color(iconColorValue))
       let button: AdaptiveGlassCapsuleButton
       if !grouped, arguments["menuEnabled"] is Bool {
-        let menuButton = AdaptiveGlassMenuButton(configuration: config)
+        let menuButton = AdaptiveGlassMenuButton(configuration: configuration)
         menuButton.onMenuResult = { [weak self, weak menuButton] revision, itemID in
           guard let self, let menuButton else { return }
           self.sendMenuResult(menuButton, revision: revision, itemID: itemID)
@@ -130,11 +131,12 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
         menuButton.applyMenu(arguments)
         button = menuButton
       } else {
-        button = AdaptiveGlassCapsuleButton(configuration: config)
+        button = AdaptiveGlassCapsuleButton(configuration: configuration)
       }
       contents.append(content)
       iconColorValues.append(iconColorValue)
       button.semanticContentAttribute = direction
+      button.setProminentForeground(prominentForeground)
       button.actionId = id
       button.tapEnabled = item["tapEnabled"] as? Bool ?? (item["enabled"] as? Bool ?? false)
       button.longPressEnabled = item["longPressEnabled"] as? Bool ?? false
@@ -266,19 +268,44 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       menuIndicator: item["menuIndicator"] as? Bool == true)
   }
 
-  /// A button's configuration for [content] in the given colors.
-  private func makeConfiguration(_ content: AdaptiveGlassCapsuleContent, foreground: UIColor,
-                                 iconColor: UIColor?) -> UIButton.Configuration {
-    var config: UIButton.Configuration
+  private func makeConfigurations(_ content: AdaptiveGlassCapsuleContent, foreground: UIColor,
+                                  iconColor: UIColor?) -> (UIButton.Configuration, UIButton.Configuration?) {
+    var config = UIButton.Configuration.plain()
+    config.background.backgroundColor = .clear
+    var prominentForeground: UIButton.Configuration?
     if !grouped, #available(iOS 26.0, *) {
       config = prominent ? .prominentGlass() : .glass()
       config.baseBackgroundColor = Self.color(tintValue)
-      config.showsActivityIndicator = loading
-    } else {
-      config = .plain()
-      config.background.backgroundColor = .clear
+      config.showsActivityIndicator = loading && !prominent
+      if prominent {
+        // UIKit's glass vibrancy can recolor the foreground even after the
+        // configuration resolves its colors. Keep the native button for the
+        // glass, layout, and interaction, and draw the same content above it.
+        var plain = UIButton.Configuration.plain()
+        plain.background.backgroundColor = .clear
+        plain.showsActivityIndicator = loading
+        prominentForeground = makeConfiguration(content, in: plain, foreground: foreground,
+                                                iconColor: iconColor, fixedForeground: true)
+      }
     }
+    let usesOverlay = prominentForeground != nil
+    let button = makeConfiguration(content, in: config, foreground: usesOverlay ? .clear : foreground,
+                                   iconColor: usesOverlay ? nil : iconColor, fixedForeground: usesOverlay)
+    return (button, prominentForeground)
+  }
+
+  /// The same title and image metrics are used for both configurations.
+  private func makeConfiguration(_ content: AdaptiveGlassCapsuleContent, in configuration: UIButton.Configuration,
+                                 foreground: UIColor, iconColor: UIColor?,
+                                 fixedForeground: Bool) -> UIButton.Configuration {
+    var config = configuration
     config.baseForegroundColor = foreground
+    if fixedForeground {
+      config.imageColorTransformer = UIConfigurationColorTransformer { _ in iconColor ?? foreground }
+      let foregroundTransformer = UIConfigurationColorTransformer { _ in foreground }
+      config.activityIndicatorColorTransformer = foregroundTransformer
+      config.indicatorColorTransformer = foregroundTransformer
+    }
     config.imagePadding = 8
     config.imagePlacement = .leading
     // A capsule narrower than its title ends it with an ellipsis instead of
@@ -289,6 +316,7 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     if let title = content.title {
       var attributes = AttributeContainer()
       attributes.font = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
+      if fixedForeground { attributes.foregroundColor = foreground }
       var text = AttributedString(title, attributes: attributes)
       if let detail = content.detail {
         // A quieter run on the same line, such as a state or current choice.
@@ -300,7 +328,7 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       config.attributedTitle = text
     }
     if let symbolConfiguration = content.symbolConfiguration {
-      let image = content.image
+      let image = fixedForeground ? content.image?.withRenderingMode(.alwaysTemplate) : content.image
       config.preferredSymbolConfigurationForImage = symbolConfiguration
       config.image = iconColor.flatMap { image?.withTintColor($0, renderingMode: .alwaysOriginal) } ?? image
     } else if let drawn = content.image {
@@ -338,9 +366,10 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       let iconColorValue = item["iconColor"] as? NSNumber
       guard configurationChanged || iconColorValue != iconColorValues[index] else { continue }
       iconColorValues[index] = iconColorValue
-      let config = makeConfiguration(contents[index], foreground: foreground,
-                                     iconColor: Self.color(iconColorValue))
-      button.configuration = config
+      let (configuration, prominentForeground) = makeConfigurations(contents[index], foreground: foreground,
+                                                                   iconColor: Self.color(iconColorValue))
+      button.configuration = configuration
+      button.setProminentForeground(prominentForeground)
     }
     updateVisibility()
   }
@@ -416,7 +445,7 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
     for button in buttons {
       let enabled = (button as? AdaptiveGlassMenuButton)?.canOpenMenu
         ?? (button.tapEnabled || button.longPressEnabled)
-      button.isEnabled = canInteract && !loading && enabled
+      button.isEnabled = canInteract && (button.isProminentLoading || (!loading && enabled))
       button.longPressRecognizer?.isEnabled = canInteract && !loading && button.longPressEnabled
     }
   }
@@ -568,6 +597,65 @@ private class AdaptiveGlassCapsuleButton: UIButton {
   var pressCancelled = false
   var longPressRecognizer: UILongPressGestureRecognizer?
   var onAccessibilityActivate: ((Bool) -> Bool)?
+  private var prominentForeground: UIButton?
+  // A loading button keeps its prominent material, while input and
+  // accessibility still treat it as disabled.
+  var isProminentLoading: Bool { prominentForeground?.configuration?.showsActivityIndicator == true }
+
+  func setProminentForeground(_ configuration: UIButton.Configuration?) {
+    guard let configuration else {
+      guard let prominentForeground else { return }
+      prominentForeground.removeFromSuperview()
+      self.prominentForeground = nil
+      titleLabel?.alpha = 1
+      imageView?.alpha = 1
+      invalidateIntrinsicContentSize()
+      return
+    }
+    if let prominentForeground {
+      prominentForeground.configuration = configuration
+    } else {
+      let foreground = UIButton(configuration: configuration)
+      foreground.frame = bounds
+      foreground.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      foreground.semanticContentAttribute = semanticContentAttribute
+      foreground.isUserInteractionEnabled = false
+      foreground.isAccessibilityElement = false
+      foreground.accessibilityElementsHidden = true
+      foreground.titleLabel?.numberOfLines = 1
+      foreground.titleLabel?.adjustsFontSizeToFitWidth = false
+      addSubview(foreground)
+      prominentForeground = foreground
+    }
+    invalidateIntrinsicContentSize()
+    setNeedsLayout()
+  }
+
+  override var intrinsicContentSize: CGSize {
+    // Only the overlay contains a spinner. Measure its content while loading.
+    if isProminentLoading, let prominentForeground { return prominentForeground.intrinsicContentSize }
+    return super.intrinsicContentSize
+  }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    if let prominentForeground {
+      // Keep the native content in its layout to preserve intrinsic size.
+      titleLabel?.alpha = 0
+      imageView?.alpha = 0
+      bringSubviewToFront(prominentForeground)
+    }
+  }
+
+  override var accessibilityTraits: UIAccessibilityTraits {
+    get { isProminentLoading ? super.accessibilityTraits.union(.notEnabled) : super.accessibilityTraits }
+    set { super.accessibilityTraits = newValue }
+  }
+
+  override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+    !isProminentLoading && super.beginTracking(touch, with: event)
+  }
+
   override func accessibilityActivate() -> Bool {
     onAccessibilityActivate?(!tapEnabled && longPressEnabled) ?? false
   }

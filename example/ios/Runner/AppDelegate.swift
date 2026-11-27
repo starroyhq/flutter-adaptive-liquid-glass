@@ -69,8 +69,7 @@ import UIKit
     }
   }
 
-  /// Gives the example's actual plugin-owned buttons a UIKit menu so the
-  /// system transition can be verified before the public menu API changes.
+  /// Drives UIKit menu and pressed states on the example's actual buttons.
   private func registerGlassButtonProbe(_ engineBridge: FlutterImplicitEngineBridge) {
     guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "GlassExampleButtonProbe") else {
       return
@@ -79,7 +78,7 @@ import UIKit
       name: "glass_example/button_probe", binaryMessenger: registrar.messenger())
     buttonProbeChannel = channel
     channel.setMethodCallHandler { [weak channel] call, result in
-      guard call.method == "attachMenus" else {
+      guard ["attachMenus", "highlightContrastSample"].contains(call.method) else {
         result(FlutterMethodNotImplemented)
         return
       }
@@ -93,6 +92,19 @@ import UIKit
           if let button = find(id, in: child) { return button }
         }
         return nil
+      }
+      if call.method == "highlightContrastSample" {
+        guard let button = find("contrast-highlighted", in: view),
+              button.window != nil, button.isEnabled else {
+          result(false)
+          return
+        }
+        // Hold UIKit's pressed state for the screenshot without scheduling
+        // a synthetic gesture or firing the button's action.
+        button.isHighlighted = true
+        button.layoutIfNeeded()
+        result(button.isHighlighted)
+        return
       }
       guard let regular = find("glass-probe-regular", in: view),
             let prominent = find("glass-probe-prominent", in: view),

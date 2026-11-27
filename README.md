@@ -9,6 +9,10 @@ imports use `flutter_adaptive_liquid_glass`, following Dart's
 [package naming rules](https://dart.dev/tools/pub/pubspec#name); hyphens are not
 valid in a pubspec package name.
 
+Version **0.9.1** applies the theme's foreground to prominent glass buttons
+on iOS. You can also set `foregroundColor` on an individual button. See the
+[0.9.1 release notes](doc/release-0.9.1.md).
+
 Version **0.9.0** uses UIKit's glass styles for standalone buttons, native
 menus, and grouped navigation bar actions. See the
 [0.9.0 release notes](doc/release-0.9.0.md).
@@ -112,7 +116,7 @@ Or add the version to your app's `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_adaptive_liquid_glass: ^0.9.0
+  flutter_adaptive_liquid_glass: ^0.9.1
 ```
 
 Requires Flutter 3.41.2 or later and Dart 3.11 or later. Supported platforms are
@@ -128,6 +132,13 @@ checks that pinned version and the current stable channel. The package has no
 production dependency besides the Flutter SDK: every native control, including
 the tab bar, the segmented control and icon buttons, is a package-owned UIKit
 bridge. It does not require a global toolchain upgrade.
+
+### Upgrading from 0.9.0
+
+Run `flutter pub upgrade flutter_adaptive_liquid_glass` and perform a full
+native rebuild. Existing prominent buttons pick up their theme's accent
+foreground after the rebuild. Use the optional `foregroundColor` to set a
+per-button foreground. See the [0.9.1 release notes](doc/release-0.9.1.md).
 
 ### Upgrading from 0.8.x
 
@@ -1118,7 +1129,7 @@ Released under the [MIT License](LICENSE). Attribution for adapted code is in
 
 The `Component checks` workflow runs for pull requests, pushes to `main` or
 `release/**`, tag pushes and manual dispatch. See the
-[CI guide](docs/development/ci.md) for the macOS job selection on pull requests.
+[CI guide](doc/development/ci.md) for the macOS job selection on pull requests.
 Its main jobs pin Flutter 3.41.9, enforce the root/example lockfiles, format and
 analyze both, and run both test suites. After quality passes, separate jobs build the
 example Debug APK (Java 17) and an arm64 iOS simulator application (macOS 26).

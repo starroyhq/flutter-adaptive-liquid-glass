@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart';
@@ -55,8 +56,13 @@ void main() {
     );
   });
 
-  Widget host(Widget child, {LiquidGlassThemeData? glass}) => MaterialApp(
+  Widget host(
+    Widget child, {
+    LiquidGlassThemeData? glass,
+    ColorScheme? scheme,
+  }) => MaterialApp(
     themeAnimationDuration: Duration.zero,
+    theme: scheme == null ? null : ThemeData(colorScheme: scheme),
     home: LiquidGlassTheme(
       data: glass ?? const LiquidGlassThemeData(mode: LiquidGlassMode.fallback),
       child: Scaffold(body: Center(child: child)),
@@ -74,6 +80,21 @@ void main() {
         ),
       )
       .color;
+
+  Color? labelColor(WidgetTester tester, String label) =>
+      DefaultTextStyle.of(tester.element(find.text(label))).style.color;
+
+  const lightFill = Color(0xfff5f5f7);
+  const darkFill = Color(0xff241b3d);
+  const explicit = Color(0xff223c51);
+  ColorScheme scheme(Brightness brightness, bool light) =>
+      ColorScheme.fromSeed(
+        seedColor: darkFill,
+        brightness: brightness,
+      ).copyWith(
+        primary: light ? lightFill : darkFill,
+        onPrimary: light ? darkFill : lightFill,
+      );
 
   group('fallback', () {
     testWidgets('a disabled prominent button gives up its accent fill', (
@@ -127,6 +148,71 @@ void main() {
             .color,
         accent.onSurface,
       );
+    });
+
+    testWidgets('a foreground override applies while pressed or loading', (
+      tester,
+    ) async {
+      final colors = scheme(Brightness.dark, true);
+      await tester.pumpWidget(
+        host(
+          scheme: colors,
+          glass: const LiquidGlassThemeData(
+            mode: LiquidGlassMode.fallback,
+            colors: LiquidGlassColors(onAccent: Color(0xff7b2254)),
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LiquidGlassButton(
+                label: 'Send',
+                prominent: true,
+                foregroundColor: explicit,
+                onPressed: () {},
+              ),
+              LiquidGlassButton.icon(
+                icon: Icons.arrow_upward,
+                semanticLabel: 'Send icon',
+                prominent: true,
+                foregroundColor: explicit,
+                onPressed: () {},
+              ),
+              const LiquidGlassButton(
+                label: 'Loading',
+                prominent: true,
+                foregroundColor: explicit,
+                loading: true,
+              ),
+              const LiquidGlassButton(
+                label: 'Disabled',
+                prominent: true,
+                foregroundColor: explicit,
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(labelColor(tester, 'Send'), explicit);
+      expect(
+        IconTheme.of(tester.element(find.byIcon(Icons.arrow_upward))).color,
+        explicit,
+      );
+      expect(
+        tester
+            .widget<CircularProgressIndicator>(
+              find.byType(CircularProgressIndicator),
+            )
+            .color,
+        explicit,
+      );
+      expect(labelColor(tester, 'Disabled'), colors.onSurface);
+      final press = await tester.startGesture(
+        tester.getCenter(find.text('Send')),
+      );
+      await tester.pump(kPressTimeout);
+      expect(labelColor(tester, 'Send'), explicit);
+      await press.up();
+      await tester.pump();
     });
 
     testWidgets('it regains its emphasis once it can be pressed', (
@@ -215,5 +301,64 @@ void main() {
       },
       variant: TargetPlatformVariant.only(TargetPlatform.iOS),
     );
+
+    for (final brightness in Brightness.values) {
+      for (final light in [true, false]) {
+        testWidgets('${brightness.name} appearance resolves onPrimary for a '
+            '${light ? 'bright' : 'dark'} fill', (tester) async {
+          final colors = scheme(brightness, light);
+          await tester.pumpWidget(
+            host(
+              glass: const _NativeTheme(),
+              scheme: colors,
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  LiquidGlassButton(
+                    label: 'Send',
+                    prominent: true,
+                    onPressed: () {},
+                  ),
+                  LiquidGlassButton.icon(
+                    icon: Icons.arrow_upward,
+                    sfSymbol: 'arrow.up',
+                    semanticLabel: 'Send icon',
+                    prominent: true,
+                    onPressed: () {},
+                  ),
+                  const LiquidGlassButton(
+                    label: 'Loading',
+                    prominent: true,
+                    loading: true,
+                  ),
+                  const LiquidGlassButton(
+                    label: 'Disabled',
+                    prominent: true,
+                    foregroundColor: explicit,
+                  ),
+                ],
+              ),
+            ),
+          );
+          await tester.pump();
+          expect(created, hasLength(4));
+          final byLabel = {
+            for (final params in created)
+              ((params['items'] as List).single as Map)['label']: params,
+          };
+          for (final label in ['Send', 'Send icon', 'Loading']) {
+            expect(byLabel[label]!['prominent'], isTrue);
+            expect(byLabel[label]!['tint'], colors.primary.toARGB32());
+            expect(byLabel[label]!['foreground'], colors.onPrimary.toARGB32());
+          }
+          expect(byLabel['Loading']!['loading'], isTrue);
+          expect(byLabel['Disabled']!['prominent'], isFalse);
+          expect(
+            byLabel['Disabled']!['foreground'],
+            colors.onSurface.toARGB32(),
+          );
+        }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+      }
+    }
   });
 }

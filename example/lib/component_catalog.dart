@@ -9,6 +9,7 @@ import 'native_layout_probe.dart';
 import 'native_menu_probe.dart';
 import 'native_navigation_probe.dart';
 import 'native_rtl_probe.dart';
+import 'prominent_button_contrast_probe.dart';
 
 /// Independent synthetic data only. No account, network or application services.
 class ComponentCatalogApp extends StatefulWidget {
@@ -169,6 +170,14 @@ class _ComponentCatalogAppState extends State<ComponentCatalogApp> {
                 ),
               ),
               child: const Text('Open glass button probe'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const ProminentButtonContrastProbe(),
+                ),
+              ),
+              child: const Text('Open prominent contrast probe'),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).push(

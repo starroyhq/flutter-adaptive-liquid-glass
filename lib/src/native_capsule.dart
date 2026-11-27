@@ -73,6 +73,7 @@ class NativeCapsule extends StatefulWidget {
     required this.items,
     this.grouped = false,
     this.prominent = false,
+    this.foregroundColor,
     this.loading = false,
     this.standaloneIcon = false,
     this.menu,
@@ -81,6 +82,7 @@ class NativeCapsule extends StatefulWidget {
        assert(menu == null || (!grouped && items.length == 1 && !loading));
   final List<NativeCapsuleItem> items;
   final bool grouped, prominent, loading;
+  final Color? foregroundColor;
   final NativeCapsuleMenu? menu;
 
   /// A single icon-only button, with or without a long press, drawn as the
@@ -360,9 +362,10 @@ class _NativeCapsuleState extends State<NativeCapsule>
       'prominent': widget.prominent,
       'loading': widget.loading,
       'foreground':
-          (widget.prominent
-                  ? glassColors.onAccent ?? colors.onPrimary
-                  : glassColors.foreground ?? colors.onSurface)
+          (widget.foregroundColor ??
+                  (widget.prominent
+                      ? glassColors.onAccent ?? colors.onPrimary
+                      : glassColors.foreground ?? colors.onSurface))
               .toARGB32(),
       'tint': widget.prominent
           ? (glassColors.accent ?? colors.primary).toARGB32()

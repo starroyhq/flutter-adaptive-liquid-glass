@@ -10,9 +10,12 @@ import 'native_menu_probe.dart';
 import 'native_navigation_probe.dart';
 import 'native_rtl_probe.dart';
 import 'new_controls_example.dart';
+import 'prominent_button_contrast_probe.dart';
 
 void main() => runApp(
-  const bool.fromEnvironment('GLASS_NATIVE_NAVIGATION_PROBE')
+  const bool.fromEnvironment('GLASS_PROMINENT_CONTRAST_PROBE')
+      ? const MaterialApp(home: ProminentButtonContrastProbe())
+      : const bool.fromEnvironment('GLASS_NATIVE_NAVIGATION_PROBE')
       ? const MaterialApp(home: NativeNavigationProbePage())
       : const bool.fromEnvironment('GLASS_NATIVE_MENU_PROBE')
       ? const MaterialApp(home: NativeMenuProbePage())

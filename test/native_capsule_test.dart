@@ -464,6 +464,7 @@ void main() {
     VoidCallback? onLongPress,
     bool prominent = false,
     bool loading = false,
+    Color? foregroundColor,
     Color? iconColor,
     String? label,
   }) => MaterialApp(
@@ -478,6 +479,7 @@ void main() {
             label: label,
             prominent: prominent,
             loading: loading,
+            foregroundColor: foregroundColor,
             iconColor: iconColor,
             onPressed: onPressed,
             onLongPress: onLongPress,
@@ -616,6 +618,40 @@ void main() {
       expect(epoch(view), greaterThan(readyEpoch));
       await event('longPressed', 'button', eventEpoch: readyEpoch, sequence: 6);
       expect(holds, 1);
+      expect(params.keys, [view]);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
+  testWidgets(
+    'the prominent foreground and its loading state update in place',
+    (tester) async {
+      const foreground = Color(0xff223c51);
+      void press() {}
+      await tester.pumpWidget(lone(prominent: true, onPressed: press));
+      await tester.pumpAndSettle();
+      final view = id;
+      final colors = scheme(tester);
+      expect(params[view]!['foreground'], colors.onPrimary.toARGB32());
+
+      await tester.pumpWidget(
+        lone(
+          prominent: true,
+          loading: true,
+          foregroundColor: foreground,
+          onPressed: press,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(updates(view).last['foreground'], foreground.toARGB32());
+      expect(updates(view).last['loading'], isTrue);
+
+      await tester.pumpWidget(
+        lone(prominent: true, foregroundColor: foreground),
+      );
+      await tester.pumpAndSettle();
+      expect(updates(view).last['foreground'], colors.onSurface.toARGB32());
+      expect(updates(view).last['prominent'], isFalse);
       expect(params.keys, [view]);
     },
     variant: TargetPlatformVariant.only(TargetPlatform.iOS),

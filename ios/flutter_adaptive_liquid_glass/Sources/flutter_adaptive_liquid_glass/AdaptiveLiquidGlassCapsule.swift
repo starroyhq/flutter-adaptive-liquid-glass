@@ -270,15 +270,31 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   private func makeConfiguration(_ content: AdaptiveGlassCapsuleContent, foreground: UIColor,
                                  iconColor: UIColor?) -> UIButton.Configuration {
     var config: UIButton.Configuration
+    let prominentGlass: Bool
     if !grouped, #available(iOS 26.0, *) {
+      prominentGlass = prominent
       config = prominent ? .prominentGlass() : .glass()
       config.baseBackgroundColor = Self.color(tintValue)
       config.showsActivityIndicator = loading
     } else {
+      prominentGlass = false
       config = .plain()
       config.background.backgroundColor = .clear
     }
     config.baseForegroundColor = foreground
+    if prominentGlass {
+      // UIKit may replace the base color when resolving a prominent button's
+      // state. Keep the resolved Dart color on each foreground element.
+      config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+        var attributes = incoming
+        attributes.foregroundColor = foreground
+        return attributes
+      }
+      config.imageColorTransformer = UIConfigurationColorTransformer { _ in iconColor ?? foreground }
+      let foregroundTransformer = UIConfigurationColorTransformer { _ in foreground }
+      config.activityIndicatorColorTransformer = foregroundTransformer
+      config.indicatorColorTransformer = foregroundTransformer
+    }
     config.imagePadding = 8
     config.imagePlacement = .leading
     // A capsule narrower than its title ends it with an ellipsis instead of
@@ -300,7 +316,7 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       config.attributedTitle = text
     }
     if let symbolConfiguration = content.symbolConfiguration {
-      let image = content.image
+      let image = prominentGlass ? content.image?.withRenderingMode(.alwaysTemplate) : content.image
       config.preferredSymbolConfigurationForImage = symbolConfiguration
       config.image = iconColor.flatMap { image?.withTintColor($0, renderingMode: .alwaysOriginal) } ?? image
     } else if let drawn = content.image {

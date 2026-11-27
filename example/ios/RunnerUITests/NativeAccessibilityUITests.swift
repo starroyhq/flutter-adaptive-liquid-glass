@@ -1,3 +1,4 @@
+import CoreGraphics
 import XCTest
 
 final class NativeAccessibilityUITests: XCTestCase {
@@ -445,6 +446,86 @@ final class NativeAccessibilityUITests: XCTestCase {
       expectText("UIKit menu: \(title)")
       expectText("Button presses: 3")
     }
+  }
+
+  func testProminentGlassForegroundContrast() throws {
+    openCatalogSearchEntry("Open prominent contrast probe")
+    expectText("Contrast renderer: native")
+
+    let title = app.buttons["contrast-title"]
+    let symbol = app.buttons["contrast-symbol"]
+    let bitmap = app.buttons["contrast-bitmap"]
+    let highlighted = app.buttons["contrast-highlighted"]
+    let loading = app.buttons["contrast-loading"]
+    let disabled = app.buttons["contrast-disabled"]
+    let custom = app.buttons["contrast-custom"]
+
+    for lightFill in [true, false] {
+      expectText(lightFill ? "Light fill #F5F5F7 · Dark theme" : "Dark fill #26376A · Light theme")
+      expectTappable(["title": title, "SF Symbol": symbol, "bitmap": bitmap,
+                      "highlighted": highlighted, "explicit foreground": custom])
+      for button in [loading, disabled] {
+        XCTAssertTrue(button.waitForExistence(timeout: 10))
+        XCTAssertFalse(button.isEnabled)
+        tapCenter(of: button)
+      }
+      expectText("Button presses: 0")
+
+      app.buttons["Highlight sample"].tap()
+      expectText("Press state: highlighted")
+      let screenshot = XCUIScreen.main.screenshot()
+      let attachment = XCTAttachment(screenshot: screenshot)
+      attachment.name = lightFill ? "prominent-contrast-light-fill" : "prominent-contrast-dark-fill"
+      attachment.lifetime = .keepAlways
+      add(attachment)
+
+      let image = try XCTUnwrap(screenshot.image.cgImage)
+      for button in [title, symbol, bitmap, highlighted] {
+        try assertProminentContrast(in: image, frame: button.frame,
+                                    name: button.identifier, lightFill: lightFill)
+      }
+      if lightFill {
+        app.buttons["Switch background"].tap()
+        expectText("Press state: normal")
+      }
+    }
+    title.tap()
+    expectText("Button presses: 1")
+  }
+
+  /// Checks broad luminance bands inside the button; the exact pixels depend
+  /// on the system's glass treatment, antialiasing, and display scale.
+  private func assertProminentContrast(in image: CGImage, frame: CGRect,
+                                       name: String, lightFill: Bool) throws {
+    let viewport = app.frame
+    let scaleX = CGFloat(image.width) / viewport.width
+    let scaleY = CGFloat(image.height) / viewport.height
+    let inner = frame.insetBy(dx: frame.width * 0.22, dy: frame.height * 0.22)
+    let area = CGRect(x: (inner.minX - viewport.minX) * scaleX,
+                      y: (inner.minY - viewport.minY) * scaleY,
+                      width: inner.width * scaleX, height: inner.height * scaleY)
+    let crop = try XCTUnwrap(image.cropping(to: area.integral), name)
+    let colorSpace = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
+    let count = crop.width * crop.height
+    var pixels = [UInt8](repeating: 0, count: count * 4)
+    try pixels.withUnsafeMutableBytes { buffer in
+      let context = try XCTUnwrap(CGContext(
+        data: buffer.baseAddress, width: crop.width, height: crop.height,
+        bitsPerComponent: 8, bytesPerRow: crop.width * 4, space: colorSpace,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+      ))
+      context.draw(crop, in: CGRect(x: 0, y: 0, width: crop.width, height: crop.height))
+    }
+    var foreground = 0
+    var background = 0
+    for offset in stride(from: 0, to: pixels.count, by: 4) {
+      let luma = (54 * Int(pixels[offset]) + 183 * Int(pixels[offset + 1])
+                  + 19 * Int(pixels[offset + 2])) / 256
+      if lightFill ? luma <= 80 : luma >= 185 { foreground += 1 }
+      if lightFill ? luma >= 175 : luma <= 130 { background += 1 }
+    }
+    XCTAssertGreaterThan(foreground, count / 100, "\(name) foreground must contrast with its fill")
+    XCTAssertGreaterThan(background, count / 4, "\(name) must render the expected prominent fill")
   }
 
   func testDefaultGlassMenuSelectionAndCancellation() throws {

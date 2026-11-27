@@ -138,8 +138,8 @@ final class NativeAccessibilityUITests: XCTestCase {
     app.buttons["Restore custom color label"].tap()
     XCTAssertTrue(app.buttons["Sample color"].waitForExistence(timeout: 10))
     app.buttons["Sample color"].tap()
-    _ = try waitForPalette(title: "Sample palette")
-    closePalette(palette)
+    let restoredPalette = try waitForPalette(title: "Sample palette")
+    closePalette(restoredPalette)
     expectText("Color calls: 0")
   }
 
@@ -338,8 +338,14 @@ final class NativeAccessibilityUITests: XCTestCase {
 
     // The covered catalog tab bar takes taps again once the probe has left.
     app.buttons["Back"].tap()
-    XCTAssertTrue(waitUntilHittable(searchTab))
+    XCTAssertTrue(add.waitForNonExistence(timeout: 10), "The native controls probe must leave")
+    XCTAssertTrue(openProbe.waitForExistence(timeout: 10), "The catalog Search page must return")
+    // A route transition can return an empty accessibility snapshot. Check
+    // the restored page before asking XCTest for the tab's activation point.
+    XCTAssertTrue(searchTab.wait(for: \.isHittable, toEqual: true, timeout: 10),
+                  "The restored Search tab must take taps")
     app.buttons["Controls"].tap()
+    expectText("Surface and buttons")
     XCTAssertTrue(openProbe.waitForNonExistence(timeout: 10))
     revealCatalogSearchEntry("Open native controls probe")
   }
@@ -920,13 +926,19 @@ final class NativeAccessibilityUITests: XCTestCase {
     return palette
   }
 
-  private func closePalette(_ palette: XCUIElement) {
+  private func closePalette(_ palette: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
     let close = palette.buttons.matching(
       NSPredicate(format: "label IN %@", ["close", "Close", "Done", "关闭", "關閉"])
     ).firstMatch
-    XCTAssertTrue(close.waitForExistence(timeout: 10))
-    close.tap()
-    XCTAssertTrue(palette.waitForNonExistence(timeout: 10))
+    XCTAssertTrue(close.waitForExistence(timeout: 10), file: file, line: line)
+    // Match Close in the active remote picker, then send a physical tap
+    // once XCTest reports that the button can receive it.
+    XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: 10),
+                  "The system palette close button must take taps", file: file, line: line)
+    tapCenter(of: close)
+    let dismissed = palette.waitForNonExistence(timeout: 10)
+    if !dismissed { attachHierarchy("System color palette after tapping Close") }
+    XCTAssertTrue(dismissed, "The system palette must dismiss after one tap", file: file, line: line)
   }
 
   private func expectText(_ text: String, file: StaticString = #filePath, line: UInt = #line) {

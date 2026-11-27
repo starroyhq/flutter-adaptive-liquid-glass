@@ -1129,7 +1129,7 @@ Released under the [MIT License](LICENSE). Attribution for adapted code is in
 
 The `Component checks` workflow runs for pull requests, pushes to `main` or
 `release/**`, tag pushes and manual dispatch. See the
-[CI guide](docs/development/ci.md) for the macOS job selection on pull requests.
+[CI guide](doc/development/ci.md) for the macOS job selection on pull requests.
 Its main jobs pin Flutter 3.41.9, enforce the root/example lockfiles, format and
 analyze both, and run both test suites. After quality passes, separate jobs build the
 example Debug APK (Java 17) and an arm64 iOS simulator application (macOS 26).

@@ -459,6 +459,8 @@ final class NativeAccessibilityUITests: XCTestCase {
     let loading = app.buttons["contrast-loading"]
     let disabled = app.buttons["contrast-disabled"]
     let custom = app.buttons["contrast-custom"]
+    let contrastButtons = [title, symbol, bitmap, highlighted, custom]
+    var samples: [(image: CGImage, frames: [(name: String, frame: CGRect)], lightFill: Bool)] = []
 
     for lightFill in [true, false] {
       expectText(lightFill ? "Light fill #F5F5F7 · Dark theme" : "Dark fill #26376A · Light theme")
@@ -479,11 +481,11 @@ final class NativeAccessibilityUITests: XCTestCase {
       attachment.lifetime = .keepAlways
       add(attachment)
 
-      let image = try XCTUnwrap(screenshot.image.cgImage)
-      for button in [title, symbol, bitmap, highlighted] {
-        try assertProminentContrast(in: image, frame: button.frame,
-                                    name: button.identifier, lightFill: lightFill)
-      }
+      samples.append((
+        image: try XCTUnwrap(screenshot.image.cgImage),
+        frames: contrastButtons.map { (name: $0.identifier, frame: $0.frame) },
+        lightFill: lightFill
+      ))
       if lightFill {
         app.buttons["Switch background"].tap()
         expectText("Press state: normal")
@@ -491,6 +493,13 @@ final class NativeAccessibilityUITests: XCTestCase {
     }
     title.tap()
     expectText("Button presses: 1")
+    // Keep both artifacts even when a contrast assertion stops the test.
+    for sample in samples {
+      for button in sample.frames {
+        try assertProminentContrast(in: sample.image, frame: button.frame,
+                                    name: button.name, lightFill: sample.lightFill)
+      }
+    }
   }
 
   /// Checks broad luminance bands inside the button; the exact pixels depend

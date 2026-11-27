@@ -97,6 +97,58 @@ void main() {
       );
 
   group('fallback', () {
+    for (final brightness in Brightness.values) {
+      testWidgets(
+        'icon-only loading keeps the labeled spinner size in ${brightness.name}',
+        (tester) async {
+          const sizes = [16.0, 22.0, 30.0];
+          const titleKey = ValueKey('loading-title');
+          var presses = 0;
+          await tester.pumpWidget(
+            host(
+              scheme: scheme(brightness, brightness == Brightness.dark),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const LiquidGlassButton(
+                    key: titleKey,
+                    label: 'Sending',
+                    prominent: true,
+                    loading: true,
+                  ),
+                  for (final size in sizes)
+                    LiquidGlassButton(
+                      key: ValueKey(size),
+                      icon: Icons.arrow_upward,
+                      semanticLabel: 'Sending',
+                      iconSize: size,
+                      prominent: true,
+                      loading: true,
+                      onPressed: () => presses++,
+                    ),
+                ],
+              ),
+            ),
+          );
+          Finder progress(Key key) => find.descendant(
+            of: find.byKey(key),
+            matching: find.byType(CircularProgressIndicator),
+          );
+          final spinnerSize = tester.getSize(progress(titleKey));
+          expect(spinnerSize, const Size.square(18));
+          for (final size in sizes) {
+            final button = find.byKey(ValueKey(size));
+            final spinner = progress(ValueKey(size));
+            expect(tester.getSize(spinner), spinnerSize);
+            expect(tester.getCenter(spinner), tester.getCenter(button));
+            expect(tester.getSize(button), const Size.square(48));
+            await tester.tap(button, warnIfMissed: false);
+          }
+          expect(presses, 0);
+        },
+      );
+    }
+
     testWidgets('a disabled prominent button gives up its accent fill', (
       tester,
     ) async {

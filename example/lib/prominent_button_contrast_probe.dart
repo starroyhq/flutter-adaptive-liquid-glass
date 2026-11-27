@@ -15,7 +15,9 @@ class ProminentButtonContrastProbe extends StatefulWidget {
 class _ProminentButtonContrastProbeState
     extends State<ProminentButtonContrastProbe> {
   static const _channel = MethodChannel('glass_example/button_probe');
+  static const _spinnerSizes = [16, 22, 30];
   bool _lightFill = true;
+  bool _fallback = false;
   bool _highlighted = false;
   int _presses = 0;
 
@@ -48,7 +50,9 @@ class _ProminentButtonContrastProbeState
     return Theme(
       data: ThemeData(colorScheme: scheme),
       child: LiquidGlassTheme(
-        data: const LiquidGlassThemeData(),
+        data: LiquidGlassThemeData(
+          mode: _fallback ? LiquidGlassMode.fallback : LiquidGlassMode.auto,
+        ),
         child: Builder(
           builder: (context) => Scaffold(
             appBar: AppBar(title: const Text('Prominent button contrast')),
@@ -120,6 +124,23 @@ class _ProminentButtonContrastProbeState
                     ],
                   ),
                   const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    children: [
+                      for (final size in _spinnerSizes)
+                        LiquidGlassButton(
+                          id: 'contrast-loading-$size',
+                          icon: Icons.arrow_upward,
+                          sfSymbol: 'arrow.up',
+                          iconSize: size.toDouble(),
+                          semanticLabel: 'Sending ($size-point icon)',
+                          prominent: true,
+                          loading: true,
+                          onPressed: _press,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
                   Align(
                     alignment: AlignmentDirectional.centerStart,
                     child: LiquidGlassButton(
@@ -156,6 +177,20 @@ class _ProminentButtonContrastProbeState
                         _highlighted = false;
                       }),
                       child: const Text('Switch background'),
+                    ),
+                  ),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton(
+                      onPressed: () => setState(() {
+                        _fallback = !_fallback;
+                        _highlighted = false;
+                      }),
+                      child: Text(
+                        _fallback
+                            ? 'Use platform renderer'
+                            : 'Use Flutter fallback',
+                      ),
                     ),
                   ),
                 ],

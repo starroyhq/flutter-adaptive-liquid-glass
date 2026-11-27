@@ -1,3 +1,8 @@
+## 0.9.2
+
+- On iOS, loading prominent icon buttons use a centered system activity
+  indicator with padding consistent across icon sizes.
+
 ## 0.9.1
 
 - Prominent glass buttons on iOS use the Flutter theme's accent foreground

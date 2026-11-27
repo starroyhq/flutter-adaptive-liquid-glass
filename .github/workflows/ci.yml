@@ -2,6 +2,11 @@ name: Component checks
 
 on:
   push:
+    branches:
+      - main
+      - 'release/**'
+    tags:
+      - '**'
   pull_request:
   workflow_dispatch:
 
@@ -9,10 +14,39 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  macos-scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      required: ${{ steps.scope.outputs.required }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 2
+      - id: scope
+        name: Check whether the PR can affect iOS
+        shell: bash
+        run: |
+          required=true
+          if [[ "$GITHUB_EVENT_NAME" == pull_request &&
+                "$GITHUB_HEAD_REF" != release/* &&
+                "$GITHUB_BASE_REF" != release/* ]]; then
+            # Compare the checked-out PR merge commit with its base parent.
+            paths=$(git diff --name-only HEAD^1 HEAD -- \
+              ios/ example/ios/ lib/ example/lib/ example/assets/ example/.metadata \
+              pubspec.yaml pubspec.lock example/pubspec.yaml example/pubspec.lock \
+              .github/workflows/ci.yml .github/scripts/)
+            if [[ -z "$paths" ]]; then
+              required=false
+            fi
+          fi
+          echo "required=$required" >> "$GITHUB_OUTPUT"
+
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -62,7 +96,8 @@ jobs:
           retention-days: 14
 
   ios-simulator:
-    needs: quality
+    needs: [quality, macos-scope]
+    if: needs.macos-scope.outputs.required == 'true'
     runs-on: macos-26
     timeout-minutes: 45
     steps:
@@ -101,7 +136,8 @@ jobs:
           retention-days: 14
 
   native-interaction:
-    needs: quality
+    needs: [quality, macos-scope]
+    if: needs.macos-scope.outputs.required == 'true'
     # The public label for the macos-26-arm64 image is macos-26; Xcode 27 and
     # its iOS 27 simulators are on the separate xcode-27 image.
     # https://github.com/actions/runner-images#available-images
@@ -283,7 +319,8 @@ jobs:
   # on the macos-26 image; it has its own image, labelled by Xcode version.
   # https://github.com/actions/runner-images#available-images
   ios-simulator-stable:
-    needs: quality-stable
+    needs: [quality-stable, macos-scope]
+    if: needs.macos-scope.outputs.required == 'true'
     runs-on: xcode-27
     timeout-minutes: 45
     steps:

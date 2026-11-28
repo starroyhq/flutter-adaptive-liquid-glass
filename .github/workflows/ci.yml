@@ -144,6 +144,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        ios: ['26', '27']
+        suite: [controls, palette]
         include:
           - ios: '26'
             runner: macos-26
@@ -151,11 +153,13 @@ jobs:
           - ios: '27'
             runner: xcode-27
             xcode: /Applications/Xcode_27.1.app
-    name: native-interaction (iOS ${{ matrix.ios }})
+    name: native-interaction (iOS ${{ matrix.ios }}, ${{ matrix.suite }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    # Leave room for the build and up to two 10-minute boots and 25-minute suites.
+    timeout-minutes: 80
     env:
       GLASS_IOS_MAJOR: ${{ matrix.ios }}
+      GLASS_NATIVE_SUITE: ${{ matrix.suite }}
     steps:
       - uses: actions/checkout@v4
       - name: Require an arm64 runner
@@ -176,116 +180,24 @@ jobs:
         working-directory: example
       - run: pod install --deployment
         working-directory: example/ios
-      - name: Create and verify a dedicated iOS ${{ matrix.ios }} simulator
-        id: simulator
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import plistlib
-          import subprocess
-          from pathlib import Path
-
-          def simctl(*args):
-              return subprocess.check_output(['xcrun', 'simctl', *args], text=True)
-
-          major = os.environ['GLASS_IOS_MAJOR']
-          device_type = 'com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro'
-          # Some point releases support only new device types (iOS 27.1 runs
-          # only the iPhone Duo), so require a runtime that runs iPhone 17 Pro.
-          candidates = [
-              runtime for runtime in json.loads(simctl('list', 'runtimes', '--json'))['runtimes']
-              if runtime.get('isAvailable')
-              and runtime['identifier'].startswith('com.apple.CoreSimulator.SimRuntime.iOS-')
-              and runtime['version'].split('.')[0] == major
-              and any(item['identifier'] == device_type for item in runtime.get('supportedDeviceTypes', []))
-          ]
-          if not candidates:
-              raise SystemExit(f'No available iOS {major} runtime runs iPhone 17 Pro; do not substitute another version or download a runtime.')
-          runtime = max(candidates, key=lambda item: tuple(map(int, item['version'].split('.'))))
-          runtime_id = runtime['identifier']
-          name = 'Liquid Glass Native Interaction ' + os.environ['GITHUB_RUN_ID']
-          device_id = simctl('create', name, device_type, runtime_id).strip()
-          # Save ownership before booting so the always-cleanup step also runs
-          # if boot or runtime verification fails.
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write(f'device_id={device_id}\n')
-          subprocess.run(['xcrun', 'simctl', 'boot', device_id], check=True)
-          subprocess.run(['xcrun', 'simctl', 'bootstatus', device_id, '-b'], check=True)
-          devices = json.loads(simctl('list', 'devices', '--json'))['devices']
-          device = next((item for item in devices.get(runtime_id, []) if item['udid'] == device_id), None)
-          if not device or device['state'] != 'Booted':
-              raise SystemExit(f'The dedicated device did not boot on the selected iOS {major} runtime.')
-          system_version = Path(runtime['runtimeRoot']) / 'System/Library/CoreServices/SystemVersion.plist'
-          with system_version.open('rb') as source:
-              version = plistlib.load(source)['ProductVersion']
-          if version.split('.')[0] != major:
-              raise SystemExit(f'Runtime verification failed: expected iOS {major}, found {version}.')
-          print(f'Native interaction destination: iPhone 17 Pro, iOS {version}, {device_id}')
-          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-              summary.write(f'Native interaction: dedicated iPhone 17 Pro simulator, iOS {version}, arm64.\n')
-          PY
-      - name: Test native slider and accessibility interaction
+      - name: Build native interaction tests
         run: >-
           xcodebuild -workspace Runner.xcworkspace -scheme NativeSliderAcceptance
           -configuration Debug -sdk iphonesimulator
-          -destination "platform=iOS Simulator,id=$GLASS_SIMULATOR_ID"
+          -destination 'generic/platform=iOS Simulator'
           -derivedDataPath ../build/ios-native-interaction
-          -resultBundlePath ../build/native-interaction.xcresult
-          -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1
-          -collect-test-diagnostics never
-          -only-testing:RunnerUITests/NativeAccessibilityUITests
-          -only-testing:RunnerUITests/NativeSliderUITests
-          ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO test
-        env:
-          GLASS_SIMULATOR_ID: ${{ steps.simulator.outputs.device_id }}
+          ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build-for-testing
         working-directory: example/ios
-      - name: Require palette cases that actually ran
-        # A case whose first system palette never appears is skipped as the
-        # known first-use limitation. The gate still fails if every palette
-        # case was skipped, so a palette that never appears cannot pass.
-        run: |
-          xcrun xcresulttool get test-results tests --path ../build/native-interaction.xcresult --format json > "$RUNNER_TEMP/tests.json"
-          python3 - "$RUNNER_TEMP/tests.json" <<'PY'
-          import json
-          import os
-          import sys
-
-          palette_cases = 8
-          skipped = []
-
-          def walk(node):
-              if node.get('nodeType') == 'Test Case' and node.get('result') == 'Skipped':
-                  skipped.append(node['name'])
-              for child in node.get('children', []):
-                  walk(child)
-
-          for node in json.load(open(sys.argv[1]))['testNodes']:
-              walk(node)
-          lines = [f'Skipped palette cases (first-use limitation): {len(skipped)} of {palette_cases}']
-          lines += [f'- {name}' for name in skipped]
-          print('\n'.join(lines))
-          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-              summary.write('\n'.join(lines) + '\n')
-          if len(skipped) >= palette_cases:
-              raise SystemExit('Every palette case was skipped; the system palette never appeared.')
-          PY
-        working-directory: example/ios
+      - name: Run native interaction tests
+        run: python3 .github/scripts/native-interaction.py
       - name: Preserve native test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ios-${{ matrix.ios }}-native-interaction-xcresult
-          path: example/build/native-interaction.xcresult
+          name: ios-${{ matrix.ios }}-${{ matrix.suite }}-native-interaction-xcresult
+          path: example/build/native-interaction/*.xcresult
           if-no-files-found: warn
           retention-days: 14
-      - name: Remove the dedicated simulator
-        if: ${{ always() && steps.simulator.outputs.device_id != '' }}
-        env:
-          GLASS_SIMULATOR_ID: ${{ steps.simulator.outputs.device_id }}
-        run: |
-          xcrun simctl shutdown "$GLASS_SIMULATOR_ID" || true
-          xcrun simctl delete "$GLASS_SIMULATOR_ID"
 
   # The jobs above pin the reference toolchain and build iOS through CocoaPods.
   # The *-stable jobs follow the current stable channel, where Flutter 3.44+

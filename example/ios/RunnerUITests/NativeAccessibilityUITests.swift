@@ -9,10 +9,19 @@ final class NativeAccessibilityUITests: XCTestCase {
     continueAfterFailure = false
     app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
     app.launch()
+    XCTAssertTrue(app.wait(for: .runningForeground, timeout: 30),
+                  "Native test fixture did not reach the foreground")
     let probe = app.buttons["Open accessibility probe"]
-    XCTAssertTrue(probe.waitForExistence(timeout: 30))
+    XCTAssertTrue(waitForStableFrame(probe), "Native test fixture did not load the catalog")
+    let renderer = app.staticTexts["Accessibility renderer: native"]
     probe.tap()
-    XCTAssertTrue(app.staticTexts["Accessibility renderer: native"].waitForExistence(timeout: 20))
+    if renderer.waitForExistence(timeout: 30) { return }
+    // A delayed or missed first tap can leave the app on the catalog. Retry
+    // navigation only while that source page is still visible.
+    if app.staticTexts["Surface and buttons"].exists && waitForStableFrame(probe) {
+      probe.tap()
+    }
+    XCTAssertTrue(renderer.waitForExistence(timeout: 30), "Native test fixture did not open the accessibility probe")
   }
 
   func testNativeLabelsUpdateWithoutExtraCallbacks() throws {
@@ -91,14 +100,15 @@ final class NativeAccessibilityUITests: XCTestCase {
   }
 
   func testCatalogColorPickerReopensAfterNativeTabRecreation() throws {
-    app.buttons["back"].tap()
+    returnToCatalog()
     let pickersTab = app.buttons["Pickers"]
-    XCTAssertTrue(pickersTab.waitForExistence(timeout: 10))
-    pickersTab.tap()
+    let controlsPage = app.staticTexts["Surface and buttons"]
+    tapSelection(pickersTab, from: controlsPage, to: "Date picker")
     try openCatalogColorPicker()
     closePalette(app.otherElements["UIColorPicker"])
-    app.buttons["Controls"].tap()
-    pickersTab.tap()
+    let controlsTab = app.buttons["Controls"]
+    tapSelection(controlsTab, from: app.buttons["Preview color"], to: "Surface and buttons")
+    tapSelection(pickersTab, from: controlsPage, to: "Date picker")
     try openCatalogColorPicker()
     closePalette(app.otherElements["UIColorPicker"])
   }
@@ -113,8 +123,7 @@ final class NativeAccessibilityUITests: XCTestCase {
 
     app.buttons["Sample color"].tap()
     _ = try waitForPalette(title: "Sample palette")
-    XCUIDevice.shared.press(.home)
-    app.activate()
+    backgroundAndReturn()
     XCTAssertTrue(palette.waitForNonExistence(timeout: 10))
     expectText("Color calls: 0")
     app.buttons["Sample color"].tap()
@@ -243,8 +252,7 @@ final class NativeAccessibilityUITests: XCTestCase {
 
     // Keep the child presented when cancellation starts. Dismissing only that
     // child must not be mistaken for completion of the owned palette's exit.
-    XCUIDevice.shared.press(.home)
-    app.activate()
+    backgroundAndReturn()
     XCTAssertTrue(app.staticTexts["Nested native cover"].waitForNonExistence(timeout: 10))
     XCTAssertTrue(palette.waitForNonExistence(timeout: 10))
     expectText("Color calls: 0")
@@ -323,8 +331,7 @@ final class NativeAccessibilityUITests: XCTestCase {
     expectText("Tab: 0")
 
     // The system segmented control.
-    app.buttons["Two"].tap()
-    expectText("Segment: 1")
+    tapSelection(app.buttons["Two"], from: app.staticTexts["Segment: 0"], to: "Segment: 1")
 
     // Standalone icon buttons carry their id and semantic label natively.
     let add = app.buttons["probe-add"]
@@ -339,8 +346,11 @@ final class NativeAccessibilityUITests: XCTestCase {
 
     // The covered catalog tab bar takes taps again once the probe has left.
     app.buttons["Back"].tap()
+    XCTAssertTrue(waitForStableFrame(searchTab))
     XCTAssertTrue(waitUntilHittable(searchTab))
-    app.buttons["Controls"].tap()
+    let controlsTab = app.buttons["Controls"]
+    XCTAssertTrue(waitUntilHittable(controlsTab))
+    tapSelection(controlsTab, from: openProbe, to: "Surface and buttons")
     XCTAssertTrue(openProbe.waitForNonExistence(timeout: 10))
     revealCatalogSearchEntry("Open native controls probe")
   }
@@ -882,7 +892,7 @@ final class NativeAccessibilityUITests: XCTestCase {
     let find = app.buttons["Find"]
     let day = app.buttons["Day"], week = app.buttons["Week"], month = app.buttons["Month"]
     for element in [alpha, beta, gamma, find, day, week, month] {
-      XCTAssertTrue(waitUntilHittable(element), element.description)
+      XCTAssertTrue(waitUntilHittable(element, timeout: 30), element.description)
     }
     attachFrames("r3-rtl-frames", [
       "Alpha": alpha, "Beta": beta, "Gamma": gamma, "Find": find,
@@ -898,8 +908,7 @@ final class NativeAccessibilityUITests: XCTestCase {
     XCTAssertGreaterThan(week.frame.midX, month.frame.midX)
 
     // Indexes stay logical: the leftmost tab is the last, the rightmost the first.
-    gamma.tap()
-    expectText("Tab: 2")
+    tapSelection(gamma, from: app.staticTexts["Tab: 0"], to: "Tab: 2")
     let tabs = [alpha, beta, gamma].sorted { $0.frame.midX < $1.frame.midX }
     tabs.last!.tap()
     expectText("Tab: 0")
@@ -919,7 +928,7 @@ final class NativeAccessibilityUITests: XCTestCase {
   @discardableResult
   private func openCatalogSearchEntry(_ title: String, file: StaticString = #filePath,
                                       line: UInt = #line) -> XCUIElement {
-    app.buttons["back"].tap()
+    returnToCatalog(file: file, line: line)
     let entry = revealCatalogSearchEntry(title, file: file, line: line)
     entry.tap()
     return entry
@@ -933,7 +942,7 @@ final class NativeAccessibilityUITests: XCTestCase {
   private func revealCatalogSearchEntry(_ title: String, file: StaticString = #filePath,
                                         line: UInt = #line) -> XCUIElement {
     let searchTab = app.buttons["Search"]
-    XCTAssertTrue(searchTab.waitForExistence(timeout: 10), file: file, line: line)
+    XCTAssertTrue(waitForStableFrame(searchTab), file: file, line: line)
     searchTab.tap()
     let entry = app.buttons[title]
     for _ in 0..<3 {
@@ -952,6 +961,26 @@ final class NativeAccessibilityUITests: XCTestCase {
     if !reachable { attachHierarchy("Catalog Search page without \(title)") }
     XCTAssertTrue(reachable, "\(title) must be reachable", file: file, line: line)
     return entry
+  }
+
+  private func returnToCatalog(file: StaticString = #filePath, line: UInt = #line) {
+    app.buttons["back"].tap()
+    let probe = app.staticTexts["Accessibility renderer: native"]
+    XCTAssertTrue(probe.waitForNonExistence(timeout: 30), file: file, line: line)
+  }
+
+  private func backgroundAndReturn(file: StaticString = #filePath, line: UInt = #line) {
+    XCUIDevice.shared.press(.home)
+    let backgrounded = NSPredicate { [app] _, _ in
+      let state = app.state
+      return state == .runningBackground || state == .runningBackgroundSuspended
+    }
+    let transition = XCTNSPredicateExpectation(predicate: backgrounded, object: nil)
+    XCTAssertEqual(XCTWaiter.wait(for: [transition], timeout: 30), .completed,
+                   "The app must enter the background before reactivation", file: file, line: line)
+    app.activate()
+    XCTAssertTrue(app.wait(for: .runningForeground, timeout: 30),
+                  "The app must return to the foreground", file: file, line: line)
   }
 
   /// A button found by its label, for native buttons whose identifier is the
@@ -1012,16 +1041,60 @@ final class NativeAccessibilityUITests: XCTestCase {
     return XCTWaiter.wait(for: [hittable], timeout: timeout) == .completed
   }
 
+  private func waitForStableFrame(_ element: XCUIElement) -> Bool {
+    guard element.waitForExistence(timeout: 30) else { return false }
+    // A platform view can be in the AX tree before UIKit has placed it. Do
+    // not ask XCTest for an activation point while the frame is still moving.
+    var previousFrame = CGRect.null
+    let settled = NSPredicate { _, _ in
+      let frame = element.frame
+      defer { previousFrame = frame }
+      return !frame.isEmpty && !frame.isInfinite && frame == previousFrame
+    }
+    // Allow two observations even when a hosted simulator takes a minute to
+    // return the first accessibility frame.
+    return XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: settled, object: nil)],
+                          timeout: 90) == .completed
+  }
+
+  /// Retries only an idempotent selection while the previous state is still visible.
+  private func tapSelection(_ element: XCUIElement, from previous: XCUIElement, to next: String,
+                            file: StaticString = #filePath, line: UInt = #line) {
+    XCTAssertTrue(waitForStableFrame(element), file: file, line: line)
+    element.tap()
+    if app.staticTexts[next].waitForExistence(timeout: 15) { return }
+    if previous.exists {
+      XCTAssertTrue(waitForStableFrame(element), file: file, line: line)
+      element.tap()
+    }
+    expectText(next, file: file, line: line)
+  }
+
   private func openCatalogColorPicker() throws {
     let well = app.buttons["Preview color"]
+    let appFrame = app.frame
+    let tab = app.buttons["Pickers"]
+    XCTAssertTrue(waitForStableFrame(tab), "The catalog tab bar must be laid out")
+    let tabFrame = tab.frame
+    // The tab bar overlays the scroll view. Use rendered geometry here because
+    // XCTest can fail the test while resolving .isHittable for the native well.
+    let viewport = CGRect(x: appFrame.minX, y: appFrame.minY, width: appFrame.width,
+                          height: tabFrame.minY - appFrame.minY)
+    XCTAssertFalse(viewport.isEmpty)
+    func isVisible(_ frame: CGRect) -> Bool {
+      !frame.isEmpty && !frame.isInfinite && viewport.contains(frame)
+    }
+    let visible = NSPredicate { _, _ in
+      well.exists && isVisible(well.frame)
+    }
     for _ in 0..<4 {
-      if well.exists && well.isHittable { break }
+      let shown = XCTNSPredicateExpectation(predicate: visible, object: nil)
+      if XCTWaiter.wait(for: [shown], timeout: 3) == .completed { break }
       app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.76))
         .press(forDuration: 0.05,
                thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.46)),
                withVelocity: .slow, thenHoldForDuration: 0.2)
     }
-    XCTAssertTrue(well.exists && well.isHittable)
     // Flutter's scroll/layout tickers do not participate in XCTest idleness.
     // Resolve one measured-center system tap after three stable AX frames.
     // The probe deliberately retains element.tap() as an independent control.
@@ -1029,22 +1102,24 @@ final class NativeAccessibilityUITests: XCTestCase {
     var stableSamples = 0
     var samples: [String] = []
     let settled = NSPredicate { _, _ in
-      let frame = well.frame
+      let frame = well.exists ? well.frame : .null
       samples.append("t=\(ProcessInfo.processInfo.systemUptime) frame=\(frame)")
-      let valid = !frame.isNull && !frame.isInfinite && !frame.isEmpty
-      stableSamples = valid && frame == previousFrame ? stableSamples + 1 : 0
+      stableSamples = isVisible(frame) && frame == previousFrame ? stableSamples + 1 : 0
       previousFrame = frame
       return stableSamples >= 2
     }
     let result = XCTWaiter.wait(
       for: [XCTNSPredicateExpectation(predicate: settled, object: nil)], timeout: 45)
-    let frames = XCTAttachment(string: samples.joined(separator: "\n"))
+    let frames = XCTAttachment(string: (["Visible viewport: \(viewport)"] + samples).joined(separator: "\n"))
     frames.name = "Catalog color well frame samples"
     frames.lifetime = .keepAlways
     add(frames)
     XCTAssertEqual(result, .completed)
-    XCTAssertTrue(well.isEnabled && well.isHittable)
-    well.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    XCTAssertTrue(well.exists && isVisible(previousFrame), "The color well must be visible above the tab bar")
+    XCTAssertTrue(well.isEnabled, "The visible color well must accept input")
+    app.coordinate(withNormalizedOffset: .zero)
+      .withOffset(CGVector(dx: previousFrame.midX - appFrame.minX, dy: previousFrame.midY - appFrame.minY))
+      .tap()
     _ = try waitForPalette(title: "Preview color")
   }
 

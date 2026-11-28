@@ -460,7 +460,11 @@ final class NativeAccessibilityUITests: XCTestCase {
     let disabled = app.buttons["contrast-disabled"]
     let custom = app.buttons["contrast-custom"]
     let contrastButtons = [title, symbol, bitmap, highlighted, custom]
-    var samples: [(image: CGImage, frames: [(name: String, frame: CGRect)], lightFill: Bool)] = []
+    let spinnerButtons = [loading] + [16, 22, 30].map { app.buttons["contrast-loading-\($0)"] }
+    var samples: [
+      (image: CGImage, frames: [(name: String, frame: CGRect)],
+       spinners: [(name: String, frame: CGRect)], lightFill: Bool)
+    ] = []
 
     for lightFill in [true, false] {
       expectText(lightFill ? "Light fill #F5F5F7 · Dark theme" : "Dark fill #26376A · Light theme")
@@ -470,6 +474,13 @@ final class NativeAccessibilityUITests: XCTestCase {
         XCTAssertTrue(button.waitForExistence(timeout: 10))
         XCTAssertFalse(button.isEnabled)
         tapCenter(of: button)
+      }
+      let iconFrame = symbol.frame
+      for spinner in spinnerButtons {
+        XCTAssertTrue(spinner.waitForExistence(timeout: 10))
+        XCTAssertFalse(spinner.isEnabled)
+        XCTAssertEqual(spinner.frame.width, iconFrame.width, accuracy: 0.5)
+        XCTAssertEqual(spinner.frame.height, iconFrame.height, accuracy: 0.5)
       }
       expectText("Button presses: 0")
 
@@ -484,6 +495,7 @@ final class NativeAccessibilityUITests: XCTestCase {
       samples.append((
         image: try XCTUnwrap(screenshot.image.cgImage),
         frames: contrastButtons.map { (name: $0.identifier, frame: $0.frame) },
+        spinners: spinnerButtons.map { (name: $0.identifier, frame: $0.frame) },
         lightFill: lightFill
       ))
       if lightFill {
@@ -493,11 +505,21 @@ final class NativeAccessibilityUITests: XCTestCase {
     }
     title.tap()
     expectText("Button presses: 1")
+    app.buttons["Use Flutter fallback"].tap()
+    expectText("Contrast renderer: fallback")
+    attachScreen("prominent-spinner-fallback-dark-fill")
+    app.buttons["Switch background"].tap()
+    expectText("Light fill #F5F5F7 · Dark theme")
+    attachScreen("prominent-spinner-fallback-light-fill")
     // Keep both artifacts even when a contrast assertion stops the test.
     for sample in samples {
       for button in sample.frames {
         try assertProminentContrast(in: sample.image, frame: button.frame,
                                     name: button.name, lightFill: sample.lightFill)
+      }
+      for spinner in sample.spinners {
+        try assertCompactSpinner(in: sample.image, frame: spinner.frame,
+                                 name: spinner.name, lightFill: sample.lightFill)
       }
     }
   }
@@ -506,13 +528,52 @@ final class NativeAccessibilityUITests: XCTestCase {
   /// on the system's glass treatment, antialiasing, and display scale.
   private func assertProminentContrast(in image: CGImage, frame: CGRect,
                                        name: String, lightFill: Bool) throws {
+    let inner = frame.insetBy(dx: frame.width * 0.22, dy: frame.height * 0.22)
+    let sample = try luminance(in: image, frame: inner, name: name)
+    let foreground = sample.values.filter { lightFill ? $0 <= 80 : $0 >= 185 }.count
+    let background = sample.values.filter { lightFill ? $0 >= 175 : $0 <= 130 }.count
+    XCTAssertGreaterThan(foreground, sample.values.count / 100,
+                         "\(name) foreground must contrast with its fill")
+    XCTAssertGreaterThan(background, sample.values.count / 4,
+                         "\(name) must render the expected prominent fill")
+  }
+
+  private func assertCompactSpinner(in image: CGImage, frame: CGRect, name: String,
+                                    lightFill: Bool) throws {
+    let sample = try luminance(in: image, frame: frame, name: name)
+    var spinnerPixels = 0
+    var outerPixels = 0
+    var outerInk = 0
+    for y in 0..<sample.height {
+      for x in 0..<sample.width {
+        let dx = (Double(x) + 0.5) / Double(sample.width) - 0.5
+        let dy = (Double(y) + 0.5) / Double(sample.height) - 0.5
+        let radiusSquared = dx * dx + dy * dy
+        let value = sample.values[y * sample.width + x]
+        let ink = lightFill ? value <= 120 : value >= 150
+        if radiusSquared <= 0.28 * 0.28 && ink { spinnerPixels += 1 }
+        // Read only the fill between the compact spinner and the glass rim.
+        // Both brightest and dimmest spokes move, so ignore exact pixel shapes.
+        if radiusSquared >= 0.30 * 0.30 && radiusSquared <= 0.41 * 0.41 {
+          outerPixels += 1
+          if ink { outerInk += 1 }
+        }
+      }
+    }
+    XCTAssertGreaterThan(spinnerPixels, sample.values.count / 400,
+                         "\(name) must draw a centered loading indicator")
+    XCTAssertLessThan(outerInk * 100, outerPixels * 3,
+                      "\(name) must leave clear space around the loading indicator")
+  }
+
+  private func luminance(in image: CGImage, frame: CGRect, name: String)
+    throws -> (width: Int, height: Int, values: [Int]) {
     let viewport = app.frame
     let scaleX = CGFloat(image.width) / viewport.width
     let scaleY = CGFloat(image.height) / viewport.height
-    let inner = frame.insetBy(dx: frame.width * 0.22, dy: frame.height * 0.22)
-    let area = CGRect(x: (inner.minX - viewport.minX) * scaleX,
-                      y: (inner.minY - viewport.minY) * scaleY,
-                      width: inner.width * scaleX, height: inner.height * scaleY)
+    let area = CGRect(x: (frame.minX - viewport.minX) * scaleX,
+                      y: (frame.minY - viewport.minY) * scaleY,
+                      width: frame.width * scaleX, height: frame.height * scaleY)
     let crop = try XCTUnwrap(image.cropping(to: area.integral), name)
     let colorSpace = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
     let count = crop.width * crop.height
@@ -525,16 +586,13 @@ final class NativeAccessibilityUITests: XCTestCase {
       ))
       context.draw(crop, in: CGRect(x: 0, y: 0, width: crop.width, height: crop.height))
     }
-    var foreground = 0
-    var background = 0
-    for offset in stride(from: 0, to: pixels.count, by: 4) {
-      let luma = (54 * Int(pixels[offset]) + 183 * Int(pixels[offset + 1])
-                  + 19 * Int(pixels[offset + 2])) / 256
-      if lightFill ? luma <= 80 : luma >= 185 { foreground += 1 }
-      if lightFill ? luma >= 175 : luma <= 130 { background += 1 }
+    let values = stride(from: 0, to: pixels.count, by: 4).map { offset in
+      let red = Int(pixels[offset])
+      let green = Int(pixels[offset + 1])
+      let blue = Int(pixels[offset + 2])
+      return (54 * red + 183 * green + 19 * blue) / 256
     }
-    XCTAssertGreaterThan(foreground, count / 100, "\(name) foreground must contrast with its fill")
-    XCTAssertGreaterThan(background, count / 4, "\(name) must render the expected prominent fill")
+    return (crop.width, crop.height, values)
   }
 
   func testDefaultGlassMenuSelectionAndCancellation() throws {

@@ -136,7 +136,8 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       contents.append(content)
       iconColorValues.append(iconColorValue)
       button.semanticContentAttribute = direction
-      button.setProminentForeground(prominentForeground)
+      button.setProminentForeground(prominentForeground,
+                                    iconLoadingColor: standalone && loading ? foreground : nil)
       button.actionId = id
       button.tapEnabled = item["tapEnabled"] as? Bool ?? (item["enabled"] as? Bool ?? false)
       button.longPressEnabled = item["longPressEnabled"] as? Bool ?? false
@@ -283,7 +284,7 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
         // glass, layout, and interaction, and draw the same content above it.
         var plain = UIButton.Configuration.plain()
         plain.background.backgroundColor = .clear
-        plain.showsActivityIndicator = loading
+        plain.showsActivityIndicator = loading && !standalone
         prominentForeground = makeConfiguration(content, in: plain, foreground: foreground,
                                                 iconColor: iconColor, fixedForeground: true)
       }
@@ -369,7 +370,8 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       let (configuration, prominentForeground) = makeConfigurations(contents[index], foreground: foreground,
                                                                    iconColor: Self.color(iconColorValue))
       button.configuration = configuration
-      button.setProminentForeground(prominentForeground)
+      button.setProminentForeground(prominentForeground,
+                                    iconLoadingColor: standalone && loading ? foreground : nil)
     }
     updateVisibility()
   }
@@ -598,12 +600,16 @@ private class AdaptiveGlassCapsuleButton: UIButton {
   var longPressRecognizer: UILongPressGestureRecognizer?
   var onAccessibilityActivate: ((Bool) -> Bool)?
   private var prominentForeground: UIButton?
+  private var prominentIconIndicator: UIActivityIndicatorView?
   // A loading button keeps its prominent material, while input and
   // accessibility still treat it as disabled.
-  var isProminentLoading: Bool { prominentForeground?.configuration?.showsActivityIndicator == true }
+  var isProminentLoading: Bool {
+    prominentIconIndicator != nil || prominentForeground?.configuration?.showsActivityIndicator == true
+  }
 
-  func setProminentForeground(_ configuration: UIButton.Configuration?) {
+  func setProminentForeground(_ configuration: UIButton.Configuration?, iconLoadingColor: UIColor?) {
     guard let configuration else {
+      setProminentIconIndicator(color: nil)
       guard let prominentForeground else { return }
       prominentForeground.removeFromSuperview()
       self.prominentForeground = nil
@@ -627,13 +633,44 @@ private class AdaptiveGlassCapsuleButton: UIButton {
       addSubview(foreground)
       prominentForeground = foreground
     }
+    prominentForeground?.isHidden = iconLoadingColor != nil
+    setProminentIconIndicator(color: iconLoadingColor)
     invalidateIntrinsicContentSize()
     setNeedsLayout()
   }
 
+  private func setProminentIconIndicator(color: UIColor?) {
+    guard let color else {
+      prominentIconIndicator?.removeFromSuperview()
+      prominentIconIndicator = nil
+      return
+    }
+    if let prominentIconIndicator {
+      prominentIconIndicator.color = color
+      return
+    }
+    // A titleless configuration can stretch its replacement image to the
+    // entire icon slot. Center the system indicator at its intrinsic size.
+    let indicator = UIActivityIndicatorView(style: .medium)
+    indicator.color = color
+    indicator.isUserInteractionEnabled = false
+    indicator.isAccessibilityElement = false
+    indicator.translatesAutoresizingMaskIntoConstraints = false
+    addSubview(indicator)
+    NSLayoutConstraint.activate([
+      indicator.centerXAnchor.constraint(equalTo: centerXAnchor),
+      indicator.centerYAnchor.constraint(equalTo: centerYAnchor),
+    ])
+    indicator.startAnimating()
+    prominentIconIndicator = indicator
+  }
+
   override var intrinsicContentSize: CGSize {
-    // Only the overlay contains a spinner. Measure its content while loading.
-    if isProminentLoading, let prominentForeground { return prominentForeground.intrinsicContentSize }
+    // Titled loading buttons measure the overlay. Icon buttons retain the
+    // glass button's normal size, which is independent of the indicator.
+    if let prominentForeground, prominentForeground.configuration?.showsActivityIndicator == true {
+      return prominentForeground.intrinsicContentSize
+    }
     return super.intrinsicContentSize
   }
 
@@ -644,6 +681,7 @@ private class AdaptiveGlassCapsuleButton: UIButton {
       titleLabel?.alpha = 0
       imageView?.alpha = 0
       bringSubviewToFront(prominentForeground)
+      if let prominentIconIndicator { bringSubviewToFront(prominentIconIndicator) }
     }
   }
 

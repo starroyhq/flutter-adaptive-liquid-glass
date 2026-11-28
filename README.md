@@ -9,6 +9,9 @@ imports use `flutter_adaptive_liquid_glass`, following Dart's
 [package naming rules](https://dart.dev/tools/pub/pubspec#name); hyphens are not
 valid in a pubspec package name.
 
+Version **0.9.2** keeps the loading indicator inset on prominent icon buttons.
+See the [0.9.2 release notes](doc/release-0.9.2.md).
+
 Version **0.9.1** applies the theme's foreground to prominent glass buttons
 on iOS. You can also set `foregroundColor` on an individual button. See the
 [0.9.1 release notes](doc/release-0.9.1.md).
@@ -116,7 +119,7 @@ Or add the version to your app's `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_adaptive_liquid_glass: ^0.9.1
+  flutter_adaptive_liquid_glass: ^0.9.2
 ```
 
 Requires Flutter 3.41.2 or later and Dart 3.11 or later. Supported platforms are

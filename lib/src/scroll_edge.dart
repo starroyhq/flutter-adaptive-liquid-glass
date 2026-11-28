@@ -1,5 +1,3 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 
 import 'theme.dart';
@@ -7,7 +5,7 @@ import 'theme.dart';
 /// How content is treated where it scrolls beneath floating chrome, after
 /// iOS 26's scroll edge effect styles.
 enum LiquidGlassEdgeEffectStyle {
-  /// A progressive blur that fades into the page background.
+  /// A color fade into the page background.
   soft,
 
   /// An opaque band of the page background with a hairline divider.
@@ -25,8 +23,7 @@ enum LiquidGlassEdgeEffectStyle {
 /// has been reached at the bottom.
 ///
 /// Reduced transparency, high contrast and the opaque mode use
-/// [LiquidGlassEdgeEffectStyle.hard]. Native platform views inside the
-/// scrolling content are composited by the system and may not be blurred.
+/// [LiquidGlassEdgeEffectStyle.hard].
 class LiquidGlassScrollEdgeEffect extends StatefulWidget {
   const LiquidGlassScrollEdgeEffect({
     super.key,
@@ -117,68 +114,26 @@ class _LiquidGlassScrollEdgeEffectState
       child: NotificationListener<ScrollNotification>(
         onNotification: (notification) =>
             notification.depth == 0 ? _observe(notification.metrics) : false,
-        child: BackdropGroup(
-          child: Stack(children: [widget.child, edge(true), edge(false)]),
-        ),
+        child: Stack(children: [widget.child, edge(true), edge(false)]),
       ),
     );
   }
 }
 
-/// A progressive blur: nested slices that share one backdrop read, each
-/// shorter one nearer the edge and blurred more, under a fade into the page
-/// colour that hides the steps between them.
 class _SoftEdge extends StatelessWidget {
   const _SoftEdge({required this.top, required this.color});
   final bool top;
   final Color color;
 
-  // Small steps keep the boundaries between slices from showing.
-  static const _sigmas = [0.5, 1.0, 1.75, 2.5, 3.5, 4.75, 6.0, 8.0];
-
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final slice = constraints.maxHeight / _sigmas.length;
-      return Stack(
-        children: [
-          for (var i = 0; i < _sigmas.length; i++)
-            Positioned(
-              left: 0,
-              right: 0,
-              // Grouped filters read the same backdrop, so the shortest,
-              // strongest slice painted last wins nearest the edge.
-              top: top ? 0 : slice * i,
-              bottom: top ? slice * i : 0,
-              child: ClipRect(
-                child: BackdropFilter.grouped(
-                  filter: ui.ImageFilter.blur(
-                    sigmaX: _sigmas[i],
-                    sigmaY: _sigmas[i],
-                  ),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-            ),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: top ? Alignment.topCenter : Alignment.bottomCenter,
-                  end: top ? Alignment.bottomCenter : Alignment.topCenter,
-                  colors: [
-                    color.withValues(alpha: color.a * .8),
-                    color.withValues(alpha: color.a * .35),
-                    color.withValues(alpha: 0),
-                  ],
-                  stops: const [0, .45, 1],
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    },
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: top ? Alignment.topCenter : Alignment.bottomCenter,
+        end: top ? Alignment.bottomCenter : Alignment.topCenter,
+        colors: [color, color.withValues(alpha: 0)],
+      ),
+    ),
   );
 }
 

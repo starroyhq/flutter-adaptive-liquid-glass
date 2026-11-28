@@ -26,6 +26,7 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   private let grouped: Bool
   /// Preserve the icon-only button's glyph layout and route fade.
   private let standalone: Bool
+  private let customMenuTrigger: Bool
   /// Flutter's text direction, which orders the buttons and places each
   /// image beside its title, independently of the device language.
   private let rightToLeft: Bool
@@ -51,6 +52,7 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
   init(frame: CGRect, identifier: Int64, arguments: [String: Any], messenger: FlutterBinaryMessenger, suppression: AdaptiveLiquidGlassSuppression) {
     grouped = arguments["grouped"] as? Bool ?? false
     standalone = arguments["standaloneIcon"] as? Bool ?? false
+    customMenuTrigger = arguments["customMenuTrigger"] as? Bool ?? false
     rightToLeft = arguments["rtl"] as? Bool == true
     fontSize = CGFloat((arguments["fontSize"] as? NSNumber)?.doubleValue ?? 17)
     foregroundValue = arguments["foreground"] as? NSNumber
@@ -147,7 +149,9 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
       button.titleLabel?.numberOfLines = 1
       button.titleLabel?.adjustsFontSizeToFitWidth = false
       button.setContentCompressionResistancePriority(.required, for: .horizontal)
-      button.widthAnchor.constraint(greaterThanOrEqualToConstant: 48).isActive = true
+      if !customMenuTrigger {
+        button.widthAnchor.constraint(greaterThanOrEqualToConstant: 48).isActive = true
+      }
       button.addTarget(self, action: #selector(touchDown(_:)), for: .touchDown)
       button.addTarget(self, action: #selector(pressed(_:event:)), for: .touchUpInside)
       button.onAccessibilityActivate = { [weak self, weak button] longPress in
@@ -271,6 +275,14 @@ private final class AdaptiveLiquidGlassCapsule: NSObject, FlutterPlatformView {
 
   private func makeConfigurations(_ content: AdaptiveGlassCapsuleContent, foreground: UIColor,
                                   iconColor: UIColor?) -> (UIButton.Configuration, UIButton.Configuration?) {
+    if customMenuTrigger {
+      var config = UIButton.Configuration.plain()
+      config.background.backgroundColor = .clear
+      config.background.backgroundColorTransformer = UIConfigurationColorTransformer { _ in .clear }
+      config.baseForegroundColor = .clear
+      config.contentInsets = .zero
+      return (config, nil)
+    }
     var config = UIButton.Configuration.plain()
     config.background.backgroundColor = .clear
     var prominentForeground: UIButton.Configuration?

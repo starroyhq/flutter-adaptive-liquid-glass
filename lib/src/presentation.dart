@@ -178,6 +178,7 @@ Future<T?> showLiquidGlassPopover<T>({
   double maxHeight = 480,
   double gap = 8,
   bool fitContent = false,
+  bool? requestFocus,
   RouteSettings? routeSettings,
   String? semanticLabel,
   Color? barrierColor,
@@ -196,6 +197,7 @@ Future<T?> showLiquidGlassPopover<T>({
     useRootNavigator: useRootNavigator,
     barrierDismissible: barrierDismissible,
     settings: routeSettings,
+    requestFocus: requestFocus,
     barrierColor: barrierColor ?? Colors.black.withValues(alpha: .08),
     // The popover scales itself from its anchor edge; the route only fades.
     scale: false,
@@ -223,6 +225,7 @@ Future<T?> _showPopup<T>({
   required bool useRootNavigator,
   required bool barrierDismissible,
   required RouteSettings? settings,
+  bool? requestFocus,
   bool slide = false,
   bool scale = true,
   required Color barrierColor,
@@ -250,6 +253,7 @@ Future<T?> _showPopup<T>({
       // popups do.
       nativeContent: LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native,
       settings: settings,
+      requestFocus: requestFocus,
     ),
   );
 }
@@ -268,9 +272,11 @@ Future<T?> _showPopup<T>({
 /// while such a popup is open, [child] is painted from the frame in which the
 /// page is isolated.
 ///
+/// Keep passive overlays, such as a toast positioned clear of native bars,
+/// outside this guard so they leave the page's native controls in place.
 /// A guard changes nothing while none of these popups is open. Flutter
-/// content above native views on a page without a popup remains unsupported
-/// (see the README).
+/// content overlapping native views on a page without a popup needs its own
+/// occlusion handling (see the README).
 class LiquidGlassOverlayGuard extends StatefulWidget {
   const LiquidGlassOverlayGuard({super.key, required this.child});
 
@@ -332,6 +338,7 @@ class _GlassPopupRoute<T> extends PopupRoute<T> implements NativeKeepingPopup {
     required this.barrierColor,
     required this.nativeContent,
     super.settings,
+    super.requestFocus,
   }) : super(traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop);
 
   /// Whether the popup's content resolves to native glass.

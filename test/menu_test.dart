@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -40,13 +41,26 @@ void main() {
       });
 
       final selections = <_Action>[];
-      Widget menu({bool enabled = true}) => LiquidGlassMenuButton<_Action>(
+      Widget menu({
+        bool enabled = true,
+        String subtitle = 'Actions',
+        bool custom = false,
+      }) => LiquidGlassMenuButton<_Action>(
         label: 'Options',
+        triggerChild: custom
+            ? const SizedBox(
+                width: 92,
+                height: 38,
+                child: Text('Custom trigger'),
+              )
+            : null,
         onSelected: selections.add,
         items: [
           LiquidGlassMenuItem(
             value: _Action.group,
             label: 'Group',
+            subtitle: subtitle,
+            displayInline: true,
             sfSymbol: 'folder',
             children: [
               LiquidGlassMenuItem(
@@ -54,6 +68,7 @@ void main() {
                 label: 'Rename',
                 iconPng: png,
                 selected: true,
+                destructive: true,
                 enabled: enabled,
               ),
             ],
@@ -69,8 +84,11 @@ void main() {
       final child = (branch['children'] as List<Map<String, Object?>>).single;
       expect(initial.enabled, isTrue);
       expect(branch['symbol'], 'folder');
+      expect(branch['subtitle'], 'Actions');
+      expect(branch['displayInline'], isTrue);
       expect(child['png'], png);
       expect(child['selected'], isTrue);
+      expect(child['destructive'], isTrue);
       initial.onSelected(child['id'] as int);
       initial.onSelected(branch['id'] as int);
       expect(selections, [_Action.rename]);
@@ -79,15 +97,227 @@ void main() {
       expect(data().revision, initial.revision);
       await _host(
         tester,
+        menu(subtitle: 'Updated actions'),
+        glass: const _NativeMenuTheme(),
+      );
+      expect(data().revision, greaterThan(initial.revision));
+      expect(data().items.single['subtitle'], 'Updated actions');
+      await _host(
+        tester,
         menu(enabled: false),
         glass: const _NativeMenuTheme(),
       );
       expect(data().revision, greaterThan(initial.revision));
       data().onSelected(child['id'] as int);
       expect(selections, [_Action.rename]);
+
+      await _host(tester, menu(custom: true), glass: const _NativeMenuTheme());
+      final native = tester.widget<UiKitView>(find.byType(UiKitView));
+      expect((native.creationParams as Map)['customMenuTrigger'], isTrue);
+      expect(tester.getSize(find.byType(UiKitView)), const Size(92, 38));
+      expect(find.text('Custom trigger'), findsOneWidget);
     },
     variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
+
+  testWidgets('imperative native menu passes the anchor and typed leaf value', (
+    tester,
+  ) async {
+    const channel = MethodChannel('flutter_adaptive_liquid_glass/menu');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    const anchorKey = Key('menu-anchor');
+    await _host(
+      tester,
+      const SizedBox(key: anchorKey, width: 116, height: 48),
+      glass: const _NativeMenuTheme(),
+    );
+    final anchor = find.byKey(anchorKey);
+    final bounds = tester.getRect(anchor);
+    final context = tester.element(anchor);
+    final calls = <MethodCall>[];
+    var chooseEnabled = true;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      final model = call.arguments as Map;
+      final items = model['items'] as List;
+      final item = items[chooseEnabled ? 0 : 1] as Map;
+      return item['id'];
+    });
+    Future<_Action?> show() => showLiquidGlassMenu(
+      context: context,
+      anchorContext: context,
+      items: const [
+        LiquidGlassMenuItem(value: _Action.rename, label: 'Rename'),
+        LiquidGlassMenuItem(
+          value: _Action.group,
+          label: 'Unavailable',
+          enabled: false,
+        ),
+      ],
+    );
+    final enabled = show();
+    await tester.pumpAndSettle();
+    expect(await enabled, _Action.rename);
+    expect(calls.single.method, 'showMenu');
+    expect((calls.single.arguments as Map)['anchor'], [
+      bounds.left,
+      bounds.top,
+      bounds.width,
+      bounds.height,
+    ]);
+    chooseEnabled = false;
+    final disabled = show();
+    await tester.pumpAndSettle();
+    expect(await disabled, isNull);
+  });
+
+  for (final coverRoute in [true, false]) {
+    testWidgets(
+      'native menu retires its request when ${coverRoute ? 'the route is covered' : 'the anchor is removed'}',
+      (tester) async {
+        const channel = MethodChannel('flutter_adaptive_liquid_glass/menu');
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+        final reply = Completer<int>();
+        final calls = <MethodCall>[];
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          calls.add(call);
+          return call.method == 'showMenu' ? reply.future : null;
+        });
+
+        final anchorVisible = ValueNotifier(true);
+        addTearDown(anchorVisible.dispose);
+        const anchorKey = Key('menu-anchor');
+        await _host(
+          tester,
+          ValueListenableBuilder(
+            valueListenable: anchorVisible,
+            builder: (_, visible, _) => visible
+                ? const SizedBox(key: anchorKey, width: 116, height: 48)
+                : const SizedBox.shrink(),
+          ),
+          glass: const _NativeMenuTheme(),
+        );
+        final anchor = tester.element(find.byKey(anchorKey));
+        final selected = showLiquidGlassMenu<int>(
+          context: anchor,
+          anchorContext: anchor,
+          items: const [LiquidGlassMenuItem(value: 1, label: 'One')],
+        );
+        await tester.pump();
+        final model = calls.single.arguments as Map;
+        expect(calls.single.method, 'showMenu');
+        final navigator = Navigator.of(anchor);
+        if (coverRoute) {
+          unawaited(
+            navigator.push<void>(
+              MaterialPageRoute(
+                builder: (_) => const Scaffold(body: Text('Other route')),
+              ),
+            ),
+          );
+        } else {
+          anchorVisible.value = false;
+        }
+        await tester.pumpAndSettle();
+        expect(calls.map((call) => call.method), ['showMenu', 'cancelMenu']);
+        expect(calls.last.arguments, model['requestId']);
+
+        if (coverRoute) {
+          navigator.pop();
+          await tester.pumpAndSettle();
+          expect(find.byKey(anchorKey), findsOneWidget);
+        }
+        final item = (model['items'] as List).single as Map;
+        reply.complete(item['id'] as int);
+        await tester.pump();
+        expect(await selected, isNull);
+      },
+    );
+  }
+
+  testWidgets('imperative Flutter menu preserves editor focus and groups', (
+    tester,
+  ) async {
+    final inputFocus = FocusNode();
+    addTearDown(inputFocus.dispose);
+    const anchorKey = Key('menu-anchor');
+    await _host(
+      tester,
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(focusNode: inputFocus),
+          const SizedBox(key: anchorKey, width: 116, height: 48),
+        ],
+      ),
+    );
+    inputFocus.requestFocus();
+    await tester.pump();
+    expect(inputFocus.hasPrimaryFocus, isTrue);
+
+    final context = tester.element(find.byKey(anchorKey));
+    final selected = showLiquidGlassMenu<int>(
+      context: context,
+      anchorContext: context,
+      items: const [
+        LiquidGlassMenuItem(
+          value: 0,
+          label: 'Options',
+          displayInline: true,
+          children: [
+            LiquidGlassMenuItem(
+              value: 1,
+              label: 'Selected option',
+              subtitle: 'Current setting',
+              selected: true,
+            ),
+            LiquidGlassMenuItem(value: 2, label: 'Unavailable', enabled: false),
+          ],
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    expect(inputFocus.hasPrimaryFocus, isTrue);
+    expect(find.text('Options'), findsOneWidget);
+    expect(find.text('Current setting'), findsOneWidget);
+    expect(find.byIcon(Icons.check), findsOneWidget);
+    await tester.tap(find.text('Unavailable'));
+    await tester.pumpAndSettle();
+    expect(find.text('Selected option'), findsOneWidget);
+    await tester.tap(find.text('Selected option'));
+    await tester.pumpAndSettle();
+    expect(await selected, 1);
+    expect(inputFocus.hasPrimaryFocus, isTrue);
+  });
+
+  testWidgets('Flutter custom trigger owns the tap without a Material host', (
+    tester,
+  ) async {
+    int? selected;
+    await _host(
+      tester,
+      LiquidGlassMenuButton<int>(
+        semanticLabel: 'Choose a value',
+        triggerChild: const SizedBox(
+          width: 80,
+          height: 44,
+          child: Text('Custom appearance'),
+        ),
+        items: const [LiquidGlassMenuItem(value: 1, label: 'One')],
+        onSelected: (value) => selected = value,
+      ),
+      scaffold: false,
+    );
+    await tester.tapAt(tester.getCenter(find.text('Custom appearance')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('One'));
+    await tester.pumpAndSettle();
+    expect(selected, 1);
+  });
 
   testWidgets('Flutter menu shows the bitmap and returns the same typed item', (
     tester,
@@ -540,6 +770,7 @@ class _NativeMenuTheme extends LiquidGlassThemeData {
 Future<void> _host(
   WidgetTester tester,
   Widget child, {
+  bool scaffold = true,
   LiquidGlassThemeData glass = const LiquidGlassThemeData(
     mode: LiquidGlassMode.fallback,
   ),
@@ -547,7 +778,9 @@ Future<void> _host(
   await tester.pumpWidget(
     MaterialApp(
       builder: (_, child) => LiquidGlassTheme(data: glass, child: child!),
-      home: Scaffold(body: Center(child: child)),
+      home: scaffold
+          ? Scaffold(body: Center(child: child))
+          : Center(child: child),
     ),
   );
   await tester.pumpAndSettle();

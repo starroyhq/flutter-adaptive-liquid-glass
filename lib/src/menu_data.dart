@@ -12,17 +12,22 @@ class LiquidGlassMenuItem<T extends Object> {
   const LiquidGlassMenuItem({
     required this.value,
     required this.label,
+    this.subtitle,
     this.icon,
     this.sfSymbol,
     this.iconPng,
     this.enabled = true,
     this.destructive = false,
     this.selected = false,
+    this.displayInline = false,
     this.children = const [],
   });
 
   final T value;
   final String label;
+
+  /// Secondary text for this action or submenu.
+  final String? subtitle;
   final IconData? icon;
 
   /// A preferred SF Symbol on iOS. Supply [icon] or [iconPng] for Flutter.
@@ -33,6 +38,10 @@ class LiquidGlassMenuItem<T extends Object> {
   final bool enabled;
   final bool destructive;
   final bool selected;
+
+  /// Shows a branch's children together in the parent instead of a submenu.
+  /// The group's label may be empty. The platform chooses its presentation.
+  final bool displayInline;
   final List<LiquidGlassMenuItem<T>> children;
 }
 
@@ -51,12 +60,14 @@ List<LiquidGlassMenuItem<T>> snapshotMenuItems<T extends Object>(
     return LiquidGlassMenuItem<T>(
       value: item.value,
       label: item.label,
+      subtitle: item.subtitle,
       icon: item.icon,
       sfSymbol: item.sfSymbol,
       iconPng: item.iconPng == null ? null : Uint8List.fromList(item.iconPng!),
       enabled: item.enabled,
       destructive: item.destructive,
       selected: item.selected,
+      displayInline: item.displayInline,
       children: snapshotMenuItems(item.children, values),
     );
   }),
@@ -71,12 +82,14 @@ bool sameMenuItems<T extends Object>(
     final x = a[i], y = b[i];
     if (x.value != y.value ||
         x.label != y.label ||
+        x.subtitle != y.subtitle ||
         x.icon != y.icon ||
         x.sfSymbol != y.sfSymbol ||
         !listEquals(x.iconPng, y.iconPng) ||
         x.enabled != y.enabled ||
         x.destructive != y.destructive ||
         x.selected != y.selected ||
+        x.displayInline != y.displayInline ||
         !sameMenuItems(x.children, y.children)) {
       return false;
     }
@@ -117,9 +130,11 @@ Future<NativeMenuPayload<T>> prepareNativeMenu<T extends Object>(
         return {
           'id': id,
           'label': item.label,
+          'subtitle': item.subtitle,
           'enabled': item.enabled,
           'selected': item.selected,
           'destructive': item.destructive,
+          'displayInline': item.displayInline,
           'symbol': item.sfSymbol,
           'png': png,
           'template': item.iconPng == null && icon != null,

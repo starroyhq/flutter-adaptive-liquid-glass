@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/cupertino.dart' show CupertinoColors;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -300,7 +301,13 @@ class _FallbackGlassSliderState extends State<FallbackGlassSlider>
                         enabled: _enabled,
                         focused: _focused,
                         press: press,
-                        colors: _ValueColors.of(context, enabled: _enabled),
+                        colors: _ValueColors.of(
+                          context,
+                          enabled: _enabled,
+                          defaultAccent: CupertinoColors.systemBlue.resolveFrom(
+                            context,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -468,7 +475,13 @@ class _FallbackGlassSwitchState extends State<FallbackGlassSwitch>
                     enabled: _enabled,
                     focused: _focused,
                     pressed: _pressed && !_reduced(context),
-                    colors: _ValueColors.of(context, enabled: _enabled),
+                    colors: _ValueColors.of(
+                      context,
+                      enabled: _enabled,
+                      defaultAccent: CupertinoColors.systemGreen.resolveFrom(
+                        context,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -746,26 +759,30 @@ class _ValueColors {
     this.thumb,
     this.foreground,
     this.border,
-    this.highlight,
     this.shadow,
   );
-  factory _ValueColors.of(BuildContext context, {bool enabled = true}) {
+  factory _ValueColors.of(
+    BuildContext context, {
+    bool enabled = true,
+    Color? defaultAccent,
+  }) {
     final palette = LiquidGlassTheme.of(context).colors;
     final scheme = Theme.of(context).colorScheme;
     Color tone(Color value) =>
         enabled ? value : value.withValues(alpha: value.a * .4);
     return _ValueColors(
-      tone(palette.accent ?? scheme.primary),
-      tone(palette.selection ?? scheme.onSurface.withValues(alpha: .16)),
+      tone(palette.accent ?? defaultAccent ?? scheme.primary),
+      tone(
+        palette.selection ?? Color.lerp(scheme.surface, scheme.onSurface, .5)!,
+      ),
       // White in both appearances, as iOS draws slider and switch thumbs.
       tone(palette.surfaceTint ?? Colors.white),
       tone(palette.foreground ?? scheme.onSurface),
       tone(palette.border ?? scheme.onSurface.withValues(alpha: .15)),
-      tone(palette.highlight ?? Colors.white.withValues(alpha: .75)),
       tone(palette.shadow ?? Colors.black.withValues(alpha: .18)),
     );
   }
-  final Color accent, track, thumb, foreground, border, highlight, shadow;
+  final Color accent, track, thumb, foreground, border, shadow;
 
   @override
   bool operator ==(Object other) =>
@@ -775,12 +792,11 @@ class _ValueColors {
       thumb == other.thumb &&
       foreground == other.foreground &&
       border == other.border &&
-      highlight == other.highlight &&
       shadow == other.shadow;
 
   @override
   int get hashCode =>
-      Object.hash(accent, track, thumb, foreground, border, highlight, shadow);
+      Object.hash(accent, track, thumb, foreground, border, shadow);
 }
 
 void _drawThumb(Canvas canvas, RRect thumb, _ValueColors colors, bool focused) {
@@ -792,14 +808,6 @@ void _drawThumb(Canvas canvas, RRect thumb, _ValueColors colors, bool focused) {
       ..color = focused ? colors.accent : colors.border
       ..style = PaintingStyle.stroke
       ..strokeWidth = focused ? 2 : 1,
-  );
-  canvas.drawLine(
-    Offset(thumb.left + 10, thumb.top + 1),
-    Offset(thumb.right - 10, thumb.top + 1),
-    Paint()
-      ..color = colors.highlight
-      ..strokeWidth = 1
-      ..strokeCap = StrokeCap.round,
   );
 }
 

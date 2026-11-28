@@ -156,7 +156,7 @@ void main() {
       await tester.enterText(find.byType(TextField), '你好 Flutter');
       expect(find.text('你好 Flutter'), findsOneWidget);
       expect(find.byType(UiKitView), findsNothing);
-      expect(find.byType(BackdropFilter), findsOneWidget);
+      expect(find.byType(BackdropFilter), findsNothing);
     },
   );
 

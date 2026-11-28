@@ -77,13 +77,18 @@ class NativeCapsule extends StatefulWidget {
     this.loading = false,
     this.standaloneIcon = false,
     this.menu,
+    this.menuTriggerChild,
   }) : assert(!standaloneIcon || (!grouped && items.length == 1)),
        assert(!loading || (!grouped && items.length == 1)),
+       assert(menuTriggerChild == null || (menu != null && !standaloneIcon)),
        assert(menu == null || (!grouped && items.length == 1 && !loading));
   final List<NativeCapsuleItem> items;
   final bool grouped, prominent, loading;
   final Color? foregroundColor;
   final NativeCapsuleMenu? menu;
+
+  /// Flutter-painted content under a plain native menu button.
+  final Widget? menuTriggerChild;
 
   /// A single icon-only button, with or without a long press, drawn as the
   /// standalone glass icon button: a semibold symbol, or a glyph bitmap
@@ -359,6 +364,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
       'rtl': rtl,
       'grouped': widget.grouped,
       'standaloneIcon': widget.standaloneIcon,
+      'customMenuTrigger': widget.menuTriggerChild != null,
       'prominent': widget.prominent,
       'loading': widget.loading,
       'foreground':
@@ -442,6 +448,7 @@ class _NativeCapsuleState extends State<NativeCapsule>
       widget.grouped,
       widget.standaloneIcon,
       menu != null,
+      widget.menuTriggerChild != null,
       Object.hashAll(
         widget.items.map(
           (item) => Object.hash(
@@ -507,31 +514,40 @@ class _NativeCapsuleState extends State<NativeCapsule>
         return SizedBox(width: width, height: height);
       }
     }
-    return SizedBox(
-      width: width,
-      height: height,
-      child: NativeVisibility(
-        child: UiKitView(
-          key: ValueKey(signature),
-          viewType: 'flutter_adaptive_liquid_glass/capsule',
-          creationParams: params,
-          creationParamsCodec: const StandardMessageCodec(),
-          onPlatformViewCreated: (id) => _created(id, signature, generation),
-          gestureRecognizers: {
-            if (menu != null) ...[
-              // Give UIKit the initial touch for its press-and-drag gesture.
-              if (menu.enabled)
-                Factory<EagerGestureRecognizer>(EagerGestureRecognizer.new),
-            ] else ...[
-              Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
-              if (widget.items.any((item) => item.onLongPress != null))
-                Factory<LongPressGestureRecognizer>(
-                  () => LongPressGestureRecognizer(),
-                ),
-            ],
-          },
-        ),
+    final view = NativeVisibility(
+      child: UiKitView(
+        key: ValueKey(signature),
+        viewType: 'flutter_adaptive_liquid_glass/capsule',
+        creationParams: params,
+        creationParamsCodec: const StandardMessageCodec(),
+        onPlatformViewCreated: (id) => _created(id, signature, generation),
+        gestureRecognizers: {
+          if (menu != null) ...[
+            // Give UIKit the initial touch for its press-and-drag gesture.
+            if (menu.enabled)
+              Factory<EagerGestureRecognizer>(EagerGestureRecognizer.new),
+          ] else ...[
+            Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
+            if (widget.items.any((item) => item.onLongPress != null))
+              Factory<LongPressGestureRecognizer>(
+                () => LongPressGestureRecognizer(),
+              ),
+          ],
+        },
       ),
+    );
+    final customTrigger = widget.menuTriggerChild;
+    if (customTrigger == null) {
+      return SizedBox(width: width, height: height, child: view);
+    }
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        ExcludeFocus(
+          child: IgnorePointer(child: ExcludeSemantics(child: customTrigger)),
+        ),
+        Positioned.fill(child: view),
+      ],
     );
   }
 }

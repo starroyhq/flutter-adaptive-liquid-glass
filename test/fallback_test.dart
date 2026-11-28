@@ -29,7 +29,7 @@ void main() {
   );
 
   testWidgets(
-    'fallback segments share one glass track with reachable targets',
+    'fallback segments share a compact planar track with reachable targets',
     (tester) async {
       final selections = <int>[];
       await tester.pumpWidget(
@@ -48,10 +48,11 @@ void main() {
           ),
         ),
       );
-      expect(find.byType(BackdropFilter), findsOneWidget);
+      expect(find.byType(BackdropFilter), findsNothing);
       expect(find.byType(LiquidGlassSurface), findsOneWidget);
+      expect(tester.getSize(find.byType(LiquidGlassSurface)).height, 36);
       for (final pressable in find.byType(FallbackPressable).evaluate()) {
-        expect(tester.getSize(find.byWidget(pressable.widget)).height, 48);
+        expect(tester.getSize(find.byWidget(pressable.widget)).height, 30);
       }
       await tester.tap(find.text('Dark'));
       expect(selections, [2]);
@@ -75,6 +76,64 @@ void main() {
         );
         expect(materials.every((m) => m.color == Colors.transparent), isTrue);
         expect(tester.widget<Icon>(find.byIcon(Icons.computer)).size, 20);
+      }
+    },
+  );
+
+  testWidgets(
+    'fallback dots and counts sit beside the tab icon in LTR and RTL',
+    (tester) async {
+      final selections = <int>[];
+      for (final direction in TextDirection.values) {
+        for (final badge in ['', '99+']) {
+          await tester.pumpWidget(
+            _host(
+              Directionality(
+                textDirection: direction,
+                child: SizedBox(
+                  width: 220,
+                  child: LiquidGlassTabBar(
+                    items: [
+                      LiquidGlassTabItem(
+                        label: 'Home',
+                        icon: Icons.home,
+                        badge: badge,
+                      ),
+                      const LiquidGlassTabItem(
+                        label: 'Chats',
+                        icon: Icons.chat,
+                      ),
+                      const LiquidGlassTabItem(label: 'Me', icon: Icons.person),
+                    ],
+                    selectedIndex: 1,
+                    onSelected: selections.add,
+                  ),
+                ),
+              ),
+            ),
+          );
+          final icon = find.byIcon(Icons.home);
+          final item = tester.getRect(
+            find.ancestor(of: icon, matching: find.byType(FallbackPressable)),
+          );
+          final glyph = tester.getRect(icon);
+          final marker = tester.getRect(
+            find.descendant(
+              of: find.byType(Badge),
+              matching: find.byType(Container),
+            ),
+          );
+          expect(marker.width, greaterThan(0));
+          expect(marker.overlaps(glyph), isFalse);
+          expect(item.contains(marker.topLeft), isTrue);
+          expect(item.contains(marker.bottomRight), isTrue);
+          expect(
+            marker.center.dx > glyph.center.dx,
+            direction == TextDirection.ltr,
+          );
+          await tester.tapAt(marker.center);
+          expect(selections.last, 0);
+        }
       }
     },
   );

@@ -61,6 +61,94 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('only iOS centers the fallback heading between uneven trays', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+      for (final direction in TextDirection.values) {
+        for (final subtitle in <String?>[null, 'Workspace']) {
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: ThemeData(platform: platform),
+              themeAnimationDuration: Duration.zero,
+              home: Directionality(
+                textDirection: direction,
+                child: LiquidGlassTheme(
+                  data: const LiquidGlassThemeData(
+                    mode: LiquidGlassMode.fallback,
+                  ),
+                  child: Scaffold(
+                    appBar: LiquidGlassNavigationBar(
+                      title: 'Files',
+                      subtitle: subtitle,
+                      leading: [
+                        LiquidGlassAction(
+                          id: 'back',
+                          label: 'Back',
+                          icon: Icons.arrow_back,
+                          onPressed: () {},
+                        ),
+                      ],
+                      actions: const [
+                        LiquidGlassAction(
+                          id: 'add',
+                          label: 'Add',
+                          icon: Icons.add,
+                        ),
+                        LiquidGlassAction(
+                          id: 'search',
+                          label: 'Search',
+                          icon: Icons.search,
+                        ),
+                        LiquidGlassAction(
+                          id: 'more',
+                          label: 'More',
+                          icon: Icons.more_horiz,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final title = tester.getRect(find.text('Files'));
+          final bar = tester.getRect(find.byType(LiquidGlassNavigationBar));
+          if (platform == TargetPlatform.iOS) {
+            expect(title.center.dx, closeTo(bar.center.dx, .1));
+            if (subtitle != null) {
+              expect(
+                tester.getCenter(find.text(subtitle)).dx,
+                closeTo(bar.center.dx, .1),
+              );
+            }
+          } else {
+            final leading = tester.getRect(find.byIcon(Icons.arrow_back));
+            if (direction == TextDirection.ltr) {
+              expect(title.left - leading.right, lessThan(26));
+            } else {
+              expect(
+                leading.left - title.right,
+                lessThan(26),
+                reason: '$subtitle, $leading, $title',
+              );
+            }
+            final paragraph = tester.widget<Text>(find.text('Files'));
+            if (subtitle == null) {
+              expect(paragraph.textAlign, TextAlign.start);
+            }
+          }
+          expect(tester.takeException(), isNull);
+        }
+      }
+    }
+  });
+
   testWidgets('without a subtitle the title is unchanged', (tester) async {
     await tester.pumpWidget(host());
     expect(find.byType(FittedBox), findsNothing);

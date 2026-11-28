@@ -7,26 +7,38 @@ import 'package:flutter_adaptive_liquid_glass/flutter_adaptive_liquid_glass.dart
 import 'package:flutter_adaptive_liquid_glass/src/fallback_selection_track.dart';
 
 void main() {
-  testWidgets('light and dark materials let the actual backdrop show through', (
+  testWidgets('planar surfaces block backdrop colors and stay bounded', (
     tester,
   ) async {
     for (final dark in [false, true]) {
-      final samples = <Color>[];
-      for (final background in const [Color(0xffff0000), Color(0xff0000ff)]) {
-        await tester.pumpWidget(_host(dark: dark, background: background));
-        await tester.pumpAndSettle();
-        final pixels = await _sample(tester);
-        samples.add(pixels.center);
-        // Both blur and rim stay inside the surface; distant pixels are intact.
-        expect(pixels.outside.toARGB32(), background.toARGB32());
-        expect(find.byType(BackdropFilter), findsOneWidget);
-        expect(
-          tester.getSize(find.byType(BackdropFilter)),
-          tester.getSize(find.byType(LiquidGlassSurface)),
-        );
+      for (final style in LiquidGlassSurfaceStyle.values) {
+        final samples = <Color>[];
+        for (final background in const [Color(0xffff0000), Color(0xff0000ff)]) {
+          await tester.pumpWidget(
+            _host(dark: dark, background: background, style: style),
+          );
+          await tester.pumpAndSettle();
+          final pixels = await _sample(tester);
+          samples.add(pixels.center);
+          expect(pixels.outside.toARGB32(), background.toARGB32());
+          expect(find.byType(BackdropFilter), findsNothing);
+          final decoration =
+              tester
+                      .widget<DecoratedBox>(
+                        find.descendant(
+                          of: find.byType(LiquidGlassSurface),
+                          matching: find.byType(DecoratedBox),
+                        ),
+                      )
+                      .decoration
+                  as BoxDecoration;
+          expect((decoration.border! as Border).top.width, 1);
+          expect(decoration.borderRadius, BorderRadius.circular(24));
+          expect(decoration.boxShadow, hasLength(1));
+          expect(decoration.boxShadow!.single.offset, const Offset(0, 4));
+        }
+        expect(samples.first, samples.last);
       }
-      expect(samples[0].r - samples[1].r, greaterThan(.15));
-      expect(samples[1].b - samples[0].b, greaterThan(.15));
     }
   });
 
@@ -46,9 +58,7 @@ void main() {
     expect(dark.g, closeTo(dark.b, .01));
   });
 
-  testWidgets('explicit tint survives the translucent material', (
-    tester,
-  ) async {
+  testWidgets('explicit tint colors the solid material', (tester) async {
     await tester.pumpWidget(_host(background: Colors.grey, tint: Colors.red));
     await tester.pumpAndSettle();
     final red = (await _sample(tester)).center;
@@ -106,7 +116,7 @@ void main() {
     }
   });
 
-  testWidgets('material and rim do not intercept adjacent action hits', (
+  testWidgets('material and outline do not intercept adjacent action hits', (
     tester,
   ) async {
     var first = 0;
@@ -140,7 +150,7 @@ void main() {
     await tester.tap(find.text('First'));
     await tester.tap(find.text('Second'));
     expect([first, second], [1, 1]);
-    expect(find.byType(BackdropFilter), findsOneWidget);
+    expect(find.byType(BackdropFilter), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

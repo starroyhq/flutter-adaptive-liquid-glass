@@ -375,6 +375,37 @@ void main() {
     expect(lifecycle, isEmpty);
   });
 
+  testWidgets('an unguarded passive overlay leaves native views visible', (
+    tester,
+  ) async {
+    final navigator = await pumpPage(tester);
+    showLiquidGlassPopover<void>(
+      context: pageContext(tester),
+      anchorContext: pageContext(tester),
+      builder: (_) => const Text('Menu'),
+    );
+    await tester.pumpAndSettle();
+    expectKept(tester);
+
+    final toast = OverlayEntry(
+      builder: (_) => const Positioned(
+        top: 0,
+        left: 0,
+        child: IgnorePointer(child: Text('Copied')),
+      ),
+    );
+    navigator.currentState!.overlay!.insert(toast);
+    await tester.pumpAndSettle();
+    expect(find.text('Copied'), findsOneWidget);
+    expectKept(tester);
+    expect(lifecycle, isEmpty);
+
+    toast.remove();
+    toast.dispose();
+    await tester.pumpAndSettle();
+    expectKept(tester);
+  });
+
   testWidgets('an overlay guard isolates the page under package popups', (
     tester,
   ) async {

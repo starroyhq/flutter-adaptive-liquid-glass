@@ -656,6 +656,47 @@ final class NativeAccessibilityUITests: XCTestCase {
     expectText("Menu cancellations: 1")
   }
 
+  func testCustomAndImperativeNativeMenus() throws {
+    openCatalogSearchEntry("Open native menu probe")
+    let custom = app.buttons["native-menu-custom-trigger"]
+    let quiet = app.descendants(matching: .any).matching(identifier: "Quiet mode").firstMatch
+    let reset = app.buttons["Reset modes"]
+    let remove = app.buttons["Remove modes"]
+    XCTAssertTrue(waitUntilHittable(custom))
+    custom.tap()
+    XCTAssertTrue(waitUntilHittable(quiet))
+    XCTAssertTrue(reset.exists)
+    XCTAssertFalse(reset.isEnabled)
+    XCTAssertTrue(remove.exists)
+    XCTAssertTrue(remove.isEnabled)
+    attachScreen("custom-trigger-uimenu")
+    quiet.tap()
+    expectText("Last selection: quiet")
+    XCTAssertTrue(quiet.waitForNonExistence(timeout: 10))
+
+    let editor = app.textFields["Menu editor"]
+    XCTAssertTrue(waitUntilHittable(editor))
+    editor.tap()
+    // A clean simulator may display the first-use keyboard tutorial.
+    let keyboardTutorial = app.buttons["Continue"].firstMatch
+    if waitUntilHittable(keyboardTutorial, timeout: 3) { keyboardTutorial.tap() }
+    expectText("Editor focus: true")
+    let openMenu = app.buttons["Editor modes"]
+    XCTAssertTrue(waitUntilHittable(openMenu))
+    openMenu.tap()
+    XCTAssertTrue(waitUntilHittable(quiet))
+    XCTAssertTrue(reset.exists)
+    XCTAssertFalse(reset.isEnabled)
+    XCTAssertTrue(remove.exists)
+    XCTAssertTrue(remove.isEnabled)
+    attachScreen("imperative-uimenu-with-editor-focused")
+    quiet.tap()
+    expectText("Editor selection: quiet")
+    expectText("Editor focus: true")
+    editor.typeText("Still focused")
+    XCTAssertEqual(editor.value as? String, "Still focused")
+  }
+
   func testNativeNavigationGroupsMenusAndBadges() throws {
     openCatalogSearchEntry("Open native navigation probe")
     let back = app.buttons["nav-probe-back"]

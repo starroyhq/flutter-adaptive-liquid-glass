@@ -296,14 +296,14 @@ class LiquidGlassSegmentedControl<T> extends StatelessWidget {
     return Opacity(
       opacity: onChanged == null ? .5 : 1,
       child: LiquidGlassSurface(
-        radius: 28,
+        radius: 20,
         style: LiquidGlassSurfaceStyle.control,
-        padding: const EdgeInsets.all(4),
+        padding: const EdgeInsets.all(3),
         child: FallbackSelectionTrack(
           selectedIndex: segments.indexWhere(
             (segment) => segment.value == selected,
           ),
-          radius: 24,
+          radius: 17,
           children: [
             for (final segment in segments)
               Semantics(
@@ -315,23 +315,23 @@ class LiquidGlassSegmentedControl<T> extends StatelessWidget {
                 onTap: onChanged == null ? null : () => select(segment.value),
                 child: Material(
                   color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(17),
                   child: FallbackPressable(
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(17),
                     scaleOnPress: false,
                     feedbackOnTap: false,
                     onTap: onChanged == null
                         ? null
                         : () => select(segment.value),
                     child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        minHeight: 48,
+                      constraints: BoxConstraints(
+                        minHeight: largeText ? 48 : 30,
                         minWidth: 48,
                       ),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
-                          vertical: 8,
+                          vertical: 5,
                         ),
                         child: Center(
                           child: Text(

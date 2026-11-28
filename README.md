@@ -9,6 +9,10 @@ imports use `flutter_adaptive_liquid_glass`, following Dart's
 [package naming rules](https://dart.dev/tools/pub/pubspec#name); hyphens are not
 valid in a pubspec package name.
 
+Version **0.10.0** uses flat, outlined Flutter surfaces on fallback paths and
+adds custom native menu triggers and programmatic menus. See the
+[0.10.0 release notes](doc/release-0.10.0.md).
+
 Version **0.9.2** keeps the loading indicator inset on prominent icon buttons.
 See the [0.9.2 release notes](doc/release-0.9.2.md).
 
@@ -30,8 +34,8 @@ Version **0.7.0** keeps the page's native glass on screen, under the barrier,
 while one of the package's alerts, sheets, popovers or menus is open. Under
 other popups, such as Material sheets and dialogs, the page's native controls
 draw their Flutter rendering in place instead of leaving gaps. The new
-`LiquidGlassOverlayGuard` protects app content, such as a toast, painted above
-the package's popups in its own `OverlayEntry`. See the
+`LiquidGlassOverlayGuard` protects Flutter overlay content that crosses outside
+a package popup and overlaps native views. See the
 [0.7.0 release notes](doc/release-0.7.0.md) and the
 [upgrade notes](#upgrading-from-06x).
 
@@ -136,6 +140,13 @@ production dependency besides the Flutter SDK: every native control, including
 the tab bar, the segmented control and icon buttons, is a package-owned UIKit
 bridge. It does not require a global toolchain upgrade.
 
+### Upgrading from 0.9.x to 0.10.0
+
+Change the constraint to `^0.10.0`, run `flutter pub get`, and perform a full
+native rebuild. Planar fallback and the four control adjustments apply to
+existing calls. See the [0.10.0 release notes](doc/release-0.10.0.md) for menu
+examples and the overlay guidance.
+
 ### Upgrading from 0.9.0
 
 Run `flutter pub upgrade flutter_adaptive_liquid_glass` and perform a full
@@ -162,8 +173,8 @@ Change the constraint to `^0.7.0`; in a 0.x version `^0.6.x` does not select
 The existing APIs remain available. Visible changes that need no code: the
 package's popups keep the page's native glass on screen under the barrier, and
 under other popups the page's native controls draw their Flutter rendering in
-place. If the app shows Flutter content in its own `OverlayEntry` above the
-package's popups, such as a toast, wrap it in `LiquidGlassOverlayGuard`; see
+place. For Flutter content above a package popup that must overlap native
+views, wrap it in `LiquidGlassOverlayGuard`. See
 [Native rendering and overlays](#native-rendering-and-overlays) and the
 [0.7.0 release notes](doc/release-0.7.0.md).
 
@@ -423,7 +434,7 @@ paths, constraints and regression sources.
 | Status | `LiquidGlassActivityIndicator`, `LiquidGlassProgressView` |
 | Picking | `LiquidGlassDatePicker`, `LiquidGlassColorPicker` |
 | Search | `LiquidGlassSearchField`, `LiquidGlassSearchScaffold` |
-| Presentations | `LiquidGlassMenuButton<T>`, `showLiquidGlassAlert<T>`, `showLiquidGlassSheet<T>`, `showLiquidGlassPopover<T>` |
+| Presentations | `LiquidGlassMenuButton<T>`, `showLiquidGlassMenu<T>`, `showLiquidGlassAlert<T>`, `showLiquidGlassSheet<T>`, `showLiquidGlassPopover<T>` |
 
 ### Controlled values and search
 
@@ -560,9 +571,9 @@ the navigation item's own subtitle on iOS 26.
 
 iOS 26 softens content where it scrolls beneath floating bars, but only for
 `UIScrollView`. `LiquidGlassScrollEdgeEffect` draws that effect for Flutter
-scrollables in every mode: a progressive blur fading into the page colour
-(`soft`), or an opaque band with a hairline (`hard`, also used when
-transparency is reduced). An edge appears only while content is beneath it.
+scrollables in every mode. The `soft` style fades the page color over content.
+The `hard` style uses an opaque band with a hairline and also applies when
+transparency is reduced. An edge appears only while content is beneath it.
 
 ```dart
 Scaffold(
@@ -769,19 +780,28 @@ backgrounding and disposal cancel applicable pending gestures.
 Alerts with exactly two actions place them side by side (a cancel action first)
 unless text is large. Action sheets show their cancel actions as a separate group.
 On iOS 26+ in native mode, the default menu trigger uses `UIButton.menu`.
-UIKit owns the transition, submenu navigation, press-drag gestures and menu
-size. `onSelected` and `onCanceled` report the completed interaction.
-The trigger takes touches that start on it so UIKit can track the same press
-through to selection. A scroll can start outside the trigger.
+Set `triggerChild` to give the button a custom Flutter appearance and keep
+UIKit in charge of the menu. The child supplies the appearance and size.
+The menu button owns pointer input and accessibility. `onSelected` and
+`onCanceled` report the completed interaction. In a scrolling layout, start
+the scroll outside the trigger or place it in a fixed header.
 [UIKit menu activation](https://developer.apple.com/documentation/uikit/uicontrol/showsmenuasprimaryaction)
 
 Use `sfSymbol` to prefer an iOS symbol, `iconPng` for a bitmap, and `icon` as a
-portable glyph. UIKit tints the portable glyph as a template. Both paths can
-display the supplied PNG. The custom `builder(context, open)`, explicit
-`LiquidGlassMenuTrigger.tap` and `.longPress` modes, and Flutter rendering on
-other targets keep the package popover. `width`, `fitContent` and
-`useRootNavigator` apply to that popover. Native system menus use the button as
-their anchor and participate in UIKit's presentation instead of a Flutter route.
+portable glyph. Both paths can display the supplied PNG. The custom
+`builder(context, open)` and explicit `LiquidGlassMenuTrigger.tap` and
+`.longPress` modes keep the Flutter popover. Its layout uses `width`,
+`fitContent`, and `useRootNavigator`.
+
+Use `showLiquidGlassMenu<T>` to open the same kind of menu from an existing
+control. Pass the control's mounted `BuildContext` as `anchorContext`.
+Menu data supports `subtitle`, `selected`, `enabled`, and `destructive`.
+Use a parent with `children` and `displayInline: true` for a section.
+The future returns the selected value or `null` on dismissal. In native mode
+on iOS 26+, the plugin gives a transparent UIKit button the anchor's bounds and
+calls `performPrimaryAction()`. An active editor keeps its keyboard focus.
+Fallback modes and other targets open the Flutter menu.
+[UIKit primary action](https://developer.apple.com/documentation/uikit/uicontrol/performprimaryaction%28%29)
 
 Native icon buttons with long-press actions use the same UIKit glass style.
 Navigation bars containing these actions combine the existing Flutter title
@@ -812,11 +832,11 @@ LiquidGlassTheme(
 
 | Token | Purpose |
 | --- | --- |
-| `surfaceTint` | Base tone of the glass surface; fallback material controls fill opacity |
+| `surfaceTint` | Native material tint and opaque fallback fill |
 | `foreground` | Ordinary control text and icons |
 | `accent` / `onAccent` | Emphasized controls and their content |
 | `selection` / `selectedForeground` | Selected capsule fill and selected content |
-| `border` / `highlight` | Edge and rim highlight colors |
+| `border` | Thin fallback outline color |
 | `shadow` | Contact shadow color |
 
 For a complete palette, derive colors from any Flutter `ColorScheme`. Use the
@@ -850,16 +870,16 @@ final local = inherited.copyWith(
 );
 ```
 
-Fallback `selection`, `border`, `highlight` and `shadow` colors retain the alpha
-you supply. `surfaceTint` is a base tone, not a replacement for the material's
-opacity policy; opaque accessibility mode still removes transparency. Verify
-custom foregrounds against the composed surface in both themes and against
-changing backgrounds. Custom colors do not imply a contrast guarantee.
+Fallback `selection`, `border`, and `shadow` colors retain the alpha you
+supply. Fallback material paints `surfaceTint` as a solid fill. Verify custom
+foregrounds against their surface in both themes. The `highlight` and
+`blurSigma` options remain available for source compatibility and have no
+effect on the planar material.
 
 On iOS 26+, colors are forwarded through the available public native tint,
 foreground and selected-item APIs. UIKit keeps its native material and
-accessibility behavior. Custom selection fills, rims and shadows are fallback
-painting controls; they do not replace system glass. The native bottom tab bar
+accessibility behavior. Custom selection fills, outlines and shadows apply to
+fallback drawing. The native bottom tab bar
 does not accept a custom glass background. Native and fallback rendering are
 therefore not expected to produce identical pixels for a custom palette.
 
@@ -896,30 +916,20 @@ switches fixed-height native controls to flexible Flutter controls. The caller c
 forward an explicit OS/application reduced-transparency preference through
 `LiquidGlassThemeData`.
 
-The fallback uses a translucent neutral fill, bounded background blur, a subtle
-gradient rim and a contact shadow. Light and dark themes use separate material
-strengths, derived from the host's `ColorScheme` without an imposed brand tint.
-The optional color tokens above can customize that palette. Floating
-surfaces use 60% fill alpha in light mode and 76% in dark mode; control surfaces
-use 64% and 78%. This protective layer keeps text readable over contrasting
-content. Pixel tests cover both neutral and default Material 3 themes over black
-and white backgrounds, including the selected capsule, at a minimum 4.5:1 text
-contrast. Custom themes and explicit tints must supply suitable foreground colors.
-The dark fill's tone is slightly lifted so it remains visible on black. The gradient rim is 0.8 logical
-pixels. The default blur is sigma 20. `LiquidGlassSurfaceStyle.floating` suits
-bottom bars and floating content; `control` provides a tighter treatment for
-buttons and action groups, with blur capped at sigma 8. Opaque/accessibility
-surfaces have no background blur or shadow.
+The Flutter fallback uses a solid light or dark fill, a thin outline, rounded
+corners, and one soft shadow. Opaque and high-contrast modes remove the shadow.
+The segmented track is 36 logical pixels at standard text sizes and grows for
+large text. Fallback navigation centers the title on iOS and aligns it to the
+leading edge elsewhere. Switches and sliders use the same explicit accent on
+both paths and match the default system green and blue on iOS.
 
 Fallback tabs and segmented controls each have **one shared selection capsule**
 that travels between items with a 220ms damped curve, including right-to-left
 layouts. A rapid second selection retargets the moving capsule. Content, selection
-and glass background are separate painting layers; this structure alone does not
-prove reduced GPU work while scrolling, which still requires device profiling.
-Tab height can grow with larger text instead of truncating labels. Every action
-retains at least a 48-point hit target. Press feedback uses a 120ms scale and
-neutral highlight even in apps that disable Material splashes; reduced motion
-disables both selection travel and press scale.
+and surface are separate painting layers. Tab height grows with larger text.
+Standard buttons retain a 48-point minimum touch target. Press feedback uses a
+120 ms scale and neutral highlight even when Material splashes are disabled.
+Reduced motion disables selection travel and press scale.
 
 This Flutter material is an approximation: it does not implement refraction
 shaders or claim to reproduce UIKit's physical glass rendering. iOS 26 native
@@ -982,15 +992,14 @@ native views beneath it hide in UIKit. A Navigator without an observer hides
 the native views of every route that is not current, the package's popups
 included, and draws nothing in their place.
 
-Flutter content that an app paints above a package popup in its own
-`OverlayEntry`, such as a toast, is only safe on the popup's surface. Wrap it
-in `LiquidGlassOverlayGuard`: while a guard is mounted, the package's popups
-isolate the page as other popups do, and the guarded content appears from the
-frame in which the page is isolated. A guard changes nothing while no package
-popup is open. Other custom `OverlayEntry` presentations are not Navigator
-routes: stop painting the underlying native controls while such an overlay is
-active. Changing themes does
-not remove the native tab platform view. Verify system materials on iOS hardware.
+Use `LiquidGlassOverlayGuard` when a Flutter `OverlayEntry` above an open
+package popup must draw over native views outside the popup's bounds. While
+the guard is mounted, the popup isolates the page and the page's native
+controls use their Flutter drawing until the guard is removed. Place passive
+toasts outside the native bars' bounds and omit the guard to keep those bars
+visible. Without a package popup, the guard has no effect. For other custom
+overlays that must cover a native control, hide that control while the overlay
+is on screen. Verify overlapping layouts on iOS hardware.
 
 `LiquidGlassNavigationBar` uses one UIKit glass group per side on iOS 26+,
 including for mixed text and icon items. UIKit can collapse a group when
@@ -1011,11 +1020,9 @@ picker, color well, progress or activity indicator and native
 Flutter composites each platform view separately, so many of them cost more GPU
 time and memory than the same number of Flutter widgets. A list or settings page
 with a switch on every row creates a UIKit switch for every row that is built.
-The Flutter fallback has no platform views, but every fallback surface,
-including the one behind each non-prominent button, segmented control, stepper
-and color well, applies its own background blur. Apart from the popup check in
-[doc/fallback-validation.md](doc/fallback-validation.md), no hardware GPU,
-frame-time or memory profile has been recorded for either path.
+Fallback surfaces use Flutter drawing with no backdrop blur. Apart from the
+popup check in [doc/fallback-validation.md](doc/fallback-validation.md), no
+hardware GPU, frame-time or memory profile has been recorded for either path.
 
 Keep glass on navigation and floating controls. Give a long list, a form or a
 settings page the Flutter controls, keeping the app's colors and feedback:
@@ -1027,8 +1034,7 @@ LiquidGlassTheme(
 )
 ```
 
-`LiquidGlassMode.opaque` costs less still: its solid surfaces have no blur. The
-tab bar stays native on iOS 26 and later in every mode, except where UIKit
+`LiquidGlassMode.opaque` also removes the surface shadow. The tab bar stays native on iOS 26 and later in every mode, except where UIKit
 would put it in the vertical bar (see
 [Rendering policy](#rendering-policy)). Profile pages that combine many native
 controls in profile mode on a device.

@@ -233,14 +233,17 @@ void main() {
         ),
       ),
     );
-    Color fill(Key key) => tester
-        .widget<ColoredBox>(
-          find.descendant(
-            of: find.byKey(key),
-            matching: find.byType(ColoredBox),
-          ),
-        )
-        .color;
+    Color fill(Key key) =>
+        (tester
+                    .widget<DecoratedBox>(
+                      find.descendant(
+                        of: find.byKey(key),
+                        matching: find.byType(DecoratedBox),
+                      ),
+                    )
+                    .decoration
+                as BoxDecoration)
+            .color!;
     expect(
       fill(inheritedKey).withValues(alpha: 1),
       _lightBrand.surfaceTint!.withValues(alpha: 1),

@@ -65,17 +65,42 @@ void main() {
     expect(opacity(tester, 1), 0);
   });
 
-  testWidgets('soft edges blur; the opaque mode uses hard edges', (
+  testWidgets('soft edges fade; the opaque mode uses a solid divider', (
     tester,
   ) async {
     final controller = ScrollController();
     addTearDown(controller.dispose);
     await tester.pumpWidget(host(controller));
     await tester.pumpAndSettle();
-    expect(find.byType(BackdropFilter), findsWidgets);
+    expect(find.byType(BackdropFilter), findsNothing);
+    final edges = find.descendant(
+      of: find.byType(AnimatedOpacity),
+      matching: find.byType(DecoratedBox),
+    );
+    final fade = tester
+        .widgetList<DecoratedBox>(edges)
+        .map(
+          (edge) =>
+              (edge.decoration as BoxDecoration).gradient as LinearGradient,
+        )
+        .toList();
+    expect(fade.map((edge) => edge.begin), [
+      Alignment.topCenter,
+      Alignment.bottomCenter,
+    ]);
+    expect(fade.every((edge) => edge.colors.last.a == 0), isTrue);
     await tester.pumpWidget(host(controller, mode: LiquidGlassMode.opaque));
     await tester.pumpAndSettle();
     expect(find.byType(BackdropFilter), findsNothing);
+    final solid = tester
+        .widgetList<DecoratedBox>(edges)
+        .map((edge) => edge.decoration as BoxDecoration)
+        .toList();
+    expect(solid, hasLength(2));
+    expect(
+      solid.every((edge) => edge.color!.a == 1 && edge.border != null),
+      isTrue,
+    );
   });
 
   testWidgets('touches reach the content beneath an edge', (tester) async {

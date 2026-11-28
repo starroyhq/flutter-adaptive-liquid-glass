@@ -38,8 +38,8 @@ class LiquidGlassColors {
         ),
       );
 
-  /// Material tint. Fallback controls set its alpha to their protective material
-  /// strength; native glass interprets it as a system tint. A surface's explicit
+  /// Material tint. Fallback surfaces paint it opaque; native glass
+  /// interprets it as a system tint. A surface's explicit
   /// `tint` takes precedence. Native tab/nav bars retain their system background.
   final Color? surfaceTint;
 
@@ -59,11 +59,11 @@ class LiquidGlassColors {
   /// Native segmented controls expose an accent, not separate selected text.
   final Color? selectedForeground;
 
-  /// Fallback outline and the middle of the rim gradient, including alpha.
+  /// Fallback outline, including alpha.
   /// High-contrast mode uses a stronger foreground-derived outline instead.
   final Color? border;
 
-  /// Fallback rim highlight, including alpha. The trailing highlight is softer.
+  /// Retained for source compatibility. Planar surfaces have no rim highlight.
   final Color? highlight;
 
   /// Fallback contact shadow, including alpha. Opaque mode has no shadow.

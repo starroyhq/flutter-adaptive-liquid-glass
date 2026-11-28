@@ -59,17 +59,17 @@ class FallbackSelectionTrack extends StatelessWidget {
                         decoration: BoxDecoration(
                           color:
                               overrides.selection ??
-                              colors.onSurface.withValues(
-                                alpha: highContrast ? .22 : (dark ? .10 : .08),
-                              ),
+                              (dark
+                                  ? const Color(0xff48484a)
+                                  : const Color(0xffececef)),
                           borderRadius: BorderRadius.circular(radius),
                           border: Border.all(
                             color: highContrast
                                 ? colors.onSurface
                                 : overrides.border ??
                                       (dark ? Colors.white : colors.onSurface)
-                                          .withValues(alpha: dark ? .12 : .06),
-                            width: highContrast ? 1 : .6,
+                                          .withValues(alpha: dark ? .13 : .09),
+                            width: highContrast ? 1.25 : 1,
                           ),
                         ),
                       ),

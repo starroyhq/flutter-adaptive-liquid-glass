@@ -1,3 +1,15 @@
+## 0.10.0
+
+- Flutter fallback surfaces use solid fills, fine outlines, and soft shadows.
+  Scroll edges use a color fade or hairline without backdrop blur.
+- Fallback tabs keep badges clear of the icon. Segmented controls use a
+  compact track, iOS navigation titles center, and switch and slider accents
+  match the native controls.
+- `LiquidGlassMenuButton.triggerChild` gives a UIKit menu a custom button
+  appearance. `showLiquidGlassMenu` presents a menu at an existing control.
+  Menu items support subtitles and inline groups.
+- The CocoaPods and Dart package versions must agree before release.
+
 ## 0.9.2
 
 - On iOS, loading prominent icon buttons use a centered system activity

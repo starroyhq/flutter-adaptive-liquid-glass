@@ -41,7 +41,7 @@ void main() {
       expect(_thumbRect(tester), first);
       expect(callbacks, [2]);
       expect(find.byType(FallbackSelectionTrack), findsOneWidget);
-      expect(find.byType(BackdropFilter), findsOneWidget);
+      expect(find.byType(BackdropFilter), findsNothing);
     });
 
     testWidgets('$name keep geometry in RTL, large text and a resized layout', (
@@ -78,7 +78,7 @@ void main() {
       }
     });
 
-    testWidgets('$name stop motion without removing the glass material', (
+    testWidgets('$name stop motion without removing the selection track', (
       tester,
     ) async {
       for (final systemSetting in [false, true]) {
@@ -99,7 +99,7 @@ void main() {
           _thumbRect(tester).center.dx,
           closeTo(_target(tester, 'Account').center.dx, .1),
         );
-        expect(find.byType(BackdropFilter), findsOneWidget);
+        expect(find.byType(BackdropFilter), findsNothing);
         expect(tester.binding.hasScheduledFrame, isFalse);
       }
     });
@@ -143,7 +143,7 @@ void main() {
         await tester.pump();
         expect(_thumbRect(tester), stopped);
         expect(tester.binding.hasScheduledFrame, isFalse);
-        expect(find.byType(BackdropFilter), findsOneWidget);
+        expect(find.byType(BackdropFilter), findsNothing);
         await tester.pump(const Duration(milliseconds: 220));
         expect(_thumbRect(tester), stopped);
 

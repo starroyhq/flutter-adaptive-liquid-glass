@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'controls.dart';
+import 'fallback_pressable.dart';
 import 'feedback.dart';
 import 'native_capsule.dart';
 import 'menu_data.dart';
@@ -12,14 +14,106 @@ import 'theme.dart';
 
 export 'menu_data.dart' show LiquidGlassMenuItem;
 
+const _menuChannel = MethodChannel('flutter_adaptive_liquid_glass/menu');
+int _nextNativeRequest = 0;
+
+/// Shows a menu at the bounds of [anchorContext] and returns the chosen value.
+///
+/// Native mode uses a UIKit menu on iOS with the caller's
+/// current text focus intact. UIKit controls the menu layout and placement.
+/// Other modes use an anchored Flutter menu without moving keyboard focus.
+/// A dismissal or an anchor that is no longer visible returns null.
+Future<T?> showLiquidGlassMenu<T extends Object>({
+  required BuildContext context,
+  required BuildContext anchorContext,
+  required List<LiquidGlassMenuItem<T>> items,
+  bool useRootNavigator = true,
+  double width = 300,
+  bool fitContent = false,
+  String? semanticLabel,
+}) async {
+  bool anchorIsActive() =>
+      LiquidGlassFeedback.canInteract(context) &&
+      LiquidGlassFeedback.canInteract(anchorContext);
+  if (items.isEmpty || !anchorIsActive()) return null;
+  if (!width.isFinite || width <= 0) {
+    throw ArgumentError.value(width, 'width', 'Menu width must be positive.');
+  }
+
+  final snapshot = snapshotMenuItems(items, <T>{});
+  if (LiquidGlassTheme.modeOf(context) == LiquidGlassMode.native) {
+    final payload = await prepareNativeMenu(snapshot);
+    if (!anchorContext.mounted || !anchorIsActive()) return null;
+    final box = anchorContext.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return null;
+    final anchor = MatrixUtils.transformRect(
+      box.getTransformTo(null),
+      Offset.zero & box.size,
+    );
+    if (!anchor.isFinite || anchor.isEmpty) return null;
+    final requestId = ++_nextNativeRequest;
+    var pending = true;
+    var cancelled = false;
+    void checkAnchor(Duration _) {
+      if (!pending) return;
+      if (!anchorIsActive() || !box.attached) {
+        cancelled = true;
+        unawaited(_cancelNativeMenu(requestId));
+        return;
+      }
+      // Observe frames the app already produces without requesting new ones.
+      WidgetsBinding.instance.addPostFrameCallback(checkAnchor);
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback(checkAnchor);
+    try {
+      final selected = await _menuChannel.invokeMethod<int>('showMenu', {
+        'requestId': requestId,
+        'anchor': [anchor.left, anchor.top, anchor.width, anchor.height],
+        'items': payload.items,
+      });
+      return !cancelled && anchorIsActive() && box.attached
+          ? payload.values[selected]
+          : null;
+    } on MissingPluginException {
+      // The host without the iOS menu implementation can still show the menu.
+    } on PlatformException catch (error) {
+      if (error.code != 'menu_unavailable') rethrow;
+    } finally {
+      pending = false;
+    }
+    if (cancelled || !anchorIsActive()) return null;
+  }
+  if (!context.mounted || !anchorContext.mounted) return null;
+
+  return showLiquidGlassPopover<T>(
+    context: context,
+    anchorContext: anchorContext,
+    useRootNavigator: useRootNavigator,
+    width: width,
+    fitContent: fitContent,
+    requestFocus: false,
+    semanticLabel: semanticLabel,
+    builder: (context) => _Menu<T>(items: snapshot, fitContent: fitContent),
+  );
+}
+
+Future<void> _cancelNativeMenu(int requestId) async {
+  try {
+    await _menuChannel.invokeMethod<void>('cancelMenu', requestId);
+  } on MissingPluginException {
+    // The caller has already invalidated the selection for this request.
+  }
+}
+
 /// Gestures supported by the default [LiquidGlassMenuButton] trigger.
 enum LiquidGlassMenuTrigger { tap, longPress, tapAndLongPress }
 
 /// A glass button with an anchored hierarchical menu.
 ///
-/// On iOS 26 and later the default trigger shows a system menu. Flutter
-/// popovers handle custom [builder]s, explicit single-gesture [trigger]s,
-/// and fallback or opaque mode.
+/// In native mode, the default button and a custom [triggerChild] both show a
+/// system menu. Flutter popovers handle custom [builder]s, explicit single
+/// gestures, and fallback or opaque mode.
 class LiquidGlassMenuButton<T extends Object> extends StatefulWidget {
   LiquidGlassMenuButton({
     super.key,
@@ -38,11 +132,13 @@ class LiquidGlassMenuButton<T extends Object> extends StatefulWidget {
     this.width = 300,
     this.fitContent = false,
     this.builder,
+    this.triggerChild,
     this.detail,
     this.iconColor,
     this.iconSize,
     this.menuIndicator = false,
   }) : assert(label != null || semanticLabel != null || builder != null),
+       assert(builder == null || triggerChild == null),
        assert(detail == null || label != null, 'A detail follows a label.'),
        assert(width > 0 && width.isFinite);
 
@@ -75,6 +171,15 @@ class LiquidGlassMenuButton<T extends Object> extends StatefulWidget {
   /// controls only the default button; this callback may be used for either
   /// gesture without changing the existing builder signature.
   final Widget Function(BuildContext context, VoidCallback? open)? builder;
+
+  /// Custom visual content for the menu's trigger. The menu owns the gestures
+  /// and accessibility of this region. Pass a [label] or [semanticLabel] and
+  /// provide noninteractive content with a bounded size.
+  ///
+  /// In native mode, UIKit receives touches beginning here, as on the default
+  /// button. In a scrollable layout, scrolling starts outside the trigger.
+  /// An explicit single-gesture [trigger] uses the Flutter popover.
+  final Widget? triggerChild;
 
   /// Passed to the default trigger; see [LiquidGlassButton.detail],
   /// [LiquidGlassButton.iconColor], [LiquidGlassButton.iconSize] and
@@ -116,6 +221,7 @@ class _LiquidGlassMenuButtonState<T extends Object>
         useRootNavigator: widget.useRootNavigator,
         width: widget.width,
         fitContent: widget.fitContent,
+        requestFocus: widget.triggerChild == null ? null : false,
         semanticLabel: widget.semanticLabel ?? widget.label,
         builder: (context) =>
             _Menu<T>(items: items, fitContent: widget.fitContent),
@@ -139,22 +245,26 @@ class _LiquidGlassMenuButtonState<T extends Object>
       if (widget.builder != null) return widget.builder!(anchorContext, open);
       if (widget.trigger == LiquidGlassMenuTrigger.tapAndLongPress &&
           LiquidGlassTheme.modeOf(anchorContext) == LiquidGlassMode.native) {
+        final custom = widget.triggerChild != null;
+        final native = _NativeMenuTrigger<T>(
+          menu: widget,
+          trigger: NativeCapsuleItem(
+            id: widget.id ?? 'button',
+            label: _accessibleLabel!,
+            title: custom ? null : widget.label,
+            detail: custom ? null : widget.detail,
+            icon: custom ? null : widget.icon,
+            iconColor: custom ? null : widget.iconColor,
+            iconSize: custom ? null : widget.iconSize,
+            sfSymbol: custom ? null : widget.sfSymbol,
+            menuIndicator: !custom && widget.menuIndicator,
+          ),
+        );
+        // Custom content is already Flutter painted, including while covered.
+        if (custom) return native;
         return NativeCoverFallback(
           fallback: (_) => _flutterTrigger(anchorContext),
-          child: _NativeMenuTrigger<T>(
-            menu: widget,
-            trigger: NativeCapsuleItem(
-              id: widget.id ?? 'button',
-              label: _accessibleLabel!,
-              title: widget.label,
-              detail: widget.detail,
-              icon: widget.icon,
-              iconColor: widget.iconColor,
-              iconSize: widget.iconSize,
-              sfSymbol: widget.sfSymbol,
-              menuIndicator: widget.menuIndicator,
-            ),
-          ),
+          child: native,
         );
       }
       return _flutterTrigger(anchorContext);
@@ -166,6 +276,31 @@ class _LiquidGlassMenuButtonState<T extends Object>
     final VoidCallback? open = widget.enabled && widget.items.isNotEmpty
         ? () => _open(anchorContext)
         : null;
+    final child = widget.triggerChild;
+    if (child != null) {
+      return Semantics(
+        label: _accessibleLabel,
+        button: true,
+        enabled: open != null,
+        child: Material(
+          type: MaterialType.transparency,
+          child: FallbackPressable(
+            onTap: widget.trigger == LiquidGlassMenuTrigger.longPress
+                ? null
+                : open,
+            onLongPress: widget.trigger == LiquidGlassMenuTrigger.tap
+                ? null
+                : open,
+            longPressSemanticLabel:
+                widget.longPressSemanticLabel ?? _accessibleLabel,
+            borderRadius: BorderRadius.circular(12),
+            child: ExcludeFocus(
+              child: IgnorePointer(child: ExcludeSemantics(child: child)),
+            ),
+          ),
+        ),
+      );
+    }
     return LiquidGlassButton(
       id: widget.id,
       label: widget.label,
@@ -238,8 +373,10 @@ class _NativeMenuTriggerState<T extends Object>
 
   @override
   Widget build(BuildContext context) => NativeCapsule(
-    standaloneIcon: widget.trigger.title == null,
+    standaloneIcon:
+        widget.menu.triggerChild == null && widget.trigger.title == null,
     items: [widget.trigger],
+    menuTriggerChild: widget.menu.triggerChild,
     menu: NativeCapsuleMenu(
       revision: _revision,
       items: _payload,
@@ -307,6 +444,42 @@ class _MenuState<T extends Object> extends State<_Menu<T>> {
     final items = _path.isEmpty ? widget.items : _path.last.children;
     final page = _page;
     final key = ValueKey(_path.isEmpty ? null : _path.last.value);
+
+    Iterable<Widget> itemRows(
+      LiquidGlassMenuItem<T> item, {
+      required bool parentEnabled,
+    }) sync* {
+      final enabled = parentEnabled && item.enabled;
+      if (item.displayInline && item.children.isNotEmpty) {
+        yield const Divider(height: 1);
+        if (item.label.isNotEmpty || item.subtitle != null) {
+          yield _MenuHeading(label: item.label, subtitle: item.subtitle);
+        }
+        for (final child in item.children) {
+          yield* itemRows(child, parentEnabled: enabled);
+        }
+        return;
+      }
+      yield _MenuRow(
+        key: ValueKey(item.value),
+        label: item.label,
+        subtitle: item.subtitle,
+        leading: _menuIcon(item),
+        color: item.destructive ? theme.colorScheme.error : foreground,
+        selected: item.selected,
+        trailing: item.children.isNotEmpty
+            ? Icon(
+                Directionality.of(context) == TextDirection.rtl
+                    ? Icons.chevron_left
+                    : Icons.chevron_right,
+              )
+            : item.selected
+            ? const Icon(Icons.check, size: 20)
+            : null,
+        onTap: enabled ? () => _select(item, page) : null,
+      );
+    }
+
     final rows = [
       if (_path.isNotEmpty) ...[
         _MenuRow(
@@ -315,30 +488,10 @@ class _MenuState<T extends Object> extends State<_Menu<T>> {
           color: foreground,
           onTap: () => _back(page),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: Text(_path.last.label, style: theme.textTheme.labelLarge),
-        ),
+        _MenuHeading(label: _path.last.label, subtitle: _path.last.subtitle),
         const Divider(height: 1),
       ],
-      for (final item in items)
-        _MenuRow(
-          key: ValueKey(item.value),
-          label: item.label,
-          leading: _menuIcon(item),
-          color: item.destructive ? theme.colorScheme.error : foreground,
-          selected: item.selected,
-          trailing: item.children.isNotEmpty
-              ? Icon(
-                  Directionality.of(context) == TextDirection.rtl
-                      ? Icons.chevron_left
-                      : Icons.chevron_right,
-                )
-              : item.selected
-              ? const Icon(Icons.check, size: 20)
-              : null,
-          onTap: item.enabled ? () => _select(item, page) : null,
-        ),
+      for (final item in items) ...itemRows(item, parentEnabled: true),
     ];
     // A lazy list has no intrinsic width, so sizing to content needs a column.
     if (widget.fitContent) {
@@ -379,6 +532,7 @@ class _MenuRow extends StatelessWidget {
   const _MenuRow({
     super.key,
     required this.label,
+    this.subtitle,
     required this.color,
     this.leading,
     this.trailing,
@@ -387,6 +541,7 @@ class _MenuRow extends StatelessWidget {
   });
 
   final String label;
+  final String? subtitle;
   final Color color;
   final Widget? leading;
   final Widget? trailing;
@@ -417,7 +572,9 @@ class _MenuRow extends StatelessWidget {
                       leading!,
                       const SizedBox(width: 12),
                     ],
-                    Expanded(child: Text(label)),
+                    Expanded(
+                      child: _MenuText(label: label, subtitle: subtitle),
+                    ),
                     if (trailing != null) ...[
                       const SizedBox(width: 12),
                       trailing!,
@@ -431,4 +588,42 @@ class _MenuRow extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _MenuHeading extends StatelessWidget {
+  const _MenuHeading({required this.label, this.subtitle});
+
+  final String label;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+    child: DefaultTextStyle.merge(
+      style: Theme.of(context).textTheme.labelLarge,
+      child: _MenuText(label: label, subtitle: subtitle),
+    ),
+  );
+}
+
+class _MenuText extends StatelessWidget {
+  const _MenuText({required this.label, this.subtitle});
+
+  final String label;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) => subtitle == null
+      ? Text(label)
+      : Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (label.isNotEmpty) Text(label),
+            Opacity(
+              opacity: .72,
+              child: Text(subtitle!, style: const TextStyle(fontSize: 12)),
+            ),
+          ],
+        );
 }

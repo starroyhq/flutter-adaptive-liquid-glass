@@ -6,6 +6,7 @@ import UIKit
 /// This uses only public UIKit APIs; system mode always clears both overrides.
 public final class FlutterAdaptiveLiquidGlassPlugin: NSObject, FlutterPlugin {
   private let registrar: FlutterPluginRegistrar
+  private let menu = AdaptiveLiquidGlassMenuPresenter()
   private var appearance: UIUserInterfaceStyle = .unspecified
   private var activationObserver: NSObjectProtocol?
 
@@ -26,9 +27,10 @@ public final class FlutterAdaptiveLiquidGlassPlugin: NSObject, FlutterPlugin {
       AdaptiveLiquidGlassStatusFactory(messenger: registrar.messenger()),
       withId: "flutter_adaptive_liquid_glass/status"
     )
-    // One instance answers both channels; `handle` dispatches by method name.
+    // One instance answers these channels; `handle` dispatches by method name.
     let plugin = FlutterAdaptiveLiquidGlassPlugin(registrar: registrar)
-    for name in ["flutter_adaptive_liquid_glass/appearance", "flutter_adaptive_liquid_glass/lifecycle"] {
+    for name in ["flutter_adaptive_liquid_glass/appearance", "flutter_adaptive_liquid_glass/lifecycle",
+                 "flutter_adaptive_liquid_glass/menu"] {
       registrar.addMethodCallDelegate(
         plugin, channel: FlutterMethodChannel(name: name, binaryMessenger: registrar.messenger()))
     }
@@ -54,6 +56,11 @@ public final class FlutterAdaptiveLiquidGlassPlugin: NSObject, FlutterPlugin {
     switch call.method {
     case "setAppearance":
       setAppearance(call.arguments as? String, result: result)
+    case "showMenu":
+      menu.show(arguments: call.arguments, in: registrar.viewController?.viewIfLoaded, result: result)
+    case "cancelMenu":
+      menu.cancel(requestID: call.arguments as? Int)
+      result(nil)
     case "suppressGlassEffects":
       // Dart counts nested popups and sends only the first and the last.
       NotificationCenter.default.post(name: AdaptiveLiquidGlassSuppression.suppressAll, object: nil)

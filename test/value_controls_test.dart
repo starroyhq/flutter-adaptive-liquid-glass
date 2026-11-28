@@ -1,5 +1,8 @@
+import 'dart:ui' as ui;
+
+import 'package:flutter/cupertino.dart' show CupertinoColors;
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_adaptive_liquid_glass/src/theme.dart';
 import 'package:flutter_adaptive_liquid_glass/src/fallback_value_controls.dart';
@@ -28,6 +31,120 @@ Widget host(
 );
 
 void main() {
+  testWidgets('fallback value tracks remain visible in light and dark', (
+    tester,
+  ) async {
+    const captureKey = ValueKey('value-control-capture');
+    const customAccent = Color(0xffbf42c6);
+    for (final dark in [false, true]) {
+      final background = dark ? Colors.black : Colors.white;
+      final scheme = dark
+          ? const ColorScheme.dark()
+          : const ColorScheme.light();
+      for (final accent in <Color?>[null, customAccent]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            themeAnimationDuration: Duration.zero,
+            theme: ThemeData(
+              colorScheme: scheme.copyWith(
+                primary: dark ? Colors.white : Colors.black,
+                onSurface: dark ? Colors.white : Colors.black,
+                surface: background,
+              ),
+            ),
+            home: Center(
+              child: RepaintBoundary(
+                key: captureKey,
+                child: ColoredBox(
+                  color: background,
+                  child: LiquidGlassTheme(
+                    data: LiquidGlassThemeData(
+                      mode: LiquidGlassMode.fallback,
+                      colors: LiquidGlassColors(accent: accent),
+                    ),
+                    child: SizedBox(
+                      width: 240,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          LiquidGlassSlider(value: .5, onChanged: (_) {}),
+                          LiquidGlassSwitch(value: true, onChanged: (_) {}),
+                          LiquidGlassSwitch(value: false, onChanged: (_) {}),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final boundary = tester.renderObject<RenderRepaintBoundary>(
+          find.byKey(captureKey),
+        );
+        final sliders = find.byType(FallbackGlassSlider);
+        final switches = find.byType(FallbackGlassSwitch);
+        final slider = tester.getRect(sliders);
+        final toggleOn = tester.getRect(switches.first);
+        final toggleOff = tester.getRect(switches.last);
+        final points = [
+          Offset(slider.left + slider.width * .25, slider.center.dy),
+          Offset(slider.left + slider.width * .75, slider.center.dy),
+          Offset(toggleOn.left + 12, toggleOn.center.dy),
+          Offset(toggleOff.right - 12, toggleOff.center.dy),
+        ].map(boundary.globalToLocal).toList();
+
+        final paint = await tester.runAsync(() async {
+          final image = await boundary.toImage();
+          try {
+            final bytes = (await image.toByteData(
+              format: ui.ImageByteFormat.rawRgba,
+            ))!;
+            return points.map((point) {
+              final offset =
+                  (point.dy.toInt() * image.width + point.dx.toInt()) * 4;
+              return Color.fromARGB(
+                255,
+                bytes.getUint8(offset),
+                bytes.getUint8(offset + 1),
+                bytes.getUint8(offset + 2),
+              );
+            }).toList();
+          } finally {
+            image.dispose();
+          }
+        });
+        final [sliderAccent, sliderTrack, switchAccent, switchTrack] = paint!;
+        expect(
+          sliderAccent.toARGB32(),
+          (accent ??
+                  CupertinoColors.systemBlue.resolveFrom(
+                    tester.element(sliders),
+                  ))
+              .toARGB32(),
+        );
+        expect(
+          switchAccent.toARGB32(),
+          (accent ??
+                  CupertinoColors.systemGreen.resolveFrom(
+                    tester.element(switches.first),
+                  ))
+              .toARGB32(),
+        );
+        for (final track in [sliderTrack, switchTrack]) {
+          final tones = [
+            track.computeLuminance(),
+            background.computeLuminance(),
+          ]..sort();
+          expect((tones.last + .05) / (tones.first + .05), greaterThan(3));
+          expect(track.r, closeTo(track.g, .01));
+          expect(track.g, closeTo(track.b, .01));
+        }
+      }
+    }
+  });
+
   testWidgets('slider emits start, snapped changes, and end while dragging', (
     tester,
   ) async {

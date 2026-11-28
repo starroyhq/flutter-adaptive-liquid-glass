@@ -23,6 +23,9 @@ class LiquidGlassThemeData {
   final LiquidGlassMode mode;
   final bool reduceTransparency;
   final bool reduceMotion;
+
+  /// Retained for source compatibility. Flutter-drawn materials do not blur
+  /// the backdrop; UIKit controls their native counterparts.
   final double blurSigma;
   final LiquidGlassColors colors;
   final LiquidGlassFeedbackData feedback;

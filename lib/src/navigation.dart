@@ -238,15 +238,19 @@ class _TabItem extends StatelessWidget {
               glassColors.foreground ??
               colors.onSurface
         : glassColors.foreground ?? colors.onSurface;
+    const iconSize = 20.0;
     final icon = Icon(
       selected ? item.selectedIcon ?? item.icon : item.icon,
-      size: 20,
+      size: iconSize,
       color: color,
     );
+    final badge = item.badge;
     return Semantics(
       selected: selected,
       button: true,
-      label: item.badge == null ? item.label : '${item.label}, ${item.badge}',
+      label: badge == null || badge.isEmpty
+          ? item.label
+          : '${item.label}, $badge',
       excludeSemantics: true,
       onTap: onTap,
       child: Material(
@@ -265,9 +269,43 @@ class _TabItem extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  item.badge == null
-                      ? icon
-                      : Badge(label: Text(item.badge!), child: icon),
+                  if (badge == null)
+                    icon
+                  else
+                    SizedBox(
+                      width: double.infinity,
+                      height: iconSize,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          icon,
+                          // Keep the badge beside the glyph and inside its own
+                          // tab, including in RTL and on narrow bars.
+                          Positioned.fill(
+                            child: Align(
+                              alignment: AlignmentDirectional.topEnd,
+                              child: FractionallySizedBox(
+                                widthFactor: .5,
+                                child: Padding(
+                                  padding: const EdgeInsetsDirectional.only(
+                                    start: iconSize / 2 + 2,
+                                  ),
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: AlignmentDirectional.topStart,
+                                    child: Badge(
+                                      label: badge.isEmpty
+                                          ? null
+                                          : Text(badge, maxLines: 1),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   const SizedBox(height: 2),
                   Text(
                     item.label,
@@ -412,6 +450,7 @@ class LiquidGlassNavigationBar extends StatelessWidget
           : actionButton(items.single);
     }
 
+    final centerTitle = Theme.of(context).platform == TargetPlatform.iOS;
     return SafeArea(
       bottom: false,
       child: Padding(
@@ -424,7 +463,8 @@ class LiquidGlassNavigationBar extends StatelessWidget
               0.0,
               double.infinity,
             );
-            final sideWidth = leading.isNotEmpty && actions.isNotEmpty
+            final sideWidth =
+                centerTitle || (leading.isNotEmpty && actions.isNotEmpty)
                 ? available / 2
                 : available.toDouble();
             Widget tray(List<LiquidGlassAction> items) => items.isEmpty
@@ -437,13 +477,36 @@ class LiquidGlassNavigationBar extends StatelessWidget
                       child: actionTray(items),
                     ),
                   );
+            final heading = _fallbackTitle(
+              context,
+              glassColors.foreground,
+              centered: centerTitle,
+            );
+            if (centerTitle) {
+              return SizedBox(
+                height: preferredSize.height - 16,
+                child: CustomMultiChildLayout(
+                  delegate: _CenteredNavigationLayout(
+                    Directionality.of(context),
+                  ),
+                  children: [
+                    LayoutId(id: _NavigationSlot.leading, child: tray(leading)),
+                    LayoutId(id: _NavigationSlot.title, child: heading),
+                    LayoutId(
+                      id: _NavigationSlot.trailing,
+                      child: tray(actions),
+                    ),
+                  ],
+                ),
+              );
+            }
             return Row(
               children: [
                 tray(leading),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: _fallbackTitle(context, glassColors.foreground),
+                    child: heading,
                   ),
                 ),
                 tray(actions),
@@ -455,22 +518,29 @@ class LiquidGlassNavigationBar extends StatelessWidget
     );
   }
 
-  Widget _fallbackTitle(BuildContext context, Color? foreground) {
+  Widget _fallbackTitle(
+    BuildContext context,
+    Color? foreground, {
+    required bool centered,
+  }) {
     final theme = Theme.of(context);
     if (subtitle == null) {
       return Text(
         title,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
+        textAlign: centered ? TextAlign.center : TextAlign.start,
         style: theme.textTheme.titleLarge?.copyWith(color: foreground),
       );
     }
     // Large text scales the two lines down to fit the bar's fixed height.
     return FittedBox(
       fit: BoxFit.scaleDown,
-      alignment: AlignmentDirectional.centerStart,
+      alignment: centered ? Alignment.center : AlignmentDirectional.centerStart,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: centered
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
@@ -494,6 +564,51 @@ class LiquidGlassNavigationBar extends StatelessWidget
       ),
     );
   }
+}
+
+enum _NavigationSlot { leading, title, trailing }
+
+class _CenteredNavigationLayout extends MultiChildLayoutDelegate {
+  _CenteredNavigationLayout(this.direction);
+
+  final TextDirection direction;
+
+  @override
+  void performLayout(Size size) {
+    final constraints = BoxConstraints.loose(size);
+    final start = layoutChild(_NavigationSlot.leading, constraints);
+    final end = layoutChild(_NavigationSlot.trailing, constraints);
+    final ltr = direction == TextDirection.ltr;
+    positionChild(
+      _NavigationSlot.leading,
+      Offset(
+        ltr ? 0 : size.width - start.width,
+        (size.height - start.height) / 2,
+      ),
+    );
+    positionChild(
+      _NavigationSlot.trailing,
+      Offset(ltr ? size.width - end.width : 0, (size.height - end.height) / 2),
+    );
+    // Reserve the larger tray's width on both sides so a long title truncates
+    // before it reaches either tray, without shifting away from screen center.
+    final exclusion = (start.width > end.width ? start.width : end.width) + 8;
+    final title = layoutChild(
+      _NavigationSlot.title,
+      BoxConstraints(
+        maxWidth: (size.width - 2 * exclusion).clamp(0, size.width),
+        maxHeight: size.height,
+      ),
+    );
+    positionChild(
+      _NavigationSlot.title,
+      Offset((size.width - title.width) / 2, (size.height - title.height) / 2),
+    );
+  }
+
+  @override
+  bool shouldRelayout(_CenteredNavigationLayout oldDelegate) =>
+      direction != oldDelegate.direction;
 }
 
 /// A plain Flutter action inside the navigation tray's shared surface.
